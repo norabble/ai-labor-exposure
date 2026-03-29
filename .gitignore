@@ -5,9 +5,11 @@ build/
 dist/
 wheels/
 *.egg-info
-
 # Virtual environments
 .venv
 
 # Environment variables
 .env
+
+# Data files
+data/

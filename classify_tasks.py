@@ -62,11 +62,11 @@ def classify_task(job_title: str, task_statement: str) -> dict:
 
 def classify_random_sample(sample_size=100):
     print("Loading O*NET tasks...")
-    if not os.path.exists("onet_tasks.csv"):
-        print("onet_tasks.csv not found. Please run download_data.py first.")
+    if not os.path.exists("data/raw/onet_tasks.csv"):
+        print("data/raw/onet_tasks.csv not found. Please run download_data.py first.")
         return
         
-    df_tasks = pd.read_csv("onet_tasks.csv")
+    df_tasks = pd.read_csv("data/raw/onet_tasks.csv")
     
     # Take a random sample for the first validation batch
     df_sample = df_tasks.sample(n=sample_size, random_state=42).copy()
@@ -101,8 +101,9 @@ def classify_random_sample(sample_size=100):
             })
 
     df_results = pd.DataFrame(results)
-    df_results.to_csv("classified_tasks_batch1.csv", index=False)
-    print("Saved classification results to classified_tasks_batch1.csv")
+    os.makedirs("data/output", exist_ok=True)
+    df_results.to_csv("data/output/classified_tasks_batch1.csv", index=False)
+    print("Saved classification results to data/output/classified_tasks_batch1.csv")
 
 if __name__ == "__main__":
     classify_random_sample(100)

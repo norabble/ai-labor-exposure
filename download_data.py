@@ -18,8 +18,8 @@ def download_onet_tasks():
     df_tasks = pd.read_excel(io.BytesIO(response.content))
     
     print(f"Loaded {len(df_tasks)} task statements.")
-    df_tasks.to_csv("onet_tasks.csv", index=False)
-    print("Saved onet_tasks.csv")
+    df_tasks.to_csv("data/raw/onet_tasks.csv", index=False)
+    print("Saved data/raw/onet_tasks.csv")
     return df_tasks
 
 def download_anthropic_data():
@@ -27,15 +27,15 @@ def download_anthropic_data():
     task_res = requests.get(ANTHROPIC_TASK_PENETRATION_URL)
     task_res.raise_for_status()
     df_task_pen = pd.read_csv(io.StringIO(task_res.text))
-    df_task_pen.to_csv("anthropic_task_penetration.csv", index=False)
-    print(f"Saved anthropic_task_penetration.csv ({len(df_task_pen)} rows)")
+    df_task_pen.to_csv("data/raw/anthropic_task_penetration.csv", index=False)
+    print(f"Saved data/raw/anthropic_task_penetration.csv ({len(df_task_pen)} rows)")
     
     print("Downloading Anthropic job exposure data...")
     job_res = requests.get(ANTHROPIC_JOB_EXPOSURE_URL)
     job_res.raise_for_status()
     df_job_exp = pd.read_csv(io.StringIO(job_res.text))
-    df_job_exp.to_csv("anthropic_job_exposure.csv", index=False)
-    print(f"Saved anthropic_job_exposure.csv ({len(df_job_exp)} rows)")
+    df_job_exp.to_csv("data/raw/anthropic_job_exposure.csv", index=False)
+    print(f"Saved data/raw/anthropic_job_exposure.csv ({len(df_job_exp)} rows)")
     
     return df_task_pen, df_job_exp
 
@@ -46,11 +46,12 @@ def download_eloundou_data():
     
     df_exposure = pd.read_csv(io.StringIO(response.text))
     print(f"Loaded exposure data for {len(df_exposure)} occupations.")
-    df_exposure.to_csv("eloundou_exposure.csv", index=False)
-    print("Saved eloundou_exposure.csv")
+    df_exposure.to_csv("data/raw/eloundou_exposure.csv", index=False)
+    print("Saved data/raw/eloundou_exposure.csv")
     return df_exposure
 
 if __name__ == "__main__":
+    os.makedirs("data/raw/", exist_ok=True)
     download_onet_tasks()
     download_anthropic_data()
     download_eloundou_data()

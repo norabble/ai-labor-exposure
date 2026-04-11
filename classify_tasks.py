@@ -9,13 +9,15 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# Load environment variable
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it before running this script.")
+# Load environment variables for GCP
+GCP_PROJECT_ID = os.environ.get("GCP_PROJECT_ID")
+GCP_LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
 
-# Initialize the Gemini GenAI client
-client = genai.Client(api_key=GEMINI_API_KEY)
+if not GCP_PROJECT_ID:
+    raise ValueError("GCP_PROJECT_ID environment variable is not set. Please set it in .env before running this script.")
+
+# Initialize the Gemini GenAI client with Vertex AI backend
+client = genai.Client(vertexai=True, project=GCP_PROJECT_ID, location=GCP_LOCATION)
 
 # Define the expected structured output format
 class ClassificationOutput(BaseModel):

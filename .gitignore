@@ -13,3 +13,20 @@ wheels/
 
 # Data files
 data/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Testing & Linting Caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs and OS files
+.vscode/
+.idea/
+.DS_Store
+*.log

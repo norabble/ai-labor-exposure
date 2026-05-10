@@ -4,4 +4,33 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "google-genai>=2.0.1",
+    "matplotlib>=3.10.8",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.2",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "requests>=2.33.1",
+    "scipy>=1.17.1",
+    "seaborn>=0.13.2",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.12",
+]
+
+[tool.ruff]
+line-length = 140
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "N",  # pep8-naming
+]

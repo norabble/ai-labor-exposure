@@ -1,4 +1,4 @@
-.PHONY: setup test lint run-pipeline download-data
+.PHONY: setup test lint download-data run-pipeline classify
 
 setup:
 	uv sync
@@ -17,11 +17,8 @@ download-data:
 	uv run download_data.py
 
 run-pipeline:
-	uv run analyze_bls.py
-	uv run synthesize_impacts.py
-	uv run generate_plots.py
-	uv run validate_bls.py
+	uv run main.py
 
-# A separate command for classification since it costs money and takes time
+# Separate target: classification is expensive (~19k LLM calls) and resumable.
 classify:
 	uv run classify_tasks.py all

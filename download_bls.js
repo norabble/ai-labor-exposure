@@ -24,23 +24,42 @@ const https = require('https');
     downloadPath: downloadDir
   });
 
+  // 2024 is only available as the full "all areas" file; 2023 is national-only.
   const urls = [
-    'https://www.bls.gov/oes/special.requests/oesm23nat.zip',
-    'https://www.bls.gov/oes/special.requests/oesm22nat.zip'
+    'https://www.bls.gov/oes/special.requests/oesm24all.zip',
+    'https://www.bls.gov/oes/special.requests/oesm23nat.zip'
   ];
 
   for (const url of urls) {
+    const filename = url.split('/').pop();
+    const destPath = path.join(downloadDir, filename);
+
+    if (fs.existsSync(destPath)) {
+      console.log(`Already exists, skipping: ${filename}`);
+      continue;
+    }
+
     console.log(`Downloading ${url}...`);
     try {
-      await page.goto(url, { waitUntil: 'networkidle0', timeout: 30000 });
+      await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
     } catch (e) {
-      // goto might throw an error when a download starts instead of a page load
+      // goto throws when a download starts — this is expected
       console.log(`Note: page.goto threw an exception (normal for downloads): ${e.message}`);
     }
 
-    // Wait for the file to appear in the directory
+    // Poll until the file appears (up to 120 seconds)
     console.log('Waiting for download to complete...');
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    const deadline = Date.now() + 120000;
+    while (!fs.existsSync(destPath) && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+
+    if (fs.existsSync(destPath)) {
+      const size = (fs.statSync(destPath).size / (1024 * 1024)).toFixed(2);
+      console.log(`Downloaded ${filename} (${size} MB)`);
+    } else {
+      console.error(`ERROR: ${filename} did not appear after 120s — URL may not exist or download failed`);
+    }
   }
 
   await browser.close();

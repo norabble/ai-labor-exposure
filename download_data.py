@@ -5,6 +5,7 @@ import pandas as pd
 import requests
 
 ONET_TASKS_URL = "https://www.onetcenter.org/dl_files/database/db_28_2_excel/Task%20Statements.xlsx"
+ONET_TASK_RATINGS_URL = "https://www.onetcenter.org/dl_files/database/db_28_2_excel/Task%20Ratings.xlsx"
 ANTHROPIC_TASK_PENETRATION_URL = (
     "https://huggingface.co/datasets/Anthropic/EconomicIndex/resolve/main/labor_market_impacts/task_penetration.csv"
 )
@@ -25,6 +26,28 @@ def download_onet_tasks():
     onet_tasks_df.to_csv("data/raw/onet_tasks.csv", index=False)
     print("Saved data/raw/onet_tasks.csv")
     return onet_tasks_df
+
+
+def download_onet_task_ratings():
+    print("Downloading O*NET Task Ratings...")
+    response = requests.get(ONET_TASK_RATINGS_URL)
+    response.raise_for_status()
+
+    print("Parsing O*NET task ratings...")
+    task_ratings_df = pd.read_excel(io.BytesIO(response.content))
+
+    # Filter for Importance (IM)
+    importance_df = task_ratings_df[task_ratings_df["Scale ID"] == "IM"].copy()
+
+    # Rename for clarity
+    importance_df = importance_df.rename(columns={"Data Value": "task_importance"})
+
+    # Keep only what we need
+    importance_df = importance_df[["Task ID", "task_importance"]]
+
+    importance_df.to_csv("data/raw/onet_task_ratings.csv", index=False)
+    print(f"Saved data/raw/onet_task_ratings.csv ({len(importance_df)} task weights)")
+    return importance_df
 
 
 def download_anthropic_data():
@@ -60,5 +83,6 @@ def download_eloundou_data():
 if __name__ == "__main__":
     os.makedirs("data/raw/", exist_ok=True)
     download_onet_tasks()
+    download_onet_task_ratings()
     download_anthropic_data()
     download_eloundou_data()

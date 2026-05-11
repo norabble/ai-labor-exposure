@@ -69,7 +69,16 @@ def load_and_match() -> pd.DataFrame:
     merged_task_data = classified_tasks_df.merge(penetration_df[["task_lower", "penetration"]], on="task_lower", how="left")
     merged_task_data["penetration"] = merged_task_data["penetration"].fillna(0.0)
 
-    merged_task_data["penetration"].notna().sum()
+    print("Loading O*NET task ratings (Importance)...")
+    ratings_path = "data/raw/onet_task_ratings.csv"
+    if os.path.exists(ratings_path):
+        ratings_df = pd.read_csv(ratings_path)
+        merged_task_data = merged_task_data.merge(ratings_df, on="Task ID", how="left")
+        merged_task_data["task_importance"] = merged_task_data["task_importance"].fillna(1.0)
+    else:
+        print("Warning: onet_task_ratings.csv not found — assuming weight=1.0 for all tasks.")
+        merged_task_data["task_importance"] = 1.0
+
     n_nonzero = (merged_task_data["penetration"] > 0).sum()
     print(f"  Matched {len(merged_task_data)} tasks | {n_nonzero} with measured AI penetration > 0")
 
@@ -98,7 +107,7 @@ def compute_task_impact(task_dataframe: pd.DataFrame) -> pd.DataFrame:
             return -penetration_value * BOUNDED_DECLINE  # full reduction → negative impact
         return 0.0  # ERROR rows
 
-    task_dataframe["task_net_impact"] = task_dataframe.apply(_impact, axis=1)
+    task_dataframe["task_net_impact"] = task_dataframe.apply(_impact, axis=1) * task_dataframe["task_importance"]
     return task_dataframe
 
 
@@ -117,27 +126,38 @@ def rollup_to_occupation(task_dataframe: pd.DataFrame) -> pd.DataFrame:
 
     occupation_aggregation_df = (
         valid_tasks_df.groupby(["O*NET-SOC Code", "Title"])
-        .agg(
-            total_tasks=("Task", "count"),
-            n_bounded=("Demand Type", lambda x: (x == "Bounded").sum()),
-            n_unbounded=("Demand Type", lambda x: (x == "Unbounded").sum()),
-            n_adversarial=("Demand Type", lambda x: (x == "Adversarial").sum()),
-            mean_penetration=("penetration", "mean"),
-            max_penetration=("penetration", "max"),
-            # Penetration-weighted net impact
-            # weighted mean: sum(net_impact) / total_tasks
-            # (tasks with 0 penetration contribute 0 — correct behaviour)
-            occupation_impact=("task_net_impact", "mean"),
+        .apply(
+            lambda g: pd.Series(
+                {
+                    "total_tasks": len(g),
+                    "total_importance": g["task_importance"].sum(),
+                    "weighted_bounded": g.loc[g["Demand Type"] == "Bounded", "task_importance"].sum(),
+                    "weighted_unbounded": g.loc[g["Demand Type"] == "Unbounded", "task_importance"].sum(),
+                    "weighted_adversarial": g.loc[g["Demand Type"] == "Adversarial", "task_importance"].sum(),
+                    "mean_penetration": (
+                        (g["penetration"] * g["task_importance"]).sum() / g["task_importance"].sum()
+                        if g["task_importance"].sum() > 0
+                        else 0
+                    ),
+                    "max_penetration": g["penetration"].max(),
+                    "occupation_impact": (g["task_net_impact"].sum() / g["task_importance"].sum() if g["task_importance"].sum() > 0 else 0),
+                }
+            )
         )
         .reset_index()
     )
 
-    occupation_aggregation_df["pct_bounded"] = occupation_aggregation_df["n_bounded"] / occupation_aggregation_df["total_tasks"]
-    occupation_aggregation_df["pct_unbounded"] = occupation_aggregation_df["n_unbounded"] / occupation_aggregation_df["total_tasks"]
-    occupation_aggregation_df["pct_adversarial"] = occupation_aggregation_df["n_adversarial"] / occupation_aggregation_df["total_tasks"]
+    occupation_aggregation_df["pct_bounded"] = occupation_aggregation_df["weighted_bounded"] / occupation_aggregation_df["total_importance"]
+    occupation_aggregation_df["pct_unbounded"] = (
+        occupation_aggregation_df["weighted_unbounded"] / occupation_aggregation_df["total_importance"]
+    )
+    occupation_aggregation_df["pct_adversarial"] = (
+        occupation_aggregation_df["weighted_adversarial"] / occupation_aggregation_df["total_importance"]
+    )
+
     occupation_aggregation_df["dominant_demand"] = (
-        occupation_aggregation_df[["n_bounded", "n_unbounded", "n_adversarial"]]
-        .rename(columns={"n_bounded": "Bounded", "n_unbounded": "Unbounded", "n_adversarial": "Adversarial"})
+        occupation_aggregation_df[["weighted_bounded", "weighted_unbounded", "weighted_adversarial"]]
+        .rename(columns={"weighted_bounded": "Bounded", "weighted_unbounded": "Unbounded", "weighted_adversarial": "Adversarial"})
         .idxmax(axis=1)
     )
 

@@ -21,7 +21,15 @@ def main():
     # and take the mean impact score
     aggregated_impact_df = (
         occupation_impact_df.groupby("OCC_CODE")
-        .agg({"occupation_impact": "mean", "Title": "first", "mean_penetration": "mean", "eloundou_exposure_mid": "mean"})
+        .agg(
+            {
+                "occupation_impact": "mean",
+                "Title": "first",
+                "mean_penetration": "mean",
+                "eloundou_exposure_mid": "mean",
+                "dominant_demand": "first",
+            }
+        )
         .reset_index()
     )
 
@@ -73,6 +81,27 @@ def main():
     plt.savefig(f"{output_dir}/bls_wage_growth_vs_impact.png", dpi=300)
     plt.close()
 
+    # Plot 3: Productivity Premium vs Red Queen's Race (Emp Growth vs Wage Growth)
+    plt.figure(figsize=(12, 10))
+    sns.scatterplot(
+        data=merged_validation_df,
+        x="emp_growth",
+        y="wage_growth",
+        hue="dominant_demand",
+        palette={"Bounded": "#d73027", "Unbounded": "#fee08b", "Adversarial": "#1a9850"},
+        alpha=0.7,
+        s=60,
+    )
+    plt.title("Productivity Premium vs Red Queen's Race\nEmployment Growth vs Wage Growth by Demand Type")
+    plt.xlabel("Year-over-Year Employment Growth (%)")
+    plt.ylabel("Year-over-Year Median Wage Growth (%)")
+    plt.axhline(0, color="black", linestyle="--", linewidth=1)
+    plt.axvline(0, color="black", linestyle="--", linewidth=1)
+
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/productivity_vs_red_queen.png", dpi=300)
+    plt.close()
+
     # Compare with Eloundou exposure only correlation
     r_emp_elo, p_emp_elo = stats.pearsonr(merged_validation_df["eloundou_exposure_mid"], merged_validation_df["emp_growth"])
     r_wage_elo, p_wage_elo = stats.pearsonr(merged_validation_df["eloundou_exposure_mid"], merged_validation_df["wage_growth"])
@@ -82,6 +111,15 @@ def main():
     print(f"Eloundou Exposure vs Emp Growth: r = {r_emp_elo:.3f} (p={p_emp_elo:.3f})")
     print(f"Our Impact Score vs Wage Growth: r = {r_wage:.3f} (p={p_wage:.3f})")
     print(f"Eloundou Exposure vs Wage Growth:r = {r_wage_elo:.3f} (p={p_wage_elo:.3f})")
+
+    print("\n--- Productivity Premium vs Red Queen's Race ---")
+    demand_stats = (
+        merged_validation_df.groupby("dominant_demand")
+        .agg({"emp_growth": "mean", "wage_growth": "mean", "Title": "count"})
+        .rename(columns={"Title": "N_Occupations"})
+    )
+
+    print(demand_stats.to_string())
 
 
 if __name__ == "__main__":

@@ -51,6 +51,9 @@ def _correlations(clean_df: pd.DataFrame, growth_col: str) -> tuple[float, float
     return r_impact, p_impact, r_eloundou, p_eloundou
 
 
+DEMAND_PALETTE = {"Bounded": "#d73027", "Unbounded": "#fee08b", "Adversarial": "#1a9850"}
+
+
 def _make_subplot_figure(
     merged_df: pd.DataFrame,
     growth_type: str,
@@ -70,20 +73,48 @@ def _make_subplot_figure(
 
         r_impact, p_impact, _, _ = _correlations(clean_df, growth_col)
 
+        # Colored scatter by demand type, then regression line overlaid without scatter
+        sns.scatterplot(
+            data=clean_df,
+            x="occupation_impact",
+            y=growth_col,
+            hue="dominant_demand",
+            palette=DEMAND_PALETTE,
+            alpha=0.6,
+            s=25,
+            legend=(ax is axes[-1]),
+            ax=ax,
+        )
         sns.regplot(
             data=clean_df,
             x="occupation_impact",
             y=growth_col,
-            scatter_kws={"alpha": 0.4, "s": 20},
-            line_kws={"color": "steelblue"},
+            scatter=False,
+            line_kws={"color": "steelblue", "linewidth": 1.5},
             ax=ax,
         )
+        for demand_type, color in DEMAND_PALETTE.items():
+            subset_df = clean_df[clean_df["dominant_demand"] == demand_type]
+            if len(subset_df) < 3:
+                continue
+            sns.regplot(
+                data=subset_df,
+                x="occupation_impact",
+                y=growth_col,
+                scatter=False,
+                line_kws={"color": color, "linewidth": 1.5},
+                ax=ax,
+            )
+
         ax.set_title(f"{_label(period)}\nr={r_impact:.3f} (p={p_impact:.3f})", fontsize=11)
         ax.set_xlabel("Occupation Impact Score", fontsize=10)
-        ax.set_ylabel(ylabel if ax == axes[0] else "", fontsize=10)
-        ax.axhline(0, color="red", linestyle="--", linewidth=0.8)
-        ax.axvline(0, color="red", linestyle="--", linewidth=0.8)
+        ax.set_ylabel(ylabel if ax is axes[0] else "", fontsize=10)
+        ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
+        ax.axvline(0, color="grey", linestyle="--", linewidth=0.8)
         ax.text(0.02, 0.98, f"n={len(clean_df)}", transform=ax.transAxes, va="top", fontsize=8, color="grey")
+
+        if ax is axes[-1]:
+            ax.legend(title="Demand Type", fontsize=8, title_fontsize=8, loc="upper right")
 
     fig.suptitle(f"Occupation Impact Score vs {ylabel}", fontsize=13, y=1.02)
     plt.tight_layout()

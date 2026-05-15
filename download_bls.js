@@ -24,8 +24,9 @@ const https = require('https');
     downloadPath: downloadDir
   });
 
-  // 2024 is only available as the full "all areas" file; 2022/2023 are national-only.
+  // 2024 and 2025 are only available as the full "all areas" file; 2022/2023 are national-only.
   const urls = [
+    'https://www.bls.gov/oes/special-requests/oesm25all.zip',
     'https://www.bls.gov/oes/special.requests/oesm24all.zip',
     'https://www.bls.gov/oes/special.requests/oesm23nat.zip',
     'https://www.bls.gov/oes/special.requests/oesm22nat.zip'

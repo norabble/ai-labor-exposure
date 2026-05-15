@@ -10,6 +10,7 @@ Inputs (any subset that exists under data/raw/bls/):
   • oesm22nat.zip — 2022 national-only file
   • oesm23nat.zip — 2023 national-only file
   • oesm24all.zip — 2024 all-areas file (filtered to AREA_TYPE==1)
+  • oesm25all.zip — 2025 all-areas file (filtered to AREA_TYPE==1)
 
 Output:
   • data/output/bls_trends.csv
@@ -27,6 +28,7 @@ YEAR_CONFIGS = [
     ("22", "data/raw/bls/oesm22nat.zip"),
     ("23", "data/raw/bls/oesm23nat.zip"),
     ("24", "data/raw/bls/oesm24all.zip"),
+    ("25", "data/raw/bls/oesm25all.zip"),
 ]
 
 

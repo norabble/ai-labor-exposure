@@ -18,6 +18,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.ticker import PercentFormatter
+
+from plot_constants import DEMAND_PALETTE
 
 
 def main():
@@ -47,8 +50,9 @@ def main():
         width = bar.get_width()
         label_x_pos = width - 0.02 if width < 0 else width + 0.02
         ha = "right" if width < 0 else "left"
-        plt.text(label_x_pos, bar.get_y() + bar.get_height() / 2, f"{width:.2f}", va="center", ha=ha, fontsize=10)
+        plt.text(label_x_pos, bar.get_y() + bar.get_height() / 2, f"{width:.0%}", va="center", ha=ha, fontsize=10)
 
+    plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.tight_layout()
     plt.savefig(f"{output_dir}/most_impacted_jobs.png", dpi=300)
     plt.close()
@@ -60,9 +64,9 @@ def main():
         x="eloundou_exposure_mid",
         y="occupation_impact",
         hue="dominant_demand",
-        palette={"Bounded": "#d73027", "Unbounded": "#fee08b", "Adversarial": "#1a9850"},
-        alpha=0.7,
-        s=60,
+        palette=DEMAND_PALETTE,
+        alpha=0.5,
+        s=15,
     )
 
     x_vals = np.array([clean_impact_report_df["eloundou_exposure_mid"].min(), clean_impact_report_df["eloundou_exposure_mid"].max()])
@@ -77,18 +81,21 @@ def main():
     clean_impact_report_df["difference_from_naive"] = (
         clean_impact_report_df["occupation_impact"] + clean_impact_report_df["eloundou_exposure_mid"]
     )
-    outliers = clean_impact_report_df.nlargest(10, "difference_from_naive")
+    outliers = clean_impact_report_df.nlargest(5, "difference_from_naive")
 
-    for i, row in outliers.iterrows():
+    for _, row in outliers.iterrows():
         plt.annotate(
             row["Title"],
             (row["eloundou_exposure_mid"], row["occupation_impact"]),
-            xytext=(5, 5),
+            xytext=(12, 6),
             textcoords="offset points",
             fontsize=8,
-            alpha=0.8,
+            alpha=0.9,
+            arrowprops={"arrowstyle": "->", "color": "grey", "lw": 0.8},
         )
 
+    plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.tight_layout()
     plt.savefig(f"{output_dir}/exposure_vs_impact.png", dpi=300)
     plt.close()
@@ -106,7 +113,7 @@ def main():
         plt.text(
             row["difference_from_naive"] - 0.02,
             list(outliers_sorted["Title"]).index(row["Title"]),
-            f"Impact: {row['occupation_impact']:.2f} | Exp: {row['eloundou_exposure_mid']:.2f}",
+            f"Impact: {row['occupation_impact']:.0%} | Exp: {row['eloundou_exposure_mid']:.0%}",
             va="center",
             ha="right",
             color="white",
@@ -114,6 +121,7 @@ def main():
             fontsize=9,
         )
 
+    plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.tight_layout()
     plt.savefig(f"{output_dir}/biggest_differences.png", dpi=300)
     plt.close()

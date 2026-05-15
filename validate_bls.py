@@ -18,12 +18,17 @@ Outputs (saved to data/output/visualizations/):
   • productivity_vs_red_queen.png — emp vs wage growth by demand type (composite)
 """
 
+import math
 import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
+from matplotlib.lines import Line2D
+from matplotlib.ticker import PercentFormatter
+
+from plot_constants import DEMAND_PALETTE
 
 
 def _label(period: str) -> str:
@@ -51,9 +56,6 @@ def _correlations(clean_df: pd.DataFrame, growth_col: str) -> tuple[float, float
     return r_impact, p_impact, r_eloundou, p_eloundou
 
 
-DEMAND_PALETTE = {"Bounded": "#d73027", "Unbounded": "#fee08b", "Adversarial": "#1a9850"}
-
-
 def _make_subplot_figure(
     merged_df: pd.DataFrame,
     growth_type: str,
@@ -62,18 +64,30 @@ def _make_subplot_figure(
     output_path: str,
 ) -> None:
     n_periods = len(periods)
-    fig, axes = plt.subplots(1, n_periods, figsize=(6 * n_periods, 6), sharey=False)
-    if n_periods == 1:
-        axes = [axes]
+    ncols = min(n_periods, 2)
+    nrows = math.ceil(n_periods / ncols)
+    fig, axes_grid = plt.subplots(nrows, ncols, figsize=(7 * ncols, 6 * nrows), sharey=False)
 
-    for ax, period in zip(axes, periods):
+    if nrows == 1 and ncols == 1:
+        axes_flat = [axes_grid]
+    elif nrows == 1 or ncols == 1:
+        axes_flat = list(axes_grid)
+    else:
+        axes_flat = [ax for row in axes_grid for ax in row]
+
+    for ax in axes_flat[n_periods:]:
+        ax.set_visible(False)
+
+    last_ax = axes_flat[n_periods - 1]
+
+    for subplot_idx, (ax, period) in enumerate(zip(axes_flat, periods)):
         growth_col = f"{growth_type}_growth_{period}"
         is_composite = period == "composite"
         clean_df = _clean(merged_df, growth_col, is_composite)
 
         r_impact, p_impact, _, _ = _correlations(clean_df, growth_col)
 
-        # Colored scatter by demand type, then regression line overlaid without scatter
+        # Colored scatter by demand type, then regression lines overlaid
         sns.scatterplot(
             data=clean_df,
             x="occupation_impact",
@@ -82,7 +96,7 @@ def _make_subplot_figure(
             palette=DEMAND_PALETTE,
             alpha=0.6,
             s=25,
-            legend=(ax is axes[-1]),
+            legend=(ax is last_ax),
             ax=ax,
         )
         sns.regplot(
@@ -102,19 +116,31 @@ def _make_subplot_figure(
                 x="occupation_impact",
                 y=growth_col,
                 scatter=False,
+                ci=None,
                 line_kws={"color": color, "linewidth": 1.5},
                 ax=ax,
             )
 
         ax.set_title(f"{_label(period)}\nr={r_impact:.3f} (p={p_impact:.3f})", fontsize=11)
         ax.set_xlabel("Occupation Impact Score", fontsize=10)
-        ax.set_ylabel(ylabel if ax is axes[0] else "", fontsize=10)
+        ax.set_ylabel(ylabel if subplot_idx % ncols == 0 else "", fontsize=10)
         ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
         ax.axvline(0, color="grey", linestyle="--", linewidth=0.8)
         ax.text(0.02, 0.98, f"n={len(clean_df)}", transform=ax.transAxes, va="top", fontsize=8, color="grey")
+        ax.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
 
-        if ax is axes[-1]:
-            ax.legend(title="Demand Type", fontsize=8, title_fontsize=8, loc="upper right")
+        if ax is last_ax:
+            handles, labels = ax.get_legend_handles_labels()
+            overall_line = Line2D([0], [0], color="steelblue", linewidth=1.5, label="All occupations")
+            ax.legend(
+                handles=handles + [overall_line],
+                labels=labels + ["All occupations"],
+                title="Demand Type",
+                fontsize=8,
+                title_fontsize=8,
+                loc="upper right",
+            )
 
     fig.suptitle(f"Occupation Impact Score vs {ylabel}", fontsize=13, y=1.02)
     plt.tight_layout()
@@ -188,7 +214,7 @@ def main():
             x="emp_growth_composite",
             y="wage_growth_composite",
             hue="dominant_demand",
-            palette={"Bounded": "#d73027", "Unbounded": "#fee08b", "Adversarial": "#1a9850"},
+            palette=DEMAND_PALETTE,
             alpha=0.7,
             s=60,
         )
@@ -197,6 +223,8 @@ def main():
         plt.ylabel("Composite Median Wage Growth (2022→latest)")
         plt.axhline(0, color="black", linestyle="--", linewidth=1)
         plt.axvline(0, color="black", linestyle="--", linewidth=1)
+        plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.tight_layout()
         plt.savefig(f"{output_dir}/productivity_vs_red_queen.png", dpi=300)
         plt.close()

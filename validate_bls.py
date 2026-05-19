@@ -26,9 +26,36 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
 from plot_constants import DEMAND_PALETTE
+
+SOC_MAJOR_GROUPS = {
+    "11": "Management",
+    "13": "Business and Financial Operations",
+    "15": "Computer and Mathematical",
+    "17": "Architecture and Engineering",
+    "19": "Life, Physical, and Social Science",
+    "21": "Community and Social Service",
+    "23": "Legal",
+    "25": "Educational Instruction and Library",
+    "27": "Arts, Design, Entertainment, Sports, and Media",
+    "29": "Healthcare Practitioners and Technical",
+    "31": "Healthcare Support",
+    "33": "Protective Service",
+    "35": "Food Preparation and Serving Related",
+    "37": "Building and Grounds Cleaning and Maintenance",
+    "39": "Personal Care and Service",
+    "41": "Sales and Related",
+    "43": "Office and Administrative Support",
+    "45": "Farming, Fishing, and Forestry",
+    "47": "Construction and Extraction",
+    "49": "Installation, Maintenance, and Repair",
+    "51": "Production",
+    "53": "Transportation and Material Moving",
+    "55": "Military Specific",
+}
 
 
 def _label(period: str) -> str:
@@ -163,6 +190,7 @@ def main():
                 "mean_penetration": "mean",
                 "eloundou_exposure_mid": "mean",
                 "dominant_demand": "first",
+                "dominant_strength": "first",
             }
         )
         .reset_index()
@@ -260,6 +288,123 @@ def main():
             emp_growth=("emp_growth_composite", "mean"), wage_growth=("wage_growth_composite", "mean"), n=("Title", "count")
         )
         print(demand_stats.to_string())
+
+    # ── AI exposure volume ────────────────────────────────────────────────────
+    # exposure_volume = (occupation employment / total modeled employment) × mean_penetration
+    # Gives each occupation's contribution to economy-wide AI exposure as a fraction of total employment.
+    latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
+    latest_year = latest_emp_col.replace("TOT_EMP_", "20")
+    exposure_volume_df = merged_validation_df.dropna(subset=[latest_emp_col, "mean_penetration"]).copy()
+    total_modeled_emp = exposure_volume_df[latest_emp_col].sum()
+    exposure_volume_df["employment_share"] = exposure_volume_df[latest_emp_col] / total_modeled_emp
+    exposure_volume_df["exposure_volume"] = exposure_volume_df["employment_share"] * exposure_volume_df["mean_penetration"]
+
+    # Occupation-level CSV
+    occupation_exposure_save_df = exposure_volume_df[
+        [
+            "OCC_CODE",
+            "Title",
+            "dominant_demand",
+            "dominant_strength",
+            latest_emp_col,
+            "employment_share",
+            "mean_penetration",
+            "exposure_volume",
+        ]
+    ].sort_values("exposure_volume", ascending=False)
+    occupation_exposure_save_df.to_csv("data/output/exposure_volume_by_occupation.csv", index=False)
+
+    # Group-level rollup — dominant demand is whichever type accumulates the most exposure_volume in the group
+    exposure_volume_df["soc_major"] = exposure_volume_df["OCC_CODE"].str.split("-").str[0]
+
+    group_demand_df = exposure_volume_df.groupby(["soc_major", "dominant_demand"])["exposure_volume"].sum().reset_index()
+    group_dominant_demand_df = group_demand_df.loc[
+        group_demand_df.groupby("soc_major")["exposure_volume"].idxmax(),
+        ["soc_major", "dominant_demand"],
+    ].rename(columns={"dominant_demand": "group_dominant_demand"})
+
+    group_rollup_df = (
+        exposure_volume_df.groupby("soc_major")
+        .agg(
+            group_name=("soc_major", lambda codes: SOC_MAJOR_GROUPS.get(codes.iloc[0], "Other")),
+            total_employment=(latest_emp_col, "sum"),
+            employment_share=("employment_share", "sum"),
+            avg_penetration=("mean_penetration", "mean"),
+            total_exposure_volume=("exposure_volume", "sum"),
+            n_occupations=("Title", "count"),
+        )
+        .reset_index()
+        .merge(group_dominant_demand_df, on="soc_major")
+        .sort_values("total_exposure_volume", ascending=False)
+        .reset_index(drop=True)
+    )
+    total_all_exposure = group_rollup_df["total_exposure_volume"].sum()
+    group_rollup_df["pct_of_total_exposure"] = group_rollup_df["total_exposure_volume"] / total_all_exposure
+    group_rollup_df.to_csv("data/output/exposure_volume_by_group.csv", index=False)
+
+    def _exposure_bar_chart(plot_df: pd.DataFrame, value_col: str, xlabel: str, title: str, output_path: str) -> None:
+        sorted_df = plot_df.sort_values(value_col, ascending=True)
+        bar_colors = [DEMAND_PALETTE.get(demand_type, "grey") for demand_type in sorted_df["group_dominant_demand"]]
+        fig, ax = plt.subplots(figsize=(12, 9))
+        bars = ax.barh(sorted_df["group_name"], sorted_df[value_col] * 100, color=bar_colors, alpha=0.85)
+        ax.set_xlabel(xlabel, fontsize=10)
+        ax.set_title(title, fontsize=12)
+        ax.xaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=1))
+        legend_handles = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+        ax.legend(handles=legend_handles, title="Dominant Demand Type", fontsize=9, title_fontsize=9, loc="lower right")
+        for bar, (_, row) in zip(bars, sorted_df.iterrows()):
+            ax.text(
+                bar.get_width() + 0.05,
+                bar.get_y() + bar.get_height() / 2,
+                f"{row[value_col]:.1%}",
+                va="center",
+                fontsize=8,
+                color="dimgrey",
+            )
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+    _exposure_bar_chart(
+        group_rollup_df,
+        "total_exposure_volume",
+        f"Employment Share × Mean Penetration ({latest_year} employment, %)",
+        f"Employment-Weighted AI Exposure by Occupational Group ({latest_year})\nColored by dominant demand type",
+        f"{output_dir}/exposure_volume_by_group.png",
+    )
+    _exposure_bar_chart(
+        group_rollup_df,
+        "pct_of_total_exposure",
+        "Share of Total AI Exposure Volume (%)",
+        f"Share of Total AI Exposure Volume by Occupational Group ({latest_year})\nColored by dominant demand type",
+        f"{output_dir}/exposure_share_by_group.png",
+    )
+
+    # Console summary
+    print(f"\n── AI Exposure Volume by Occupation — Top 20 ({latest_emp_col}) ──")
+    top_exposure_display_df = occupation_exposure_save_df.head(20).copy()
+    top_exposure_display_df[latest_emp_col] = top_exposure_display_df[latest_emp_col].map("{:,.0f}".format)
+    top_exposure_display_df["employment_share"] = top_exposure_display_df["employment_share"].map("{:.2%}".format)
+    top_exposure_display_df["mean_penetration"] = top_exposure_display_df["mean_penetration"].map("{:.0%}".format)
+    top_exposure_display_df["exposure_volume"] = top_exposure_display_df["exposure_volume"].map("{:.3%}".format)
+    print(
+        top_exposure_display_df[["Title", "dominant_demand", "employment_share", "mean_penetration", "exposure_volume"]].to_string(
+            index=False
+        )
+    )
+
+    print("\n── AI Exposure Volume by Occupational Group ──")
+    group_display_df = group_rollup_df.copy()
+    group_display_df["total_employment"] = group_display_df["total_employment"].map("{:,.0f}".format)
+    group_display_df["employment_share"] = group_display_df["employment_share"].map("{:.1%}".format)
+    group_display_df["avg_penetration"] = group_display_df["avg_penetration"].map("{:.0%}".format)
+    group_display_df["total_exposure_volume"] = group_display_df["total_exposure_volume"].map("{:.2%}".format)
+    group_display_df["pct_of_total_exposure"] = group_display_df["pct_of_total_exposure"].map("{:.1%}".format)
+    print(
+        group_display_df[
+            ["group_name", "group_dominant_demand", "employment_share", "avg_penetration", "total_exposure_volume", "pct_of_total_exposure"]
+        ].to_string(index=False)
+    )
 
 
 if __name__ == "__main__":

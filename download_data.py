@@ -10,6 +10,9 @@ ANTHROPIC_TASK_PENETRATION_URL = (
     "https://huggingface.co/datasets/Anthropic/EconomicIndex/resolve/main/labor_market_impacts/task_penetration.csv"
 )
 ANTHROPIC_JOB_EXPOSURE_URL = "https://huggingface.co/datasets/Anthropic/EconomicIndex/resolve/main/labor_market_impacts/job_exposure.csv"
+ANTHROPIC_TASK_CONVERSATION_PCT_URL = (
+    "https://huggingface.co/datasets/Anthropic/EconomicIndex/resolve/main/release_2025_03_27/task_pct_v2.csv"
+)
 ELOUNDOU_EXPOSURE_URL = "https://raw.githubusercontent.com/openai/GPTs-are-GPTs/main/data/occ_level.csv"
 
 
@@ -64,6 +67,13 @@ def download_anthropic_data():
     job_exposure_df = pd.read_csv(io.StringIO(job_exposure_response.text))
     job_exposure_df.to_csv("data/raw/anthropic_job_exposure.csv", index=False)
     print(f"Saved data/raw/anthropic_job_exposure.csv ({len(job_exposure_df)} rows)")
+
+    print("Downloading Anthropic task conversation % data...")
+    task_conv_pct_response = requests.get(ANTHROPIC_TASK_CONVERSATION_PCT_URL)
+    task_conv_pct_response.raise_for_status()
+    task_conv_pct_df = pd.read_csv(io.StringIO(task_conv_pct_response.text))
+    task_conv_pct_df.to_csv("data/raw/anthropic_task_conversation_pct.csv", index=False)
+    print(f"Saved data/raw/anthropic_task_conversation_pct.csv ({len(task_conv_pct_df)} rows)")
 
     return task_penetration_df, job_exposure_df
 

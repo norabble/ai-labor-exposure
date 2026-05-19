@@ -5,11 +5,14 @@ Generates visualizations from the occupation impact report.
 
 Inputs:
   • data/output/occupation_impact_report.csv
+  • data/output/classified_all_tasks.csv          (for usage_by_demand_type chart)
+  • data/raw/anthropic_task_conversation_pct.csv  (for usage_by_demand_type chart)
 
 Outputs (saved to data/output/visualizations/):
   • most_impacted_jobs.png        — Top 15 highest/lowest impact occupations
   • exposure_vs_impact.png        — Eloundou exposure vs. our full model impact score
   • biggest_differences.png       — Occupations most different from naive exposure prediction
+  • usage_by_demand_type.png      — Claude conversation share vs. task share by demand type
 """
 
 import os
@@ -125,6 +128,87 @@ def main():
     plt.tight_layout()
     plt.savefig(f"{output_dir}/biggest_differences.png", dpi=300)
     plt.close()
+
+    # 4. Claude conversation share vs. O*NET task share by demand type
+    classified_path = "data/output/classified_all_tasks.csv"
+    conv_pct_path = "data/raw/anthropic_task_conversation_pct.csv"
+    if os.path.exists(classified_path) and os.path.exists(conv_pct_path):
+        classified_tasks_df = pd.read_csv(classified_path)
+        task_conv_pct_df = pd.read_csv(conv_pct_path)
+
+        classified_tasks_df["task_lower"] = classified_tasks_df["Task"].str.lower().str.strip()
+        task_conv_pct_df["task_lower"] = task_conv_pct_df["task_name"].str.lower().str.strip()
+
+        # One demand type per unique task text (a task may appear across many occupations)
+        unique_classified_df = classified_tasks_df[classified_tasks_df["Demand Type"] != "ERROR"].drop_duplicates("task_lower")[
+            ["task_lower", "Demand Type"]
+        ]
+
+        matched_conv_df = task_conv_pct_df.merge(unique_classified_df, on="task_lower", how="inner")
+
+        demand_types = ["Bounded", "Unbounded", "Adversarial"]
+        total_unique_tasks = len(unique_classified_df)
+        total_matched_conv_pct = matched_conv_df["pct"].sum()
+
+        # Task share: fraction of all classified O*NET tasks in each demand type
+        pct_tasks = [(unique_classified_df["Demand Type"] == dt).sum() / total_unique_tasks * 100 for dt in demand_types]
+
+        # Conversation share: fraction of matched conversations in each demand type (normalized to matched)
+        pct_conversations = [
+            matched_conv_df[matched_conv_df["Demand Type"] == dt]["pct"].sum() / total_matched_conv_pct * 100 for dt in demand_types
+        ]
+
+        bar_width = 0.35
+        x_positions = range(len(demand_types))
+
+        fig, ax = plt.subplots(figsize=(9, 6))
+        task_bars = ax.bar(
+            [xi - bar_width / 2 for xi in x_positions],
+            pct_tasks,
+            width=bar_width,
+            color="lightgrey",
+            edgecolor="grey",
+            label="Share of O*NET tasks",
+        )
+        conv_bars = ax.bar(
+            [xi + bar_width / 2 for xi in x_positions],
+            pct_conversations,
+            width=bar_width,
+            color=[DEMAND_PALETTE[dt] for dt in demand_types],
+            edgecolor="white",
+            alpha=0.85,
+            label="Share of Claude conversations",
+        )
+
+        for bar in task_bars:
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.5,
+                f"{bar.get_height():.1f}%",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+                color="dimgrey",
+            )
+        for bar in conv_bars:
+            ax.text(
+                bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5, f"{bar.get_height():.1f}%", ha="center", va="bottom", fontsize=9
+            )
+
+        ax.set_xticks(list(x_positions))
+        ax.set_xticklabels(demand_types, fontsize=11)
+        ax.set_ylabel("Share of Total (%)", fontsize=10)
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=0))
+        coverage_pct = total_matched_conv_pct
+        ax.set_title(
+            f"Claude Conversation Share vs. O*NET Task Share by Demand Type\n"
+            f"(conversations cover {coverage_pct:.0f}% of all tasks; shares normalized to matched tasks)",
+            fontsize=11,
+        )
+        ax.legend(fontsize=9)
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/usage_by_demand_type.png", dpi=300, bbox_inches="tight")
+        plt.close()
 
     print(f"Visualizations saved to {output_dir}")
 

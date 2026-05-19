@@ -161,6 +161,12 @@ def rollup_to_occupation(task_dataframe: pd.DataFrame) -> pd.DataFrame:
         .idxmax(axis=1)
     )
 
+    pct_col_map = {"Bounded": "pct_bounded", "Unbounded": "pct_unbounded", "Adversarial": "pct_adversarial"}
+    occupation_aggregation_df["dominant_strength"] = occupation_aggregation_df.apply(
+        lambda row: row[pct_col_map[row["dominant_demand"]]],
+        axis=1,
+    )
+
     return occupation_aggregation_df
 
 
@@ -236,6 +242,14 @@ def synthesize():
 
     print("\n── Occupation Impact Score distribution ──")
     print(occupation_data_df["occupation_impact"].describe().round(4).to_string())
+
+    print("\n── Top 20: Highest Observed AI Exposure ──")
+    exposure_display_df = occupation_data_df.nlargest(20, "mean_penetration")[
+        ["Title", "dominant_demand", "dominant_strength", "mean_penetration"]
+    ].copy()
+    exposure_display_df["dominant_strength"] = exposure_display_df["dominant_strength"].map("{:.0%}".format)
+    exposure_display_df["mean_penetration"] = exposure_display_df["mean_penetration"].map("{:.0%}".format)
+    print(exposure_display_df.to_string(index=False))
 
     print("\n── Top 15: Highest Displacement Risk (most negative impact score) ──")
     top_decline = occupation_data_df.head(15)[["Title", "dominant_demand", "mean_penetration", "occupation_impact", "impact_narrative"]]

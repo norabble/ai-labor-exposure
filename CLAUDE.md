@@ -72,7 +72,7 @@ The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSAR
 | `most_impacted_jobs.png` | `generate_plots.py` | Horizontal bar chart of top 15 highest- and lowest-impact occupations. |
 | `exposure_vs_impact.png` | `generate_plots.py` | Scatter of Eloundou exposure vs. our model's occupation impact score, colored by dominant demand type. Shows where our model diverges from naive exposure. |
 | `biggest_differences.png` | `generate_plots.py` | Top 5 occupations where our model departs most from the naive "impact = −exposure" baseline. |
-| `usage_by_demand_type.png` | `generate_plots.py` | Grouped bar: share of O\*NET tasks vs. share of actual Claude conversations (from Anthropic Economic Index `task_pct_v2.csv`) by demand type. Validates whether real AI usage aligns with task-level model assumptions. |
+| `usage_by_demand_type.png` | `generate_plots.py` | Stacked bar: Claude conversation share by demand type, with each bar stacked by occupational category (SOC major group). Task share shown as a simple reference bar alongside. Validates whether real AI usage aligns with task-level model assumptions, and shows which occupations drive each demand type's usage. |
 | `validation_emp_growth.png` | `validate_bls.py` | 2×2 grid: occupation impact score vs. YoY employment growth for each period (2022–23, 23–24, 24–25, composite). Per-demand trend lines + overall trend line. |
 | `validation_wage_growth.png` | `validate_bls.py` | Same layout as above for median wage growth. |
 | `productivity_vs_red_queen.png` | `validate_bls.py` | Composite employment growth vs. composite wage growth, colored by dominant demand type. Tests whether Unbounded/Adversarial occupations show the expected productivity premium. |

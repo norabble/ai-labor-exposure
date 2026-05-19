@@ -21,9 +21,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
-from plot_constants import DEMAND_PALETTE
+from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
 
 
 def main():
@@ -129,7 +130,7 @@ def main():
     plt.savefig(f"{output_dir}/biggest_differences.png", dpi=300)
     plt.close()
 
-    # 4. Claude conversation share vs. O*NET task share by demand type
+    # 4. Claude conversation share by demand type, stacked by occupational category
     classified_path = "data/output/classified_all_tasks.csv"
     conv_pct_path = "data/raw/anthropic_task_conversation_pct.csv"
     if os.path.exists(classified_path) and os.path.exists(conv_pct_path):
@@ -139,73 +140,104 @@ def main():
         classified_tasks_df["task_lower"] = classified_tasks_df["Task"].str.lower().str.strip()
         task_conv_pct_df["task_lower"] = task_conv_pct_df["task_name"].str.lower().str.strip()
 
-        # One demand type per unique task text (a task may appear across many occupations)
+        demand_types = ["Bounded", "Unbounded", "Adversarial"]
+
+        # One demand type per unique task text
         unique_classified_df = classified_tasks_df[classified_tasks_df["Demand Type"] != "ERROR"].drop_duplicates("task_lower")[
             ["task_lower", "Demand Type"]
         ]
 
-        matched_conv_df = task_conv_pct_df.merge(unique_classified_df, on="task_lower", how="inner")
-
-        demand_types = ["Bounded", "Unbounded", "Adversarial"]
-        total_unique_tasks = len(unique_classified_df)
-        total_matched_conv_pct = matched_conv_df["pct"].sum()
-
         # Task share: fraction of all classified O*NET tasks in each demand type
+        total_unique_tasks = len(unique_classified_df)
         pct_tasks = [(unique_classified_df["Demand Type"] == dt).sum() / total_unique_tasks * 100 for dt in demand_types]
 
-        # Conversation share: fraction of matched conversations in each demand type (normalized to matched)
-        pct_conversations = [
-            matched_conv_df[matched_conv_df["Demand Type"] == dt]["pct"].sum() / total_matched_conv_pct * 100 for dt in demand_types
-        ]
+        # Map each occupation to its SOC major group
+        valid_classified_df = classified_tasks_df[classified_tasks_df["Demand Type"] != "ERROR"].copy()
+        valid_classified_df["soc_major"] = valid_classified_df["O*NET-SOC Code"].str[:2]
+        valid_classified_df["soc_group"] = valid_classified_df["soc_major"].map(SOC_MAJOR_GROUPS).fillna("Other")
+
+        # Unique (task, soc_group) pairs — a task appearing in many occupations within one group is counted once
+        task_group_df = valid_classified_df[["task_lower", "soc_group"]].drop_duplicates()
+        # Distribute each task's conversation pct equally across all distinct SOC groups it appears in
+        n_groups_per_task = task_group_df.groupby("task_lower").size().rename("n_groups")
+        task_group_df = task_group_df.merge(n_groups_per_task, on="task_lower")
+        task_group_df = task_group_df.merge(unique_classified_df, on="task_lower")
+        task_group_df = task_group_df.merge(task_conv_pct_df[["task_lower", "pct"]], on="task_lower", how="inner")
+        task_group_df["adjusted_pct"] = task_group_df["pct"] / task_group_df["n_groups"]
+
+        # Roll up to (Demand Type, soc_group) and normalize to total matched pct
+        group_demand_df = task_group_df.groupby(["Demand Type", "soc_group"])["adjusted_pct"].sum().reset_index()
+        total_matched_pct = group_demand_df["adjusted_pct"].sum()
+        group_demand_df["norm_pct"] = group_demand_df["adjusted_pct"] / total_matched_pct * 100
+
+        # Keep top 10 groups by total conversation share; collapse the rest into "Other"
+        top_groups = group_demand_df.groupby("soc_group")["norm_pct"].sum().nlargest(10).index.tolist()
+        group_demand_df["plot_group"] = group_demand_df["soc_group"].apply(lambda g: g if g in top_groups else "Other")
+        plot_df = group_demand_df.groupby(["Demand Type", "plot_group"])["norm_pct"].sum().reset_index()
+
+        # Pivot: rows = demand types, columns = occupational groups
+        pivot_df = plot_df.pivot(index="Demand Type", columns="plot_group", values="norm_pct").fillna(0)
+        pivot_df = pivot_df.reindex(demand_types)
+
+        # Sort columns by total share descending, "Other" last
+        col_totals = pivot_df.drop(columns=["Other"], errors="ignore").sum()
+        sorted_cols = col_totals.sort_values(ascending=False).index.tolist()
+        if "Other" in pivot_df.columns:
+            sorted_cols = sorted_cols + ["Other"]
+        pivot_df = pivot_df[sorted_cols]
+
+        # Color palette for occupational groups
+        group_palette = sns.color_palette("tab20", n_colors=len(sorted_cols))
+        color_map = {col: group_palette[i] for i, col in enumerate(sorted_cols)}
+        if "Other" in color_map:
+            color_map["Other"] = "#cccccc"
 
         bar_width = 0.35
-        x_positions = range(len(demand_types))
+        x_positions = np.arange(len(demand_types))
 
-        fig, ax = plt.subplots(figsize=(9, 6))
-        task_bars = ax.bar(
-            [xi - bar_width / 2 for xi in x_positions],
-            pct_tasks,
-            width=bar_width,
-            color="lightgrey",
-            edgecolor="grey",
-            label="Share of O*NET tasks",
-        )
-        conv_bars = ax.bar(
-            [xi + bar_width / 2 for xi in x_positions],
-            pct_conversations,
-            width=bar_width,
-            color=[DEMAND_PALETTE[dt] for dt in demand_types],
-            edgecolor="white",
-            alpha=0.85,
-            label="Share of Claude conversations",
-        )
+        fig, ax = plt.subplots(figsize=(13, 7))
 
-        for bar in task_bars:
+        # Task share: simple reference bars on the left of each group
+        task_bar_positions = x_positions - bar_width / 2
+        task_bar_objs = ax.bar(task_bar_positions, pct_tasks, width=bar_width, color="lightgrey", edgecolor="grey", zorder=2)
+        for bar in task_bar_objs:
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + 0.5,
+                bar.get_height() + 0.4,
                 f"{bar.get_height():.1f}%",
                 ha="center",
                 va="bottom",
-                fontsize=9,
+                fontsize=8,
                 color="dimgrey",
             )
-        for bar in conv_bars:
-            ax.text(
-                bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5, f"{bar.get_height():.1f}%", ha="center", va="bottom", fontsize=9
-            )
 
-        ax.set_xticks(list(x_positions))
+        # Conversation share: stacked by occupational category on the right of each group
+        conv_bar_positions = x_positions + bar_width / 2
+        bottom = np.zeros(len(demand_types))
+        for group in sorted_cols:
+            vals = pivot_df[group].values
+            ax.bar(conv_bar_positions, vals, width=bar_width, bottom=bottom, color=color_map[group], edgecolor="white", linewidth=0.3)
+            bottom += vals
+
+        # Total label on top of each stacked bar
+        for i, dt in enumerate(demand_types):
+            total = pivot_df.loc[dt].sum()
+            ax.text(conv_bar_positions[i], total + 0.4, f"{total:.1f}%", ha="center", va="bottom", fontsize=8)
+
+        ax.set_xticks(x_positions)
         ax.set_xticklabels(demand_types, fontsize=11)
-        ax.set_ylabel("Share of Total (%)", fontsize=10)
+        ax.set_ylabel("Share of Matched Conversations (%)", fontsize=10)
         ax.yaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=0))
-        coverage_pct = total_matched_conv_pct
+
+        legend_handles = [Patch(color=color_map[g], label=g) for g in sorted_cols]
+        legend_handles.append(Patch(facecolor="lightgrey", edgecolor="grey", label="O*NET task share (reference)"))
+        ax.legend(handles=legend_handles, fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1), borderaxespad=0)
+
         ax.set_title(
-            f"Claude Conversation Share vs. O*NET Task Share by Demand Type\n"
-            f"(conversations cover {coverage_pct:.0f}% of all tasks; shares normalized to matched tasks)",
+            f"Claude Conversation Share by Demand Type and Occupational Category\n"
+            f"(matched to {total_matched_pct:.0f}% of conversation volume; right bars stacked by occupational category)",
             fontsize=11,
         )
-        ax.legend(fontsize=9)
         plt.tight_layout()
         plt.savefig(f"{output_dir}/usage_by_demand_type.png", dpi=300, bbox_inches="tight")
         plt.close()

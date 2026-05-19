@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"If you added or changed a pipeline output, visualization, or data file this session — update the Outputs Reference table in CLAUDE.md before committing.\"}'"
+          }
+        ]
+      }
+    ]
+  }
+}

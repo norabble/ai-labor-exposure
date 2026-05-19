@@ -52,6 +52,33 @@ The pipeline has two distinct phases:
 
 The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSARIAL_REBOUND=1.0`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
 
+## Outputs Reference
+
+**When adding a new pipeline output (CSV, visualization, or printed table), add a row here before committing.** This is the authoritative record of what the pipeline produces and what each output is for. If an output changes behaviour or is removed, update or delete its row.
+
+### Data files — `data/output/`
+
+| File | Produced by | Purpose |
+|------|-------------|---------|
+| `occupation_impact_report.csv` | `synthesize_impacts.py` | Per-occupation impact scores, dominant demand type, dominant strength, mean penetration, Eloundou exposure, and impact narrative. Primary model output. |
+| `bls_trends.csv` | `analyze_bls.py` | Year-over-year and composite employment/wage growth by occupation (2022–2025). Used for model validation. |
+| `exposure_volume_by_occupation.csv` | `validate_bls.py` | Per-occupation `employment_share × mean_penetration` (`exposure_volume`), sorted descending. Shows where AI exposure is landing in the workforce. |
+| `exposure_volume_by_group.csv` | `validate_bls.py` | Same metric rolled up to SOC major group. Includes `group_dominant_demand` and `pct_of_total_exposure`. |
+
+### Visualizations — `data/output/visualizations/`
+
+| File | Produced by | Purpose |
+|------|-------------|---------|
+| `most_impacted_jobs.png` | `generate_plots.py` | Horizontal bar chart of top 15 highest- and lowest-impact occupations. |
+| `exposure_vs_impact.png` | `generate_plots.py` | Scatter of Eloundou exposure vs. our model's occupation impact score, colored by dominant demand type. Shows where our model diverges from naive exposure. |
+| `biggest_differences.png` | `generate_plots.py` | Top 5 occupations where our model departs most from the naive "impact = −exposure" baseline. |
+| `usage_by_demand_type.png` | `generate_plots.py` | Grouped bar: share of O\*NET tasks vs. share of actual Claude conversations (from Anthropic Economic Index `task_pct_v2.csv`) by demand type. Validates whether real AI usage aligns with task-level model assumptions. |
+| `validation_emp_growth.png` | `validate_bls.py` | 2×2 grid: occupation impact score vs. YoY employment growth for each period (2022–23, 23–24, 24–25, composite). Per-demand trend lines + overall trend line. |
+| `validation_wage_growth.png` | `validate_bls.py` | Same layout as above for median wage growth. |
+| `productivity_vs_red_queen.png` | `validate_bls.py` | Composite employment growth vs. composite wage growth, colored by dominant demand type. Tests whether Unbounded/Adversarial occupations show the expected productivity premium. |
+| `exposure_volume_by_group.png` | `validate_bls.py` | Horizontal bar: employment-weighted AI exposure by SOC major group, colored by group dominant demand type. |
+| `exposure_share_by_group.png` | `validate_bls.py` | Same as above but each bar shows the group's share of total economy-wide AI exposure volume. |
+
 ## Coding Standards
 
 From `CONTRIBUTING.md` — these are enforced by pre-commit:

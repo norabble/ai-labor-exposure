@@ -83,23 +83,23 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | File | Produced by | Purpose |
 |------|-------------|---------|
 | `most_impacted_jobs.png` | `generate_plots.py` | Horizontal bar chart of top 15 highest- and lowest-impact occupations. |
-| `exposure_vs_impact.png` | `generate_plots.py` | Scatter of Eloundou exposure vs. our model's occupation impact score, colored by dominant demand type. Shows where our model diverges from naive exposure. |
-| `biggest_differences.png` | `generate_plots.py` | Top 5 occupations where our model departs most from the naive "impact = −exposure" baseline. |
-| `usage_by_demand_type.png` | `generate_plots.py` | Stacked bar: Claude conversation share by demand type, with each bar stacked by occupational category (SOC major group). Task share shown as a simple reference bar alongside. Validates whether real AI usage aligns with task-level model assumptions, and shows which occupations drive each demand type's usage. |
-| `validation_emp_growth.png` | `validate_bls.py` | 2×2 grid: occupation impact score vs. YoY employment growth for each period (2022–23, 23–24, 24–25, composite). Per-demand trend lines + overall trend line. |
-| `validation_wage_growth.png` | `validate_bls.py` | Same layout as above for median wage growth. |
-| `productivity_vs_red_queen.png` | `validate_bls.py` | Composite employment growth vs. composite wage growth, colored by dominant demand type. Tests whether Unbounded/Adversarial occupations show the expected productivity premium. |
+| `prior_exposure_vs_model_impact.png` | `generate_plots.py` | Scatter of Eloundou et al. exposure vs. model impact score, colored by dominant demand type. Dashed naive baseline shows where model diverges from "exposure = displacement." See `docs/charts/prior_exposure_vs_model_impact.md`. |
+| `model_vs_naive_divergence.png` | `generate_plots.py` | Top 5 occupations where the model departs most from the naive exposure baseline. See `docs/charts/model_vs_naive_divergence.md`. |
+| `usage_by_demand_type.png` | `generate_plots.py` | Stacked bar: Claude conversation share by demand type, with each bar stacked by occupational category (SOC major group). Task share shown as a simple reference bar alongside. |
+| `task_importance_vs_penetration.png` | `generate_plots.py` | Grouped boxplot: task importance score by demand type, split by whether the task has AI penetration > 0. |
+| `model_vs_actual_employment_growth.png` | `validate_bls.py` | 2×2 grid: model impact score vs. YoY employment growth for each period (2022–23, 23–24, 24–25, composite). Per-demand trend lines + overall trend line. |
+| `model_vs_actual_wage_growth.png` | `validate_bls.py` | Same layout as above for median wage growth. |
+| `employment_vs_wage_growth_by_demand_type.png` | `validate_bls.py` | Composite employment growth vs. composite wage growth, colored by demand type. Tests whether Unbounded/Adversarial occupations show the expected productivity premium. See `docs/charts/employment_vs_wage_growth_by_demand_type.md`. |
 | `exposure_volume_by_group.png` | `validate_bls.py` | Horizontal bar: employment-weighted AI exposure by SOC major group, colored by group dominant demand type. |
 | `exposure_share_by_group.png` | `validate_bls.py` | Same as above but each bar shows the group's share of total economy-wide AI exposure volume. |
 | `employment_by_demand_type.png` | `validate_bls.py` | Bar chart: total U.S. workers in each dominant demand type bucket, annotated with % of modeled workforce and mean impact score. |
-| `wage_quartile_demand_type.png` | `validate_bls.py` | Two-panel: (left) employment-weighted demand type share by wage quartile, showing Bounded dominance in low-wage jobs; (right) employment-weighted mean impact score by quartile. |
-| `anthropic_exposure_vs_impact.png` | `validate_bls.py` | Scatter of Anthropic's observed job exposure vs. our occupation impact score, colored by dominant demand type. Pearson r annotated in title. Shows where high observed usage leads to expansion vs. displacement. |
-| `shift_share_emp_growth.png` | `validate_bls.py` | 2×2 grid: occupation impact score vs. employment growth residual (raw growth minus employment-weighted sector mean) per period. Removes sector-cycle noise for cleaner model validation. |
-| `shift_share_wage_growth.png` | `validate_bls.py` | Same layout as above for wage growth residuals. |
-| `sector_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite employment/wage growth. Bubble size ∝ sector employment. Wage r=−0.485, p=0.022, jackknife-robust (n=22 sectors). |
-| `top_risk_trajectories.png` | `validate_bls.py` | Line chart of actual 2022–2025 BLS employment trajectories for top 10 most-negative-impact occupations, indexed to 100 at 2022. Each line annotated with model prediction vs. actual change. |
-| `high_risk_concentration.png` | `validate_bls.py` | Bubble chart: displacement pressure (pct_bounded × mean_penetration) vs. employment share, for occupations above 5% displacement pressure. Bubble size ∝ exposure_volume. |
-| `task_importance_vs_penetration.png` | `generate_plots.py` | Grouped boxplot: task importance score by demand type, split by whether the task has AI penetration > 0. Shows whether AI-penetrated Bounded tasks are the important ones or peripheral ones. |
+| `wage_quartile_demand_type.png` | `validate_bls.py` | Two-panel: (left) employment-weighted demand type share by wage quartile; (right) employment-weighted mean model impact score by quartile. |
+| `observed_ai_usage_vs_model_impact.png` | `validate_bls.py` | Scatter of observed AI task coverage vs. model impact score. Weak aggregate r (0.166) reflects Adversarial/Unbounded and Bounded occupations pulling in opposite directions. See `docs/charts/observed_ai_usage_vs_model_impact.md`. |
+| `sector_adjusted_employment_growth.png` | `validate_bls.py` | 2×2 grid: model impact vs. employment growth residual (occupation minus employment-weighted sector mean) per period. See `docs/charts/sector_adjusted_growth.md`. |
+| `sector_adjusted_wage_growth.png` | `validate_bls.py` | Same layout as above for wage growth residuals. |
+| `sector_level_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite growth. Wage r=−0.485, p=0.022, jackknife-robust. See `docs/charts/sector_level_validation.md`. |
+| `top_risk_trajectories.png` | `validate_bls.py` | Line chart of 2022–2025 BLS employment trajectories for top 10 most-negative-impact occupations, indexed to 100 at 2022. Each line annotated with model prediction vs. actual change. |
+| `high_risk_concentration.png` | `validate_bls.py` | Bubble chart: displacement pressure vs. employment share for occupations above 5% threshold. Bubble size ∝ AI exposure volume. See `docs/charts/high_risk_concentration.md`. |
 
 ## Coding Standards
 

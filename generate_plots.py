@@ -9,11 +9,11 @@ Inputs:
   • data/raw/anthropic_task_conversation_pct.csv  (for usage_by_demand_type chart)
 
 Outputs (saved to data/output/visualizations/):
-  • most_impacted_jobs.png        — Top 15 highest/lowest impact occupations
-  • exposure_vs_impact.png        — Eloundou exposure vs. our full model impact score
-  • biggest_differences.png       — Occupations most different from naive exposure prediction
-  • usage_by_demand_type.png           — Claude conversation share vs. task share by demand type
-  • task_importance_vs_penetration.png — task importance vs. AI penetration by demand type
+  • most_impacted_jobs.png               — Top 15 highest/lowest impact occupations
+  • prior_exposure_vs_model_impact.png   — Eloundou et al. exposure vs. model impact score
+  • model_vs_naive_divergence.png        — Occupations where model diverges most from naive baseline
+  • usage_by_demand_type.png             — Claude conversation share vs. task share by demand type
+  • task_importance_vs_penetration.png   — Task importance vs. AI penetration by demand type
 """
 
 import os
@@ -47,7 +47,7 @@ def main():
     colors = ["#d73027" if x < 0 else "#1a9850" for x in most_impacted["occupation_impact"]]
     bars = plt.barh(most_impacted["Title"], most_impacted["occupation_impact"], color=colors)
     plt.axvline(0, color="black", linewidth=1)
-    plt.title("Most Impacted Occupations (Our Full Model)", fontsize=16, pad=20)
+    plt.title("Most Impacted Occupations", fontsize=16, pad=20)
     plt.xlabel("Occupation Impact Score", fontsize=12)
     plt.ylabel("", fontsize=12)
 
@@ -75,11 +75,11 @@ def main():
     )
 
     x_vals = np.array([clean_impact_report_df["eloundou_exposure_mid"].min(), clean_impact_report_df["eloundou_exposure_mid"].max()])
-    plt.plot(x_vals, -x_vals, "--", color="grey", label="Naive Expectation (Impact = -Exposure)")
+    plt.plot(x_vals, -x_vals, "--", color="grey", label="Naive Baseline (Impact = −Exposure)")
 
-    plt.title("Eloundou Exposure vs. Full Model Impact", fontsize=16, pad=20)
-    plt.xlabel("Eloundou Exposure (Mid)", fontsize=12)
-    plt.ylabel("Our Occupation Impact Score", fontsize=12)
+    plt.title("Eloundou et al. Exposure vs. Model Impact Score", fontsize=16, pad=20)
+    plt.xlabel("Eloundou et al. Exposure Estimate (mid)", fontsize=12)
+    plt.ylabel("Model Occupation Impact Score", fontsize=12)
     plt.axhline(0, color="black", linewidth=0.5, linestyle=":")
     plt.legend(title="Dominant Demand Type")
 
@@ -102,7 +102,7 @@ def main():
     plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/exposure_vs_impact.png", dpi=300)
+    plt.savefig(f"{output_dir}/prior_exposure_vs_model_impact.png", dpi=300)
     plt.close()
 
     # 3. Occupations most different from naive exposure prediction
@@ -110,15 +110,15 @@ def main():
     outliers_sorted = outliers.sort_values("difference_from_naive", ascending=True)
 
     plt.barh(outliers_sorted["Title"], outliers_sorted["difference_from_naive"], color="#4575b4")
-    plt.title("Occupations Most Different from Exposure-Only Data", fontsize=16, pad=20)
-    plt.xlabel("Difference Score (Our Impact vs. Naive Negative Exposure)", fontsize=12)
+    plt.title("Where the Model Diverges Most from the Naive Exposure Baseline", fontsize=16, pad=20)
+    plt.xlabel("Divergence from Naive Baseline (Model Impact + Exposure Estimate)", fontsize=12)
     plt.ylabel("")
 
     for i, row in outliers_sorted.iterrows():
         plt.text(
             row["difference_from_naive"] - 0.02,
             list(outliers_sorted["Title"]).index(row["Title"]),
-            f"Impact: {row['occupation_impact']:.0%} | Exp: {row['eloundou_exposure_mid']:.0%}",
+            f"Impact: {row['occupation_impact']:.0%} | Exposure: {row['eloundou_exposure_mid']:.0%}",
             va="center",
             ha="right",
             color="white",
@@ -128,7 +128,7 @@ def main():
 
     plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/biggest_differences.png", dpi=300)
+    plt.savefig(f"{output_dir}/model_vs_naive_divergence.png", dpi=300)
     plt.close()
 
     # 4. Claude conversation share by demand type, stacked by occupational category
@@ -279,7 +279,7 @@ def main():
                 plt.text(dt_idx + x_offset, y_min - 0.15, f"n={n}", ha="center", fontsize=8, color="dimgrey")
 
         plt.title(
-            "Task Importance vs. AI Penetration by Demand Type\n" "Are AI-penetrated Bounded tasks the important ones or peripheral ones?",
+            "Task Importance vs. AI Penetration by Demand Type\nAre AI-penetrated Bounded tasks the important ones or peripheral ones?",
             fontsize=12,
         )
         plt.xlabel("Demand Type", fontsize=11)

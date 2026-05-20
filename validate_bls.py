@@ -13,19 +13,19 @@ Inputs:
   • data/output/occupation_impact_report.csv
 
 Outputs (saved to data/output/visualizations/):
-  • validation_emp_growth.png      — impact score vs emp growth, one subplot per period
-  • validation_wage_growth.png     — impact score vs wage growth, one subplot per period
-  • productivity_vs_red_queen.png  — emp vs wage growth by demand type (composite)
-  • shift_share_emp_growth.png     — impact score vs emp growth residual (sector mean removed)
-  • shift_share_wage_growth.png    — impact score vs wage growth residual (sector mean removed)
-  • employment_by_demand_type.png  — workers by dominant demand type bucket
-  • wage_quartile_demand_type.png  — demand type share and mean impact by wage quartile
-  • anthropic_exposure_vs_impact.png — Anthropic observed exposure vs. our impact score
-  • sector_validation.png          — sector-level labeled bubble scatter (n=22 sectors)
-  • top_risk_trajectories.png      — 2022-2025 employment index for top 10 at-risk occupations
-  • high_risk_concentration.png    — bubble chart of high displacement-pressure occupations
-  • exposure_volume_by_group.png   — employment-weighted AI exposure by SOC group
-  • exposure_share_by_group.png    — share of total AI exposure by SOC group
+  • model_vs_actual_employment_growth.png      — model impact vs. YoY employment growth per period
+  • model_vs_actual_wage_growth.png            — model impact vs. YoY wage growth per period
+  • employment_vs_wage_growth_by_demand_type.png — composite emp vs wage growth, colored by demand type
+  • sector_adjusted_employment_growth.png      — model impact vs. sector-adjusted employment growth
+  • sector_adjusted_wage_growth.png            — model impact vs. sector-adjusted wage growth
+  • employment_by_demand_type.png              — workers by dominant demand type bucket
+  • wage_quartile_demand_type.png              — demand type share and mean impact by wage quartile
+  • observed_ai_usage_vs_model_impact.png      — observed AI task coverage vs. model impact score
+  • sector_level_validation.png               — sector-level labeled bubble scatter (n=22 sectors)
+  • top_risk_trajectories.png                 — 2022-2025 employment index for top 10 at-risk occupations
+  • high_risk_concentration.png               — bubble chart of high displacement-pressure occupations
+  • exposure_volume_by_group.png              — employment-weighted AI exposure by SOC group
+  • exposure_share_by_group.png               — share of total AI exposure by SOC group
 """
 
 import math
@@ -146,7 +146,7 @@ def _make_subplot_figure(
             )
 
         ax.set_title(f"{_label(period)}\nr={r_impact:.3f} (p={p_impact:.3f})", fontsize=11)
-        ax.set_xlabel("Occupation Impact Score", fontsize=10)
+        ax.set_xlabel("Model Occupation Impact Score", fontsize=10)
         ax.set_ylabel(ylabel if subplot_idx % ncols == 0 else "", fontsize=10)
         ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
         ax.axvline(0, color="grey", linestyle="--", linewidth=0.8)
@@ -166,7 +166,7 @@ def _make_subplot_figure(
                 loc="upper right",
             )
 
-    fig.suptitle(f"Occupation Impact Score vs {ylabel}", fontsize=13, y=1.02)
+    fig.suptitle(f"Model Impact Score vs. {ylabel}", fontsize=13, y=1.02)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
@@ -217,14 +217,14 @@ def main():
         "emp",
         emp_periods,
         "Year-over-Year Employment Growth",
-        f"{output_dir}/validation_emp_growth.png",
+        f"{output_dir}/model_vs_actual_employment_growth.png",
     )
     _make_subplot_figure(
         merged_validation_df,
         "wage",
         wage_periods,
         "Year-over-Year Median Wage Growth",
-        f"{output_dir}/validation_wage_growth.png",
+        f"{output_dir}/model_vs_actual_wage_growth.png",
     )
 
     # ── Productivity Premium vs Red Queen's Race (composite) ──────────────────
@@ -243,15 +243,16 @@ def main():
             alpha=0.7,
             s=60,
         )
-        plt.title("Productivity Premium vs Red Queen's Race\nComposite Employment vs Wage Growth by Demand Type")
+        plt.title("Composite Employment vs. Wage Growth by Demand Type (2022→latest)")
         plt.xlabel("Composite Employment Growth (2022→latest)")
         plt.ylabel("Composite Median Wage Growth (2022→latest)")
         plt.axhline(0, color="black", linestyle="--", linewidth=1)
         plt.axvline(0, color="black", linestyle="--", linewidth=1)
         plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.legend(title="Demand Type")
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/productivity_vs_red_queen.png", dpi=300)
+        plt.savefig(f"{output_dir}/employment_vs_wage_growth_by_demand_type.png", dpi=300)
         plt.close()
 
     # ── Correlation summary ───────────────────────────────────────────────────
@@ -312,15 +313,15 @@ def main():
         merged_validation_df,
         "ss_emp",
         emp_periods,
-        "Employment Growth Residual (vs. sector mean)",
-        f"{output_dir}/shift_share_emp_growth.png",
+        "Employment Growth Residual (occupation minus sector average)",
+        f"{output_dir}/sector_adjusted_employment_growth.png",
     )
     _make_subplot_figure(
         merged_validation_df,
         "ss_wage",
         wage_periods,
-        "Wage Growth Residual (vs. sector mean)",
-        f"{output_dir}/shift_share_wage_growth.png",
+        "Wage Growth Residual (occupation minus sector average)",
+        f"{output_dir}/sector_adjusted_wage_growth.png",
     )
 
     print("\n── Shift-Share Correlation Comparison (our impact score) ───────────────")
@@ -495,11 +496,7 @@ def main():
         pad=12,
     )
     for bar, (_, row) in zip(emp_bars, demand_emp_df.iterrows()):
-        label = (
-            f"{row['workers_millions']:.1f}M\n"
-            f"({row['pct_of_modeled']:.0%} of modeled)\n"
-            f"Predicted demand Δ: {row['mean_impact']:.1%}"
-        )
+        label = f"{row['workers_millions']:.1f}M\n({row['pct_of_modeled']:.0%} of modeled)\nPredicted demand Δ: {row['mean_impact']:.1%}"
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.8, label, ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/employment_by_demand_type.png", dpi=300, bbox_inches="tight")
@@ -574,7 +571,7 @@ def main():
     ax_impact.axhline(0, color="black", linewidth=0.8)
     ax_impact.set_ylabel("Employment-Weighted Mean Impact Score", fontsize=10)
     ax_impact.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
-    ax_impact.set_title(f"Mean Impact Score by Wage Quartile ({latest_year})\n(employment-weighted)", fontsize=11)
+    ax_impact.set_title(f"Mean Model Impact Score by Wage Quartile ({latest_year})\n(employment-weighted)", fontsize=11)
     for bar, val in zip(impact_bars, quartile_impact_series.values):
         offset = 0.001 if val >= 0 else -0.001
         ax_impact.text(
@@ -631,17 +628,17 @@ def main():
             )
 
         plt.title(
-            f"Anthropic Observed Exposure vs. Our Occupation Impact Score\n"
+            f"Observed AI Task Coverage vs. Model Impact Score\n"
             f"Pearson r = {pearson_r:.3f} (p = {pearson_p:.3f}, n = {len(anthropic_merged_df)})",
             fontsize=13,
         )
-        plt.xlabel("Anthropic Observed Job Exposure (fraction of tasks covered by Claude conversations)", fontsize=11)
-        plt.ylabel("Our Occupation Impact Score", fontsize=11)
+        plt.xlabel("Observed AI Task Coverage (share of occupation's tasks covered by Claude conversations)", fontsize=11)
+        plt.ylabel("Model Occupation Impact Score", fontsize=11)
         plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.legend(title="Dominant Demand Type")
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/anthropic_exposure_vs_impact.png", dpi=300)
+        plt.savefig(f"{output_dir}/observed_ai_usage_vs_model_impact.png", dpi=300)
         plt.close()
 
         print(f"\n── Anthropic Exposure vs. Our Impact (n={len(anthropic_merged_df)}) ──")
@@ -718,12 +715,12 @@ def main():
         legend_handles_s = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
         ax_wage_s.legend(handles=legend_handles_s, title="Dominant Demand Type", fontsize=8)
         fig.suptitle(
-            "Sector-Level Validation: Employment-Weighted Impact vs. Observed Growth\n"
-            "(bubble size ∝ sector employment; wage correlation jackknife-robust — no sector exclusion makes p ≥ 0.05)",
+            "Sector-Level Validation: Employment-Weighted Model Impact vs. Observed Growth\n"
+            "(bubble size ∝ sector employment; wage result holds when any single sector is excluded)",
             fontsize=12,
         )
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/sector_validation.png", dpi=300, bbox_inches="tight")
+        plt.savefig(f"{output_dir}/sector_level_validation.png", dpi=300, bbox_inches="tight")
         plt.close()
 
         print(f"\n── Sector-Level Validation (n={len(sector_agg_df)}) ──")
@@ -764,7 +761,7 @@ def main():
     ax_traj.set_ylabel("Employment (indexed to 2022 = 100)", fontsize=10)
     ax_traj.set_title(
         "Employment Trajectories: Top 10 At-Risk Occupations (2022–2025)\n"
-        "(model: occupation_impact vs. actual BLS employment indexed to 100)",
+        "(model prediction vs. actual BLS employment, indexed to 100 at 2022)",
         fontsize=12,
     )
     ax_traj.set_xticks(trajectory_years)
@@ -809,11 +806,11 @@ def main():
             fontsize=7,
             alpha=0.9,
         )
-    ax_bubble.set_xlabel("Displacement Pressure (pct_bounded × mean_penetration)", fontsize=10)
+    ax_bubble.set_xlabel("Displacement Pressure (share of Bounded tasks × mean AI penetration)", fontsize=10)
     ax_bubble.set_ylabel("Employment Share of Modeled Workforce", fontsize=10)
     ax_bubble.set_title(
-        f"High-Risk Occupation Concentration (displacement_pressure > 5%)\n"
-        f"Bubble size ∝ exposure_volume; n = {len(high_risk_bubble_df)} occupations",
+        f"High-Risk Occupation Concentration (displacement pressure > 5%)\n"
+        f"Bubble size ∝ AI exposure volume; n = {len(high_risk_bubble_df)} occupations",
         fontsize=12,
     )
     ax_bubble.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))

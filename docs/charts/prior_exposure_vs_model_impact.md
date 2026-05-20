@@ -2,6 +2,8 @@
 
 **File:** `prior_exposure_vs_model_impact.png`
 
+![Eloundou et al. Exposure vs. Model Impact Score](images/prior_exposure_vs_model_impact.png)
+
 ## What this chart shows
 
 Each dot is one occupation. The x-axis plots how exposed that occupation's tasks are to AI according to a published estimate from prior literature (Eloundou et al.), and the y-axis shows the impact score this model predicts for that same occupation.

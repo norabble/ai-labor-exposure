@@ -2,6 +2,8 @@
 
 **File:** `high_risk_concentration.png`
 
+![High-Risk Occupation Concentration](images/high_risk_concentration.png)
+
 ## What this chart shows
 
 Each bubble is one occupation that clears a minimum threshold of **displacement pressure** (above 5%). The axes reveal two dimensions of risk:

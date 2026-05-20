@@ -2,6 +2,8 @@
 
 **File:** `model_vs_naive_divergence.png`
 
+![Where the Model Diverges Most from the Naive Exposure Baseline](images/model_vs_naive_divergence.png)
+
 ## What this chart shows
 
 These are the five occupations where this model's prediction departs most from what you'd expect if AI exposure always caused displacement.

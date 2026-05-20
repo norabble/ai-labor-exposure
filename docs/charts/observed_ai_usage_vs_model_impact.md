@@ -2,6 +2,8 @@
 
 **File:** `observed_ai_usage_vs_model_impact.png`
 
+![Observed AI Task Coverage vs. Model Impact Score](images/observed_ai_usage_vs_model_impact.png)
+
 ## What this chart shows
 
 Each dot is one occupation. The x-axis shows how much of that occupation's task work is already covered by actual Claude conversations (measured by Anthropic from real usage data). The y-axis shows this model's predicted impact score for that occupation.

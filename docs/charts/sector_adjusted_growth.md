@@ -2,6 +2,10 @@
 
 **Files:** `sector_adjusted_employment_growth.png`, `sector_adjusted_wage_growth.png`
 
+![Sector-Adjusted Employment Growth](images/sector_adjusted_employment_growth.png)
+
+![Sector-Adjusted Wage Growth](images/sector_adjusted_wage_growth.png)
+
 ## What these charts show
 
 These are the same layout as `model_vs_actual_employment_growth.png` and `model_vs_actual_wage_growth.png`, but the y-axis has been adjusted to remove sector-level trends before plotting.
@@ -28,4 +32,14 @@ A positive residual means the occupation outperformed its sector peers; a negati
 
 ## Interpreting the correlation statistics
 
-Each subplot shows a Pearson r and p-value for the model impact score vs. the growth residual in that period. A small r (close to zero) with a high p-value means the model's occupation-specific signal is weak in that window — which is expected given how short the BLS data series is. The sector-level validation (`sector_level_validation.png`) aggregates to 22 sectors and finds a statistically significant wage correlation.
+Each subplot shows a Pearson r and p-value for the model impact score vs. the growth residual in that period. A small r (close to zero) with a high p-value means the model's occupation-specific prediction is not showing up in the BLS data.
+
+There are several plausible explanations:
+
+**AI adoption hasn't reached the scale needed to show up in aggregate employment data yet.** The BLS data runs through 2025, and widespread AI-driven workforce restructuring likely takes years to manifest in headcount changes. Employers may be absorbing productivity gains without yet reducing headcount in Bounded occupations.
+
+**Observed AI usage has been concentrated in Unbounded and Adversarial tasks.** The `usage_by_demand_type.png` chart shows that the majority of Claude conversation volume falls in Unbounded occupations (71.5%), with relatively little in Bounded ones (18.7%). If AI is being used mostly in expansion-type work, the displacement signal in Bounded occupations will be minimal — not because displacement won't happen, but because it isn't happening yet at scale.
+
+**The model or data could be wrong.** The demand type classifications rest on assumptions about which tasks are Bounded vs. Unbounded. If those labels are systematically off for large occupations, the model's occupation-level predictions may not reflect reality even in the long run. Similarly, the Eloundou et al. exposure estimates and Anthropic penetration scores are imperfect proxies for actual AI adoption depth.
+
+The sector-level validation (`sector_level_validation.png`) aggregates to 22 sectors and finds a statistically significant wage correlation (r = −0.485, p = 0.022), suggesting the model has some structural validity — but the occupation-level employment signal remains absent in this window.

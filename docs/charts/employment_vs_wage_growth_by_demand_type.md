@@ -2,6 +2,8 @@
 
 **File:** `employment_vs_wage_growth_by_demand_type.png`
 
+![Composite Employment vs. Wage Growth by Demand Type](images/employment_vs_wage_growth_by_demand_type.png)
+
 ## What this chart shows
 
 Each dot is one occupation, plotted by its composite employment growth (x-axis) against its composite wage growth (y-axis), both measured from 2022 to the latest available BLS data. Dots are colored by dominant demand type.
@@ -14,6 +16,14 @@ The chart tests two theoretical predictions about how different types of AI-expo
 
 **Adversarial (green):** Work defined by a counterparty that escalates in response to any gain (fraud detection, cybersecurity, compliance). AI capability on both sides raises the stakes and volume of work. Both employment and wages should grow. Look for green dots in the upper-right quadrant.
 
-## Why this test is noisy
+## What the dispersed pattern means
 
-The composite period (2022–2025) spans the post-pandemic labor market, which had strong tailwinds for many occupations independent of AI. Macroeconomic effects dominate occupation-level AI effects in short windows, which is why the dots are dispersed rather than clearly separated. The sector-adjusted charts (`sector_adjusted_employment_growth.png`, `sector_adjusted_wage_growth.png`) remove some of this noise by subtracting each occupation's sector mean before plotting.
+The dots show no clear separation by demand type — Bounded, Unbounded, and Adversarial occupations overlap throughout the chart. There are several honest interpretations:
+
+**AI-driven effects may not have materialized yet.** Widespread workforce restructuring takes time. Employers in Bounded occupations may be absorbing AI productivity gains without reducing headcount — at least through 2025. The predicted divergence between demand types may be a future signal, not a present one.
+
+**Observed AI usage has been concentrated outside Bounded work.** The `usage_by_demand_type.png` chart shows Claude conversation volume is heavily skewed toward Unbounded occupations. If Bounded workers aren't yet adopting AI at scale, there's no mechanism yet for the displacement prediction to show up in employment data.
+
+**The model or classifications may be wrong.** The demand type assignment relies on classifying each O\*NET task statement as Bounded, Unbounded, or Adversarial. If those labels are systematically off — particularly for large occupations that drive aggregate patterns — the model's predictions could be structurally incorrect rather than just early.
+
+The sector-adjusted charts (`sector_adjusted_employment_growth.png`, `sector_adjusted_wage_growth.png`) strip out macroeconomic and sector-cycle noise, but the occupation-level signal remains absent in those views as well. The one robust finding across all validation charts is in wage growth at the sector level — see `sector_level_validation.png`.

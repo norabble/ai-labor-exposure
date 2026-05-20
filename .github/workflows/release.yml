@@ -49,6 +49,18 @@ jobs:
       - name: Run analysis pipeline
         run: uv run main.py 2>&1 | tee pipeline_run.txt
 
+      - name: Update docs/charts/images with freshly generated charts
+        run: |
+          cp data/output/visualizations/prior_exposure_vs_model_impact.png \
+             data/output/visualizations/model_vs_naive_divergence.png \
+             data/output/visualizations/employment_vs_wage_growth_by_demand_type.png \
+             data/output/visualizations/sector_adjusted_employment_growth.png \
+             data/output/visualizations/sector_adjusted_wage_growth.png \
+             data/output/visualizations/sector_level_validation.png \
+             data/output/visualizations/high_risk_concentration.png \
+             data/output/visualizations/observed_ai_usage_vs_model_impact.png \
+             docs/charts/images/
+
       - name: Package visualizations
         run: cd data/output && zip -r visualizations.zip visualizations/
 

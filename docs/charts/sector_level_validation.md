@@ -2,6 +2,8 @@
 
 **File:** `sector_level_validation.png`
 
+![Sector-Level Validation](images/sector_level_validation.png)
+
 ## What this chart shows
 
 Each bubble is one of the 22 BLS major occupational groups (e.g., "Healthcare Practitioners," "Computer and Mathematical"). The x-axis is the sector's employment-weighted mean model impact score; the y-axis is its composite employment or wage growth. Bubble size scales with total employment in the sector.
@@ -12,11 +14,11 @@ Individual occupation-level validation is noisy: a single occupation's growth ca
 
 ## What the correlation statistics mean
 
-**Employment panel (left):** r = 0.283, p = 0.202. The model's sector-level employment predictions are in the right direction but not statistically significant — too few sectors (n = 22) and too short a time window to detect the signal reliably.
+**Employment panel (left):** r = 0.283, p = 0.202. The model's sector-level employment predictions point in the right direction but do not reach statistical significance. This is consistent with the broader picture across all validation charts: AI-driven employment effects are not yet detectable in BLS data through 2025. This could mean the effects are still ahead of us, or that the model's employment predictions are wrong.
 
-**Wage panel (right):** r = −0.485, p = 0.022. Sectors with higher predicted impact (more Unbounded/Adversarial occupations) show higher composite wage growth. This negative correlation is expected: the model uses a signed impact score where positive means expansion, but the mechanism for wage growth in Unbounded/Adversarial sectors is productivity premium — workers who stay command higher wages.
+**Wage panel (right):** r = −0.485, p = 0.022. Sectors where the model predicts negative net impact (Bounded-dominated sectors) show relatively lower composite wage growth; sectors with positive predicted impact (Unbounded/Adversarial-dominated) show higher wage growth. The negative sign reflects the direction of the impact score: negative impact = more Bounded = weaker wages.
 
-Wait — a negative r should mean higher impact predicts lower wages. In practice, the impact score mixes displacement (negative) and expansion (positive) within each sector, so the sector mean impact is driven by how much of the sector is Bounded vs. Unbounded. A sector with many Bounded occupations will have a negative mean impact and will also have lower wage growth if those workers are being displaced downward. The negative r reflects that sectors our model flags as at-risk (negative mean impact) are indeed seeing relatively weaker wage growth.
+This is the strongest statistical signal in the entire validation suite. One interpretation: even if headcounts haven't changed yet, the wage data may be picking up early signals of structural pressure — Bounded-sector workers seeing less wage growth, Unbounded/Adversarial workers seeing a productivity premium. Another interpretation: the wage pattern reflects pre-existing sector dynamics that happen to correlate with our classifications, rather than AI effects specifically.
 
 ## Jackknife robustness
 

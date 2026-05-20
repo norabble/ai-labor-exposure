@@ -58,6 +58,18 @@ def _correlations(clean_df: pd.DataFrame, growth_col: str) -> tuple[float, float
     return r_impact, p_impact, r_eloundou, p_eloundou
 
 
+def _compute_shift_share_residuals(df: pd.DataFrame, growth_col: str, emp_weight_col: str, soc_major_col: str) -> pd.Series:
+    """
+    Occupation-specific shift-share residual: observed growth minus the
+    employment-weighted mean of its SOC major group. Strips out the national
+    trend and sector-level cycle, leaving only the occupation-specific
+    deviation — a cleaner target for model validation.
+    """
+    valid_df = df[[soc_major_col, growth_col, emp_weight_col]].dropna()
+    sector_means = valid_df.groupby(soc_major_col).apply(lambda g: (g[growth_col] * g[emp_weight_col]).sum() / g[emp_weight_col].sum())
+    return df[growth_col] - df[soc_major_col].map(sector_means)
+
+
 def _make_subplot_figure(
     merged_df: pd.DataFrame,
     growth_type: str,
@@ -263,6 +275,62 @@ def main():
             emp_growth=("emp_growth_composite", "mean"), wage_growth=("wage_growth_composite", "mean"), n=("Title", "count")
         )
         print(demand_stats.to_string())
+
+    # ── Shift-share validation ────────────────────────────────────────────────
+    # Decompose observed growth into sector trend + occupation-specific residual.
+    # Correlating our model against the residual removes sector-cycle noise and
+    # gives a cleaner test of whether occupation_impact predicts anything beyond
+    # what the sector average already explains.
+    merged_validation_df["soc_major"] = merged_validation_df["OCC_CODE"].str[:2]
+    ss_weight_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
+
+    for period in emp_periods:
+        raw_col = f"emp_growth_{period}"
+        if raw_col in merged_validation_df.columns:
+            merged_validation_df[f"ss_emp_growth_{period}"] = _compute_shift_share_residuals(
+                merged_validation_df, raw_col, ss_weight_col, "soc_major"
+            )
+
+    for period in wage_periods:
+        raw_col = f"wage_growth_{period}"
+        if raw_col in merged_validation_df.columns:
+            merged_validation_df[f"ss_wage_growth_{period}"] = _compute_shift_share_residuals(
+                merged_validation_df, raw_col, ss_weight_col, "soc_major"
+            )
+
+    _make_subplot_figure(
+        merged_validation_df,
+        "ss_emp",
+        emp_periods,
+        "Employment Growth Residual (vs. sector mean)",
+        f"{output_dir}/shift_share_emp_growth.png",
+    )
+    _make_subplot_figure(
+        merged_validation_df,
+        "ss_wage",
+        wage_periods,
+        "Wage Growth Residual (vs. sector mean)",
+        f"{output_dir}/shift_share_wage_growth.png",
+    )
+
+    print("\n── Shift-Share Correlation Comparison (our impact score) ───────────────")
+    header = f"{'Period':<28} {'Metric':<8} {'Raw r':>7} {'SS r':>7} {'Δr':>7}"
+    print(header)
+    print("-" * len(header))
+    for period in emp_periods:
+        for growth_type, label in [("emp", "Emp"), ("wage", "Wage")]:
+            raw_col = f"{growth_type}_growth_{period}"
+            ss_col = f"ss_{growth_type}_growth_{period}"
+            if raw_col not in merged_validation_df.columns or ss_col not in merged_validation_df.columns:
+                continue
+            is_composite = period == "composite"
+            raw_clean = _clean(merged_validation_df, raw_col, is_composite).dropna(subset=["occupation_impact"])
+            ss_clean = merged_validation_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[ss_col, "occupation_impact"])
+            if len(raw_clean) < 10 or len(ss_clean) < 10:
+                continue
+            r_raw, _ = stats.pearsonr(raw_clean["occupation_impact"], raw_clean[raw_col])
+            r_ss, _ = stats.pearsonr(ss_clean["occupation_impact"], ss_clean[ss_col])
+            print(f"{_label(period):<28} {label:<8} {r_raw:>7.3f} {r_ss:>7.3f} {r_ss - r_raw:>+7.3f}")
 
     # ── AI exposure volume ────────────────────────────────────────────────────
     # exposure_volume = (occupation employment / total modeled employment) × mean_penetration

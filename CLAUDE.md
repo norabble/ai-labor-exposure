@@ -82,6 +82,8 @@ The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSAR
 | `employment_by_demand_type.png` | `validate_bls.py` | Bar chart: total U.S. workers in each dominant demand type bucket, annotated with % of modeled workforce and mean impact score. |
 | `wage_quartile_demand_type.png` | `validate_bls.py` | Two-panel: (left) employment-weighted demand type share by wage quartile, showing Bounded dominance in low-wage jobs; (right) employment-weighted mean impact score by quartile. |
 | `anthropic_exposure_vs_impact.png` | `validate_bls.py` | Scatter of Anthropic's observed job exposure vs. our occupation impact score, colored by dominant demand type. Pearson r annotated in title. Shows where high observed usage leads to expansion vs. displacement. |
+| `shift_share_emp_growth.png` | `validate_bls.py` | 2×2 grid: occupation impact score vs. employment growth residual (raw growth minus employment-weighted sector mean) per period. Removes sector-cycle noise for cleaner model validation. |
+| `shift_share_wage_growth.png` | `validate_bls.py` | Same layout as above for wage growth residuals. |
 
 ## Coding Standards
 

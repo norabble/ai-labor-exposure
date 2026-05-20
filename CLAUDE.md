@@ -52,6 +52,18 @@ The pipeline has two distinct phases:
 
 The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSARIAL_REBOUND=1.0`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
 
+## Release Pipeline
+
+Push a `v*` tag to cut a GitHub release with all pipeline outputs attached as assets:
+
+```bash
+git tag v1.0 && git push origin v1.0
+```
+
+The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic, and BLS data, then runs `analyze → synthesize → plot → validate`. Classification is skipped — the pre-computed results live in `seeds/classified_all_tasks.csv` and are copied into place before the pipeline runs. To update the seed after a re-classification, copy `data/output/classified_all_tasks.csv` to `seeds/` and commit it.
+
+BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch if the download script changes.
+
 ## Outputs Reference
 
 **When adding a new pipeline output (CSV, visualization, or printed table), add a row here before committing.** This is the authoritative record of what the pipeline produces and what each output is for. If an output changes behaviour or is removed, update or delete its row.

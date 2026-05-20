@@ -1,0 +1,96 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python via uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          uv sync
+          npm install
+
+      - name: Cache BLS zip downloads
+        uses: actions/cache@v4
+        id: bls-cache
+        with:
+          path: data/raw/bls
+          key: bls-zips-${{ hashFiles('download_bls.js') }}
+
+      - name: Download O*NET, Anthropic, and Eloundou source data
+        run: uv run download_data.py
+
+      - name: Download BLS data via Puppeteer
+        if: steps.bls-cache.outputs.cache-hit != 'true'
+        run: node download_bls.js
+
+      - name: Restore pre-computed classified tasks from seed
+        run: |
+          mkdir -p data/output
+          cp seeds/classified_all_tasks.csv data/output/classified_all_tasks.csv
+
+      - name: Run analysis pipeline
+        run: uv run main.py 2>&1 | tee pipeline_run.txt
+
+      - name: Package visualizations
+        run: cd data/output && zip -r visualizations.zip visualizations/
+
+      - name: Build release notes
+        run: |
+          cat > release_notes.md << 'EOF'
+          ## AI Labor Market Exposure Analysis
+
+          ### Output files
+
+          | File | Description |
+          |------|-------------|
+          | `occupation_impact_report.csv` | Per-occupation impact scores (primary model output) |
+          | `bls_trends.csv` | BLS employment/wage growth by occupation (2022–2025) |
+          | `exposure_volume_by_occupation.csv` | Employment-weighted AI exposure by occupation |
+          | `exposure_volume_by_group.csv` | Same, rolled up to SOC major group |
+          | `employment_by_demand_type.csv` | Workers in each AI demand type bucket |
+          | `visualizations.zip` | All charts as a single download |
+
+          Individual chart PNGs are also attached — see [CLAUDE.md](CLAUDE.md#outputs-reference) for descriptions.
+
+          <details>
+          <summary>Pipeline run log</summary>
+
+          ```
+          EOF
+          cat pipeline_run.txt >> release_notes.md
+          printf '```\n\n</details>\n' >> release_notes.md
+          # strip leading whitespace added by the heredoc indentation
+          sed -i 's/^          //' release_notes.md
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "Release ${{ github.ref_name }}" \
+            --notes-file release_notes.md \
+            data/output/occupation_impact_report.csv \
+            data/output/bls_trends.csv \
+            data/output/exposure_volume_by_occupation.csv \
+            data/output/exposure_volume_by_group.csv \
+            data/output/employment_by_demand_type.csv \
+            data/output/visualizations.zip \
+            data/output/visualizations/*.png

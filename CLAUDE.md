@@ -64,6 +64,7 @@ The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSAR
 | `bls_trends.csv` | `analyze_bls.py` | Year-over-year and composite employment/wage growth by occupation (2022–2025). Used for model validation. |
 | `exposure_volume_by_occupation.csv` | `validate_bls.py` | Per-occupation `employment_share × mean_penetration` (`exposure_volume`), sorted descending. Shows where AI exposure is landing in the workforce. |
 | `exposure_volume_by_group.csv` | `validate_bls.py` | Same metric rolled up to SOC major group. Includes `group_dominant_demand` and `pct_of_total_exposure`. |
+| `employment_by_demand_type.csv` | `validate_bls.py` | Total workers, % of modeled workforce, mean occupation impact, and occupation count for each dominant demand type. |
 
 ### Visualizations — `data/output/visualizations/`
 
@@ -78,6 +79,9 @@ The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSAR
 | `productivity_vs_red_queen.png` | `validate_bls.py` | Composite employment growth vs. composite wage growth, colored by dominant demand type. Tests whether Unbounded/Adversarial occupations show the expected productivity premium. |
 | `exposure_volume_by_group.png` | `validate_bls.py` | Horizontal bar: employment-weighted AI exposure by SOC major group, colored by group dominant demand type. |
 | `exposure_share_by_group.png` | `validate_bls.py` | Same as above but each bar shows the group's share of total economy-wide AI exposure volume. |
+| `employment_by_demand_type.png` | `validate_bls.py` | Bar chart: total U.S. workers in each dominant demand type bucket, annotated with % of modeled workforce and mean impact score. |
+| `wage_quartile_demand_type.png` | `validate_bls.py` | Two-panel: (left) employment-weighted demand type share by wage quartile, showing Bounded dominance in low-wage jobs; (right) employment-weighted mean impact score by quartile. |
+| `anthropic_exposure_vs_impact.png` | `validate_bls.py` | Scatter of Anthropic's observed job exposure vs. our occupation impact score, colored by dominant demand type. Pearson r annotated in title. Shows where high observed usage leads to expansion vs. displacement. |
 
 ## Coding Standards
 

@@ -22,6 +22,7 @@ import math
 import os
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
@@ -379,6 +380,194 @@ def main():
             ["group_name", "group_dominant_demand", "employment_share", "avg_penetration", "total_exposure_volume", "pct_of_total_exposure"]
         ].to_string(index=False)
     )
+
+    # ── Employment by dominant demand type ───────────────────────────────────
+    demand_emp_df = (
+        exposure_volume_df.groupby("dominant_demand")
+        .agg(
+            total_workers=(latest_emp_col, "sum"),
+            mean_impact=("occupation_impact", "mean"),
+            n_occupations=("OCC_CODE", "count"),
+        )
+        .reindex(["Bounded", "Unbounded", "Adversarial"])
+        .reset_index()
+    )
+    demand_emp_df["pct_of_modeled"] = demand_emp_df["total_workers"] / demand_emp_df["total_workers"].sum()
+    demand_emp_df["workers_millions"] = demand_emp_df["total_workers"] / 1e6
+    demand_emp_df.to_csv("data/output/employment_by_demand_type.csv", index=False)
+
+    fig, ax = plt.subplots(figsize=(9, 7))
+    emp_bars = ax.bar(
+        range(3),
+        demand_emp_df["workers_millions"],
+        color=[DEMAND_PALETTE[d] for d in demand_emp_df["dominant_demand"]],
+        alpha=0.85,
+        width=0.55,
+    )
+    ax.set_xticks([0, 1, 2])
+    ax.set_xticklabels(demand_emp_df["dominant_demand"], fontsize=11)
+    ax.set_ylabel("Workers (millions)", fontsize=10)
+    # extra headroom so annotations don't collide with the title
+    ax.set_ylim(0, demand_emp_df["workers_millions"].max() * 1.35)
+    ax.set_title(
+        f"U.S. Workers by Dominant AI Demand Type ({latest_year})\n"
+        "Classified by the demand type with the most task importance weight\n"
+        "Predicted demand Δ = model's net labor demand change (positive = expansion, negative = displacement)",
+        fontsize=10,
+        pad=12,
+    )
+    for bar, (_, row) in zip(emp_bars, demand_emp_df.iterrows()):
+        label = (
+            f"{row['workers_millions']:.1f}M\n"
+            f"({row['pct_of_modeled']:.0%} of modeled)\n"
+            f"Predicted demand Δ: {row['mean_impact']:.1%}"
+        )
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.8, label, ha="center", va="bottom", fontsize=9)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/employment_by_demand_type.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+    print("\n── Employment by Dominant Demand Type ──")
+    emp_display_df = demand_emp_df.copy()
+    emp_display_df["workers_millions"] = emp_display_df["workers_millions"].map("{:.1f}M".format)
+    emp_display_df["pct_of_modeled"] = emp_display_df["pct_of_modeled"].map("{:.0%}".format)
+    emp_display_df["mean_impact"] = emp_display_df["mean_impact"].map("{:.1%}".format)
+    print(emp_display_df[["dominant_demand", "workers_millions", "pct_of_modeled", "mean_impact", "n_occupations"]].to_string(index=False))
+
+    # ── Wage quartile × demand type ──────────────────────────────────────────
+    latest_wage_col = f"A_MEDIAN_{latest_emp_col.replace('TOT_EMP_', '')}"
+    wage_quartile_df = merged_validation_df.dropna(subset=[latest_wage_col, latest_emp_col, "dominant_demand"]).copy()
+    wage_quartile_df = wage_quartile_df.sort_values(latest_wage_col).reset_index(drop=True)
+
+    # Employment-weighted quartiles: each quartile spans ~25% of total worker-count
+    wage_quartile_df["cum_emp"] = wage_quartile_df[latest_emp_col].cumsum()
+    total_wq_emp = wage_quartile_df[latest_emp_col].sum()
+    quartile_labels = ["Q1 (lowest wages)", "Q2", "Q3", "Q4 (highest wages)"]
+    wage_quartile_df["quartile"] = pd.cut(
+        wage_quartile_df["cum_emp"] / total_wq_emp,
+        bins=[0, 0.25, 0.5, 0.75, 1.01],
+        labels=quartile_labels,
+        include_lowest=True,
+    )
+
+    # Employment-weighted demand type share within each quartile
+    quartile_demand_emp = wage_quartile_df.groupby(["quartile", "dominant_demand"])[latest_emp_col].sum().reset_index()
+    quartile_total_emp = quartile_demand_emp.groupby("quartile")[latest_emp_col].sum().rename("quartile_total")
+    quartile_demand_emp = quartile_demand_emp.merge(quartile_total_emp, on="quartile")
+    quartile_demand_emp["share"] = quartile_demand_emp[latest_emp_col] / quartile_demand_emp["quartile_total"]
+
+    # Employment-weighted mean impact per quartile
+    quartile_impact_series = (
+        wage_quartile_df.groupby("quartile")
+        .apply(lambda g: (g["occupation_impact"] * g[latest_emp_col]).sum() / g[latest_emp_col].sum())
+        .rename("weighted_impact")
+        .reindex(quartile_labels)
+    )
+
+    pivot_wq = quartile_demand_emp.pivot(index="quartile", columns="dominant_demand", values="share").fillna(0)
+    pivot_wq = pivot_wq.reindex(quartile_labels)
+    for col in ["Bounded", "Unbounded", "Adversarial"]:
+        if col not in pivot_wq.columns:
+            pivot_wq[col] = 0.0
+
+    fig, (ax_stack, ax_impact) = plt.subplots(1, 2, figsize=(14, 6))
+
+    bottom = np.zeros(len(quartile_labels))
+    for demand_type in ["Bounded", "Unbounded", "Adversarial"]:
+        vals = pivot_wq[demand_type].values
+        ax_stack.bar(range(4), vals, bottom=bottom, color=DEMAND_PALETTE[demand_type], label=demand_type, alpha=0.85)
+        for i, (v, b) in enumerate(zip(vals, bottom)):
+            if v > 0.06:
+                ax_stack.text(i, b + v / 2, f"{v:.0%}", ha="center", va="center", fontsize=8.5, color="white", fontweight="bold")
+        bottom += vals
+
+    ax_stack.set_xticks([0, 1, 2, 3])
+    ax_stack.set_xticklabels(quartile_labels, fontsize=9)
+    ax_stack.set_ylabel("Share of Workers in Quartile", fontsize=10)
+    ax_stack.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    ax_stack.set_title(f"Demand Type by Wage Quartile ({latest_year})\n(employment-weighted; each quartile ≈ 25% of workers)", fontsize=11)
+    legend_handles_wq = [Patch(facecolor=DEMAND_PALETTE[d], label=d) for d in ["Bounded", "Unbounded", "Adversarial"]]
+    ax_stack.legend(handles=legend_handles_wq, title="Demand Type", fontsize=9)
+
+    impact_colors = ["#d73027" if v < 0 else "#1a9850" for v in quartile_impact_series.values]
+    impact_bars = ax_impact.bar(range(4), quartile_impact_series.values, color=impact_colors, alpha=0.85, width=0.55)
+    ax_impact.set_xticks([0, 1, 2, 3])
+    ax_impact.set_xticklabels(quartile_labels, fontsize=9)
+    ax_impact.axhline(0, color="black", linewidth=0.8)
+    ax_impact.set_ylabel("Employment-Weighted Mean Impact Score", fontsize=10)
+    ax_impact.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
+    ax_impact.set_title(f"Mean Impact Score by Wage Quartile ({latest_year})\n(employment-weighted)", fontsize=11)
+    for bar, val in zip(impact_bars, quartile_impact_series.values):
+        offset = 0.001 if val >= 0 else -0.001
+        ax_impact.text(
+            bar.get_x() + bar.get_width() / 2,
+            val + offset,
+            f"{val:.1%}",
+            ha="center",
+            va="bottom" if val >= 0 else "top",
+            fontsize=9,
+        )
+
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/wage_quartile_demand_type.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+    # ── Anthropic observed exposure vs. our model impact ─────────────────────
+    anthropic_job_path = "data/raw/anthropic_job_exposure.csv"
+    if os.path.exists(anthropic_job_path):
+        anthropic_exp_df = pd.read_csv(anthropic_job_path)
+        anthropic_merged_df = aggregated_impact_df.merge(
+            anthropic_exp_df[["occ_code", "observed_exposure"]],
+            left_on="OCC_CODE",
+            right_on="occ_code",
+            how="inner",
+        ).dropna(subset=["occupation_impact", "observed_exposure", "dominant_demand"])
+
+        pearson_r, pearson_p = stats.pearsonr(anthropic_merged_df["observed_exposure"], anthropic_merged_df["occupation_impact"])
+
+        plt.figure(figsize=(12, 10))
+        sns.scatterplot(
+            data=anthropic_merged_df,
+            x="observed_exposure",
+            y="occupation_impact",
+            hue="dominant_demand",
+            palette=DEMAND_PALETTE,
+            alpha=0.55,
+            s=20,
+        )
+        plt.axhline(0, color="black", linewidth=0.6, linestyle=":")
+
+        # High-exposure occupations that our model says will expand (demand type disagrees with doom)
+        positive_outliers = anthropic_merged_df[anthropic_merged_df["occupation_impact"] > 0].nlargest(5, "observed_exposure")
+        # High-exposure occupations with strongly negative impact (both models agree on high risk)
+        negative_outliers = anthropic_merged_df[anthropic_merged_df["observed_exposure"] > 0.3].nsmallest(3, "occupation_impact")
+        for _, row in pd.concat([positive_outliers, negative_outliers]).drop_duplicates("OCC_CODE").iterrows():
+            plt.annotate(
+                row["Title"],
+                (row["observed_exposure"], row["occupation_impact"]),
+                xytext=(10, 5),
+                textcoords="offset points",
+                fontsize=7.5,
+                alpha=0.9,
+                arrowprops={"arrowstyle": "->", "color": "grey", "lw": 0.7},
+            )
+
+        plt.title(
+            f"Anthropic Observed Exposure vs. Our Occupation Impact Score\n"
+            f"Pearson r = {pearson_r:.3f} (p = {pearson_p:.3f}, n = {len(anthropic_merged_df)})",
+            fontsize=13,
+        )
+        plt.xlabel("Anthropic Observed Job Exposure (fraction of tasks covered by Claude conversations)", fontsize=11)
+        plt.ylabel("Our Occupation Impact Score", fontsize=11)
+        plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.legend(title="Dominant Demand Type")
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/anthropic_exposure_vs_impact.png", dpi=300)
+        plt.close()
+
+        print(f"\n── Anthropic Exposure vs. Our Impact (n={len(anthropic_merged_df)}) ──")
+        print(f"Pearson r = {pearson_r:.3f}, p = {pearson_p:.4f}")
 
 
 if __name__ == "__main__":

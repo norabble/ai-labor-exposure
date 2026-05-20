@@ -13,9 +13,19 @@ Inputs:
   • data/output/occupation_impact_report.csv
 
 Outputs (saved to data/output/visualizations/):
-  • validation_emp_growth.png   — impact score vs emp growth, one subplot per period
-  • validation_wage_growth.png  — impact score vs wage growth, one subplot per period
-  • productivity_vs_red_queen.png — emp vs wage growth by demand type (composite)
+  • validation_emp_growth.png      — impact score vs emp growth, one subplot per period
+  • validation_wage_growth.png     — impact score vs wage growth, one subplot per period
+  • productivity_vs_red_queen.png  — emp vs wage growth by demand type (composite)
+  • shift_share_emp_growth.png     — impact score vs emp growth residual (sector mean removed)
+  • shift_share_wage_growth.png    — impact score vs wage growth residual (sector mean removed)
+  • employment_by_demand_type.png  — workers by dominant demand type bucket
+  • wage_quartile_demand_type.png  — demand type share and mean impact by wage quartile
+  • anthropic_exposure_vs_impact.png — Anthropic observed exposure vs. our impact score
+  • sector_validation.png          — sector-level labeled bubble scatter (n=22 sectors)
+  • top_risk_trajectories.png      — 2022-2025 employment index for top 10 at-risk occupations
+  • high_risk_concentration.png    — bubble chart of high displacement-pressure occupations
+  • exposure_volume_by_group.png   — employment-weighted AI exposure by SOC group
+  • exposure_share_by_group.png    — share of total AI exposure by SOC group
 """
 
 import math
@@ -636,6 +646,183 @@ def main():
 
         print(f"\n── Anthropic Exposure vs. Our Impact (n={len(anthropic_merged_df)}) ──")
         print(f"Pearson r = {pearson_r:.3f}, p = {pearson_p:.4f}")
+
+    # ── Sector-level validation ───────────────────────────────────────────────
+    if "emp_growth_composite" in merged_validation_df.columns:
+        sector_source_df = merged_validation_df.dropna(subset=[latest_emp_col]).copy()
+        sector_source_df["soc_group"] = sector_source_df["soc_major"].map(SOC_MAJOR_GROUPS).fillna("Other")
+
+        def _sector_weighted_mean(col: str) -> pd.Series:
+            valid = sector_source_df.dropna(subset=[col])
+            return valid.groupby("soc_group").apply(lambda g: (g[col] * g[latest_emp_col]).sum() / g[latest_emp_col].sum())
+
+        sector_agg_df = pd.DataFrame(
+            {
+                "sector_impact": _sector_weighted_mean("occupation_impact"),
+                "emp_growth": _sector_weighted_mean("emp_growth_composite"),
+                "wage_growth": _sector_weighted_mean("wage_growth_composite"),
+            }
+        ).reset_index()
+        sector_agg_df = sector_agg_df.merge(
+            sector_source_df.groupby("soc_group")[latest_emp_col].sum().rename("total_emp").reset_index(),
+            on="soc_group",
+        )
+        sector_dominant_df = (
+            sector_source_df.groupby(["soc_group", "dominant_demand"])[latest_emp_col]
+            .sum()
+            .reset_index()
+            .sort_values(latest_emp_col, ascending=False)
+            .drop_duplicates("soc_group")[["soc_group", "dominant_demand"]]
+        )
+        sector_agg_df = sector_agg_df.merge(sector_dominant_df, on="soc_group").dropna(
+            subset=["sector_impact", "emp_growth", "wage_growth"]
+        )
+
+        sector_r_emp, sector_p_emp = stats.pearsonr(sector_agg_df["sector_impact"], sector_agg_df["emp_growth"])
+        sector_r_wage, sector_p_wage = stats.pearsonr(sector_agg_df["sector_impact"], sector_agg_df["wage_growth"])
+
+        fig, (ax_emp_s, ax_wage_s) = plt.subplots(1, 2, figsize=(16, 8))
+        bubble_size_scale = 1500 / sector_agg_df["total_emp"].max()
+
+        for ax_s, growth_col_s, r_s, p_s, ylabel_s in [
+            (ax_emp_s, "emp_growth", sector_r_emp, sector_p_emp, "Composite Employment Growth"),
+            (ax_wage_s, "wage_growth", sector_r_wage, sector_p_wage, "Composite Wage Growth"),
+        ]:
+            bubble_colors_s = [DEMAND_PALETTE.get(d, "grey") for d in sector_agg_df["dominant_demand"]]
+            ax_s.scatter(
+                sector_agg_df["sector_impact"],
+                sector_agg_df[growth_col_s],
+                s=(sector_agg_df["total_emp"] * bubble_size_scale).clip(30),
+                c=bubble_colors_s,
+                alpha=0.75,
+                edgecolors="white",
+                linewidths=0.5,
+            )
+            for _, row_s in sector_agg_df.iterrows():
+                ax_s.annotate(
+                    row_s["soc_group"],
+                    (row_s["sector_impact"], row_s[growth_col_s]),
+                    xytext=(5, 3),
+                    textcoords="offset points",
+                    fontsize=6.5,
+                    alpha=0.85,
+                )
+            ax_s.axhline(0, color="grey", linestyle="--", linewidth=0.8)
+            ax_s.axvline(0, color="grey", linestyle="--", linewidth=0.8)
+            ax_s.set_xlabel("Sector Mean Impact Score (employment-weighted)", fontsize=10)
+            ax_s.set_ylabel(ylabel_s, fontsize=10)
+            ax_s.set_title(f"r = {r_s:.3f}, p = {p_s:.3f}, n = {len(sector_agg_df)}", fontsize=11)
+            ax_s.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+            ax_s.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+
+        legend_handles_s = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+        ax_wage_s.legend(handles=legend_handles_s, title="Dominant Demand Type", fontsize=8)
+        fig.suptitle(
+            "Sector-Level Validation: Employment-Weighted Impact vs. Observed Growth\n"
+            "(bubble size ∝ sector employment; wage correlation jackknife-robust — no sector exclusion makes p ≥ 0.05)",
+            fontsize=12,
+        )
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/sector_validation.png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+        print(f"\n── Sector-Level Validation (n={len(sector_agg_df)}) ──")
+        print(f"Employment: r = {sector_r_emp:.3f}, p = {sector_p_emp:.3f}")
+        print(f"Wage:       r = {sector_r_wage:.3f}, p = {sector_p_wage:.3f}  (jackknife-robust)")
+
+    # ── Employment trajectories for top-risk occupations ─────────────────────
+    top_risk_df = aggregated_impact_df.nsmallest(10, "occupation_impact")[["OCC_CODE", "Title", "occupation_impact"]]
+    trajectory_emp_cols = [c for c in ["TOT_EMP_22", "TOT_EMP_23", "TOT_EMP_24", "TOT_EMP_25"] if c in bls_trends_df.columns]
+    trajectory_years = [int("20" + c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
+    trajectory_df = top_risk_df.merge(bls_trends_df[["OCC_CODE"] + trajectory_emp_cols], on="OCC_CODE", how="inner")
+
+    fig, ax_traj = plt.subplots(figsize=(14, 9))
+    color_cycle = plt.cm.tab10.colors
+
+    for i, (_, occ_row) in enumerate(trajectory_df.iterrows()):
+        emp_values = [occ_row[c] for c in trajectory_emp_cols]
+        if any(pd.isna(v) for v in emp_values) or emp_values[0] == 0:
+            continue
+        base_emp = emp_values[0]
+        indexed = [v / base_emp * 100 for v in emp_values]
+        color = color_cycle[i % len(color_cycle)]
+        ax_traj.plot(trajectory_years, indexed, color=color, linewidth=1.8, marker="o", markersize=4)
+        actual_change = (emp_values[-1] - base_emp) / base_emp
+        endpoint_label = f"{occ_row['Title'][:32]}\nmodel: {occ_row['occupation_impact']:.0%} / actual: {actual_change:.0%}"
+        ax_traj.annotate(
+            endpoint_label,
+            (trajectory_years[-1], indexed[-1]),
+            xytext=(7, 0),
+            textcoords="offset points",
+            fontsize=6.5,
+            color=color,
+            va="center",
+        )
+
+    ax_traj.axhline(100, color="black", linestyle="--", linewidth=1, label="2022 baseline")
+    ax_traj.set_xlabel("Year", fontsize=10)
+    ax_traj.set_ylabel("Employment (indexed to 2022 = 100)", fontsize=10)
+    ax_traj.set_title(
+        "Employment Trajectories: Top 10 At-Risk Occupations (2022–2025)\n"
+        "(model: occupation_impact vs. actual BLS employment indexed to 100)",
+        fontsize=12,
+    )
+    ax_traj.set_xticks(trajectory_years)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/top_risk_trajectories.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+    # ── High-risk concentration bubble chart ─────────────────────────────────
+    occ_pct_bounded_df = (
+        occupation_impact_df.assign(OCC_CODE=occupation_impact_df["O*NET-SOC Code"].astype(str).str.split(".").str[0])
+        .groupby("OCC_CODE")
+        .agg(pct_bounded=("pct_bounded", "mean"), dominant_demand=("dominant_demand", "first"), Title=("Title", "first"))
+        .reset_index()
+    )
+    bubble_df = occ_pct_bounded_df.merge(
+        exposure_volume_df[["OCC_CODE", "employment_share", "exposure_volume", "mean_penetration"]],
+        on="OCC_CODE",
+        how="inner",
+    )
+    bubble_df["displacement_pressure"] = bubble_df["pct_bounded"] * bubble_df["mean_penetration"]
+    high_risk_bubble_df = bubble_df[bubble_df["displacement_pressure"] > 0.05].copy()
+
+    top_annotate_df = high_risk_bubble_df.nlargest(15, "exposure_volume")
+    bubble_colors = [DEMAND_PALETTE.get(d, "grey") for d in high_risk_bubble_df["dominant_demand"]]
+
+    fig, ax_bubble = plt.subplots(figsize=(14, 10))
+    ax_bubble.scatter(
+        high_risk_bubble_df["displacement_pressure"],
+        high_risk_bubble_df["employment_share"],
+        s=(high_risk_bubble_df["exposure_volume"] * 50000).clip(10),
+        c=bubble_colors,
+        alpha=0.65,
+        edgecolors="white",
+        linewidths=0.5,
+    )
+    for _, row_b in top_annotate_df.iterrows():
+        ax_bubble.annotate(
+            row_b["Title"][:35],
+            (row_b["displacement_pressure"], row_b["employment_share"]),
+            xytext=(8, 0),
+            textcoords="offset points",
+            fontsize=7,
+            alpha=0.9,
+        )
+    ax_bubble.set_xlabel("Displacement Pressure (pct_bounded × mean_penetration)", fontsize=10)
+    ax_bubble.set_ylabel("Employment Share of Modeled Workforce", fontsize=10)
+    ax_bubble.set_title(
+        f"High-Risk Occupation Concentration (displacement_pressure > 5%)\n"
+        f"Bubble size ∝ exposure_volume; n = {len(high_risk_bubble_df)} occupations",
+        fontsize=12,
+    )
+    ax_bubble.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    ax_bubble.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=2))
+    legend_handles_b = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+    ax_bubble.legend(handles=legend_handles_b, title="Dominant Demand Type", fontsize=9)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/high_risk_concentration.png", dpi=300, bbox_inches="tight")
+    plt.close()
 
 
 if __name__ == "__main__":

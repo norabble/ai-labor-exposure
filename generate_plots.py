@@ -12,7 +12,8 @@ Outputs (saved to data/output/visualizations/):
   • most_impacted_jobs.png        — Top 15 highest/lowest impact occupations
   • exposure_vs_impact.png        — Eloundou exposure vs. our full model impact score
   • biggest_differences.png       — Occupations most different from naive exposure prediction
-  • usage_by_demand_type.png      — Claude conversation share vs. task share by demand type
+  • usage_by_demand_type.png           — Claude conversation share vs. task share by demand type
+  • task_importance_vs_penetration.png — task importance vs. AI penetration by demand type
 """
 
 import os
@@ -240,6 +241,53 @@ def main():
         )
         plt.tight_layout()
         plt.savefig(f"{output_dir}/usage_by_demand_type.png", dpi=300, bbox_inches="tight")
+        plt.close()
+
+    # 5. Task importance vs. AI penetration by demand type
+    task_ratings_path = "data/raw/onet_task_ratings.csv"
+    task_penetration_path = "data/raw/anthropic_task_penetration.csv"
+    if os.path.exists(classified_path) and os.path.exists(task_ratings_path) and os.path.exists(task_penetration_path):
+        importance_classified_df = pd.read_csv(classified_path)
+        importance_classified_df = importance_classified_df[importance_classified_df["Demand Type"] != "ERROR"]
+        task_ratings_df = pd.read_csv(task_ratings_path)
+        task_penetration_raw_df = pd.read_csv(task_penetration_path)
+        task_penetration_raw_df["task_lower"] = task_penetration_raw_df["task"].str.lower().str.strip()
+
+        # Join ratings by Task ID; join penetration by lowercased text
+        importance_df = importance_classified_df.drop_duplicates("Task ID").merge(task_ratings_df, on="Task ID", how="inner")
+        importance_df["task_lower"] = importance_df["Task"].str.lower().str.strip()
+        importance_df = importance_df.merge(task_penetration_raw_df[["task_lower", "penetration"]], on="task_lower", how="inner")
+        importance_df["ai_penetrated"] = importance_df["penetration"] > 0
+
+        plt.figure(figsize=(12, 7))
+        sns.boxplot(
+            data=importance_df,
+            x="Demand Type",
+            y="task_importance",
+            hue="ai_penetrated",
+            order=["Bounded", "Unbounded", "Adversarial"],
+            hue_order=[True, False],
+            palette={True: "#2166ac", False: "#d1e5f0"},
+            width=0.5,
+        )
+
+        y_min = importance_df["task_importance"].min()
+        for dt_idx, demand_type in enumerate(["Bounded", "Unbounded", "Adversarial"]):
+            for pen_idx, penetrated in enumerate([True, False]):
+                n = len(importance_df[(importance_df["Demand Type"] == demand_type) & (importance_df["ai_penetrated"] == penetrated)])
+                x_offset = -0.2 if pen_idx == 0 else 0.2
+                plt.text(dt_idx + x_offset, y_min - 0.15, f"n={n}", ha="center", fontsize=8, color="dimgrey")
+
+        plt.title(
+            "Task Importance vs. AI Penetration by Demand Type\n" "Are AI-penetrated Bounded tasks the important ones or peripheral ones?",
+            fontsize=12,
+        )
+        plt.xlabel("Demand Type", fontsize=11)
+        plt.ylabel("Task Importance Score", fontsize=11)
+        handles_imp, _ = plt.gca().get_legend_handles_labels()
+        plt.legend(handles=handles_imp, labels=["AI Penetrated (penetration > 0)", "Not Penetrated"], title="AI Coverage")
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/task_importance_vs_penetration.png", dpi=300)
         plt.close()
 
     print(f"Visualizations saved to {output_dir}")

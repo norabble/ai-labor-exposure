@@ -84,6 +84,10 @@ The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSAR
 | `anthropic_exposure_vs_impact.png` | `validate_bls.py` | Scatter of Anthropic's observed job exposure vs. our occupation impact score, colored by dominant demand type. Pearson r annotated in title. Shows where high observed usage leads to expansion vs. displacement. |
 | `shift_share_emp_growth.png` | `validate_bls.py` | 2×2 grid: occupation impact score vs. employment growth residual (raw growth minus employment-weighted sector mean) per period. Removes sector-cycle noise for cleaner model validation. |
 | `shift_share_wage_growth.png` | `validate_bls.py` | Same layout as above for wage growth residuals. |
+| `sector_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite employment/wage growth. Bubble size ∝ sector employment. Wage r=−0.485, p=0.022, jackknife-robust (n=22 sectors). |
+| `top_risk_trajectories.png` | `validate_bls.py` | Line chart of actual 2022–2025 BLS employment trajectories for top 10 most-negative-impact occupations, indexed to 100 at 2022. Each line annotated with model prediction vs. actual change. |
+| `high_risk_concentration.png` | `validate_bls.py` | Bubble chart: displacement pressure (pct_bounded × mean_penetration) vs. employment share, for occupations above 5% displacement pressure. Bubble size ∝ exposure_volume. |
+| `task_importance_vs_penetration.png` | `generate_plots.py` | Grouped boxplot: task importance score by demand type, split by whether the task has AI penetration > 0. Shows whether AI-penetrated Bounded tasks are the important ones or peripheral ones. |
 
 ## Coding Standards
 

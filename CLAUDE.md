@@ -55,7 +55,7 @@ task_impact = penetration × (1 − rebound_fraction)
 - `Unbounded` → rebound = 0.5 → half absorbed by backlog expansion
 - `Adversarial` → rebound = 1.0 → fully absorbed by arms-race escalation
 
-`occupation_impact` is the importance-weighted mean of task impacts — always ≥ 0, with higher values indicating greater structural disruption. The three rebound constants (`BOUNDED_REBOUND=0.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSARIAL_REBOUND=1.0`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
+`occupation_impact` is the importance-weighted mean of task impacts — always ≥ 0, with higher values indicating greater structural disruption. The three rebound constants (`BOUNDED_REBOUND=0.1`, `UNBOUNDED_REBOUND=0.7`, `ADVERSARIAL_REBOUND=0.9`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters. See `docs/model_vs_observed_exposure.md` for a comparison of the model's predictive value against raw observed AI task coverage.
 
 ## Release Pipeline
 

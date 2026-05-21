@@ -106,6 +106,7 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `top_risk_trajectories.png` | `validate_bls.py` | Line chart of 2022–2025 BLS employment trajectories for top 10 most-negative-impact occupations, indexed to 100 at 2022. Each line annotated with model prediction vs. actual change. |
 | `high_risk_concentration.png` | `validate_bls.py` | Bubble chart: displacement pressure vs. employment share for occupations above 5% threshold. Bubble size ∝ AI exposure volume. See `docs/charts/high_risk_concentration.md`. |
 | `cps_2026_direction.png` | `validate_bls.py` | Horizontal bar: Apr 2025→Apr 2026 employment growth by SOC major group, from BLS CPS Table A-19. Directional indicator only — not BLS OEWS. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_2026_direction.md`. |
+| `cps_model_vs_actual.png` | `validate_bls.py` | Scatter: employment-weighted model impact per SOC major group vs. CPS Apr 2025→Apr 2026 growth. Major-group level validation against CPS data. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_model_vs_actual.md`. |
 
 ## Coding Standards
 

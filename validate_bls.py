@@ -28,6 +28,7 @@ Outputs (saved to data/output/visualizations/):
   • exposure_volume_by_group.png              — employment-weighted AI exposure by SOC group
   • exposure_share_by_group.png               — share of total AI exposure by SOC group
   • cps_2026_direction.png                    — CPS Apr 2025→Apr 2026 employment direction by major group
+  • cps_model_vs_actual.png                   — scatter: employment-weighted model impact vs. CPS growth, major group level
 """
 
 import math
@@ -201,46 +202,34 @@ _CPS_TO_SOC_MAJOR: dict[str, str] = {
 }
 
 
-def _plot_cps_2026_direction(output_dir: str, exposure_group_df: pd.DataFrame) -> None:
-    """Parse CPS Table A-19 and produce a major-group employment direction chart.
-
-    Data source: BLS CPS monthly Table A-19, Apr 2025 vs. Apr 2026.
-    This is a directional indicator only — not BLS OEWS; wage data unavailable.
-    """
+def _parse_cps_a19() -> pd.DataFrame | None:
+    """Parse CPS Table A-19 HTML; return DataFrame with soc_major + emp_growth_apr25_apr26, or None."""
     cps_path = "data/raw/cps/table_a19.html"
     if not os.path.exists(cps_path):
-        print("  Skipping CPS 2026 direction chart — data/raw/cps/table_a19.html not found.")
-        print("  Run: uv run download_data.py  (or make download-data) to fetch it.")
-        return
+        return None
 
-    tables = pd.read_html(cps_path)
-    raw_cps_df = tables[0]
+    raw_cps_df = pd.read_html(cps_path)[0]
 
-    # Multi-level columns: extract occupation name and Total 16+ Apr 2025 / Apr 2026
-    occupation_col = raw_cps_df.columns[0]
-    apr_2025_col = raw_cps_df.columns[1]  # Total, 16 years and over, Apr. 2025
-    apr_2026_col = raw_cps_df.columns[2]  # Total, 16 years and over, Apr. 2026
-
-    cps_parsed_df = raw_cps_df[[occupation_col, apr_2025_col, apr_2026_col]].copy()
+    # Multi-level columns: col 0 = occupation name, col 1 = Total 16+ Apr 2025, col 2 = Total 16+ Apr 2026
+    cps_parsed_df = raw_cps_df.iloc[:, [0, 1, 2]].copy()
     cps_parsed_df.columns = ["occupation", "apr_2025", "apr_2026"]
     cps_parsed_df = cps_parsed_df.dropna(subset=["occupation"])
-    cps_parsed_df["occupation_lower"] = cps_parsed_df["occupation"].str.lower().str.strip()
-
-    cps_parsed_df["soc_major"] = cps_parsed_df["occupation_lower"].map(_CPS_TO_SOC_MAJOR)
+    cps_parsed_df["soc_major"] = cps_parsed_df["occupation"].str.lower().str.strip().map(_CPS_TO_SOC_MAJOR)
     cps_mapped_df = cps_parsed_df.dropna(subset=["soc_major"]).copy()
-
     cps_mapped_df["apr_2025"] = pd.to_numeric(cps_mapped_df["apr_2025"], errors="coerce")
     cps_mapped_df["apr_2026"] = pd.to_numeric(cps_mapped_df["apr_2026"], errors="coerce")
     cps_mapped_df = cps_mapped_df.dropna(subset=["apr_2025", "apr_2026"])
     cps_mapped_df["emp_growth_apr25_apr26"] = (cps_mapped_df["apr_2026"] - cps_mapped_df["apr_2025"]) / cps_mapped_df["apr_2025"]
+    return cps_mapped_df.reset_index(drop=True)
 
-    # Merge with exposure group data for demand type coloring
+
+def _plot_cps_2026_direction(output_dir: str, cps_mapped_df: pd.DataFrame, exposure_group_df: pd.DataFrame) -> None:
+    """Horizontal bar chart of CPS major group employment direction (Apr 2025 → Apr 2026)."""
     group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
     group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
     cps_chart_df = cps_mapped_df.merge(group_demand_df, on="soc_major", how="left")
     cps_chart_df = cps_chart_df.sort_values("emp_growth_apr25_apr26", ascending=True)
 
-    # Print summary table
     print("\n── CPS Table A-19: Major Group Employment Direction (Apr 2025 → Apr 2026) ──")
     print("   (CPS monthly survey — directional indicator only; not BLS OEWS)\n")
     display_df = cps_chart_df[["occupation", "apr_2025", "apr_2026", "emp_growth_apr25_apr26", "group_dominant_demand"]].copy()
@@ -249,7 +238,6 @@ def _plot_cps_2026_direction(output_dir: str, exposure_group_df: pd.DataFrame) -
     display_df["emp_growth_apr25_apr26"] = display_df["emp_growth_apr25_apr26"].map("{:+.1%}".format)
     print(display_df.to_string(index=False))
 
-    # Chart
     bar_colors = [DEMAND_PALETTE.get(d, "grey") for d in cps_chart_df["group_dominant_demand"]]
     short_labels = [SOC_MAJOR_GROUPS.get(row["soc_major"], row["occupation"])[:40] for _, row in cps_chart_df.iterrows()]
 
@@ -268,13 +256,101 @@ def _plot_cps_2026_direction(output_dir: str, exposure_group_df: pd.DataFrame) -
         "Major Group Employment Direction: Apr 2025 → Apr 2026\nCPS Table A-19 (monthly survey) — directional indicator only; not BLS OEWS",
         fontsize=11,
     )
-
     legend_handles_cps = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
     ax_cps.legend(handles=legend_handles_cps, title="Dominant Demand Type", fontsize=9, loc="lower right")
     plt.tight_layout()
     plt.savefig(f"{output_dir}/cps_2026_direction.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"\n  Saved {output_dir}/cps_2026_direction.png")
+
+
+def _plot_cps_model_vs_actual(
+    output_dir: str,
+    cps_mapped_df: pd.DataFrame,
+    merged_validation_df: pd.DataFrame,
+    exposure_group_df: pd.DataFrame,
+) -> None:
+    """Scatter of employment-weighted model impact vs. CPS Apr 2025→Apr 2026 growth, major group level."""
+    emp_col = next((c for c in ["TOT_EMP_25", "TOT_EMP_24", "TOT_EMP_23"] if c in merged_validation_df.columns), None)
+    if emp_col is None:
+        print("  Skipping CPS model comparison — no employment column found.")
+        return
+
+    valid_df = merged_validation_df.dropna(subset=["occupation_impact", emp_col]).copy()
+    valid_df["soc_major"] = valid_df["OCC_CODE"].str[:2]
+
+    group_impact_df = (
+        valid_df.groupby("soc_major")
+        .apply(
+            lambda g: pd.Series(
+                {
+                    "group_impact": (g["occupation_impact"] * g[emp_col]).sum() / g[emp_col].sum(),
+                    "n_occupations": len(g),
+                }
+            ),
+            include_groups=False,
+        )
+        .reset_index()
+    )
+
+    group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
+    group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
+
+    comparison_df = group_impact_df.merge(cps_mapped_df[["soc_major", "emp_growth_apr25_apr26"]], on="soc_major").merge(
+        group_demand_df, on="soc_major", how="left"
+    )
+    comparison_df["group_label"] = comparison_df["soc_major"].map(SOC_MAJOR_GROUPS)
+
+    cps_r, cps_p = stats.pearsonr(comparison_df["group_impact"], comparison_df["emp_growth_apr25_apr26"])
+
+    print(f"\n── CPS Model vs. Actual (Major Group Level, n={len(comparison_df)}) ──")
+    print(f"Pearson r = {cps_r:.3f}, p = {cps_p:.4f}")
+
+    dot_colors = [DEMAND_PALETTE.get(d, "grey") for d in comparison_df["group_dominant_demand"]]
+    fig, ax_cps_scatter = plt.subplots(figsize=(11, 8))
+    ax_cps_scatter.scatter(
+        comparison_df["group_impact"],
+        comparison_df["emp_growth_apr25_apr26"],
+        c=dot_colors,
+        s=90,
+        alpha=0.85,
+        edgecolors="white",
+        linewidths=0.5,
+    )
+    for _, scatter_row in comparison_df.iterrows():
+        label_text = scatter_row["group_label"][:28] if pd.notna(scatter_row["group_label"]) else scatter_row["soc_major"]
+        ax_cps_scatter.annotate(
+            label_text,
+            (scatter_row["group_impact"], scatter_row["emp_growth_apr25_apr26"]),
+            xytext=(5, 3),
+            textcoords="offset points",
+            fontsize=7.5,
+            alpha=0.9,
+        )
+    sns.regplot(
+        data=comparison_df,
+        x="group_impact",
+        y="emp_growth_apr25_apr26",
+        scatter=False,
+        ax=ax_cps_scatter,
+        line_kws={"color": "steelblue", "linewidth": 1.5},
+    )
+    ax_cps_scatter.axhline(0, color="grey", linestyle="--", linewidth=0.8)
+    ax_cps_scatter.set_xlabel("Employment-Weighted Mean Model Impact Score", fontsize=10)
+    ax_cps_scatter.set_ylabel("Employment Growth Apr 2025 → Apr 2026 (CPS)", fontsize=10)
+    ax_cps_scatter.set_title(
+        f"Model Impact vs. CPS Employment Growth — Major Group Level\n"
+        f"r = {cps_r:.3f}, p = {cps_p:.3f}, n = {len(comparison_df)} groups  |  CPS monthly, not BLS OEWS",
+        fontsize=11,
+    )
+    ax_cps_scatter.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
+    ax_cps_scatter.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
+    legend_handles_scatter = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+    ax_cps_scatter.legend(handles=legend_handles_scatter, title="Dominant Demand Type", fontsize=9)
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/cps_model_vs_actual.png", dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved {output_dir}/cps_model_vs_actual.png")
 
 
 def main():
@@ -924,9 +1000,15 @@ def main():
     plt.savefig(f"{output_dir}/high_risk_concentration.png", dpi=300, bbox_inches="tight")
     plt.close()
 
-    # ── CPS 2026 directional indicator ───────────────────────────────────────
+    # ── CPS 2026 directional indicator + model comparison ────────────────────
     exposure_group_csv_df = pd.read_csv("data/output/exposure_volume_by_group.csv")
-    _plot_cps_2026_direction(output_dir, exposure_group_csv_df)
+    cps_mapped_df = _parse_cps_a19()
+    if cps_mapped_df is not None:
+        _plot_cps_2026_direction(output_dir, cps_mapped_df, exposure_group_csv_df)
+        _plot_cps_model_vs_actual(output_dir, cps_mapped_df, merged_validation_df, exposure_group_csv_df)
+    else:
+        print("  Skipping CPS charts — data/raw/cps/table_a19.html not found.")
+        print("  Run: uv run download_data.py  (or make download-data) to fetch it.")
 
 
 if __name__ == "__main__":

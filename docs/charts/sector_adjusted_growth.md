@@ -42,4 +42,4 @@ There are several plausible explanations:
 
 **The model or data could be wrong.** The demand type classifications rest on assumptions about which tasks are Bounded vs. Unbounded. If those labels are systematically off for large occupations, the model's occupation-level predictions may not reflect reality even in the long run. Similarly, the Eloundou et al. exposure estimates and Anthropic penetration scores are imperfect proxies for actual AI adoption depth.
 
-The sector-level validation (`sector_level_validation.png`) aggregates to 22 sectors and finds a statistically significant wage correlation (r = −0.485, p = 0.022), suggesting the model has some structural validity — but the occupation-level employment signal remains absent in this window.
+The sector-level validation (`sector_level_validation.png`) aggregates to 22 sectors but also finds no statistically significant correlation under the current non-negative impact model — the occupation-level and sector-level signals are both absent in this window.

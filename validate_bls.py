@@ -610,13 +610,11 @@ def main():
             alpha=0.55,
             s=20,
         )
-        plt.axhline(0, color="black", linewidth=0.6, linestyle=":")
-
-        # High-exposure occupations that our model says will expand (demand type disagrees with doom)
-        positive_outliers = anthropic_merged_df[anthropic_merged_df["occupation_impact"] > 0].nlargest(5, "observed_exposure")
-        # High-exposure occupations with strongly negative impact (both models agree on high risk)
-        negative_outliers = anthropic_merged_df[anthropic_merged_df["observed_exposure"] > 0.3].nsmallest(3, "occupation_impact")
-        for _, row in pd.concat([positive_outliers, negative_outliers]).drop_duplicates("OCC_CODE").iterrows():
+        # High-coverage occupations with high displacement impact (Bounded-dominated)
+        high_impact_outliers = anthropic_merged_df.nlargest(5, "occupation_impact")
+        # High-coverage occupations where rebound keeps model impact low (Adversarial/Unbounded)
+        low_impact_outliers = anthropic_merged_df[anthropic_merged_df["observed_exposure"] > 0.3].nsmallest(3, "occupation_impact")
+        for _, row in pd.concat([high_impact_outliers, low_impact_outliers]).drop_duplicates("OCC_CODE").iterrows():
             plt.annotate(
                 row["Title"],
                 (row["observed_exposure"], row["occupation_impact"]),
@@ -728,7 +726,7 @@ def main():
         print(f"Wage:       r = {sector_r_wage:.3f}, p = {sector_p_wage:.3f}  (jackknife-robust)")
 
     # ── Employment trajectories for top-risk occupations ─────────────────────
-    top_risk_df = aggregated_impact_df.nsmallest(10, "occupation_impact")[["OCC_CODE", "Title", "occupation_impact"]]
+    top_risk_df = aggregated_impact_df.nlargest(10, "occupation_impact")[["OCC_CODE", "Title", "occupation_impact"]]
     trajectory_emp_cols = [c for c in ["TOT_EMP_22", "TOT_EMP_23", "TOT_EMP_24", "TOT_EMP_25"] if c in bls_trends_df.columns]
     trajectory_years = [int("20" + c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
     trajectory_df = top_risk_df.merge(bls_trends_df[["OCC_CODE"] + trajectory_emp_cols], on="OCC_CODE", how="inner")

@@ -37,27 +37,23 @@ def main():
 
     sns.set_theme(style="whitegrid")
 
-    # 1. Most Impacted Jobs (Top 15 Negative, Top 15 Positive)
-    plt.figure(figsize=(14, 10))
+    # 1. Most Impacted Occupations (Top 30 by displacement impact)
+    plt.figure(figsize=(14, 12))
 
-    top_negative = impact_report_df.nsmallest(15, "occupation_impact")
-    top_positive = impact_report_df.nlargest(15, "occupation_impact")
-    most_impacted = pd.concat([top_positive, top_negative]).sort_values("occupation_impact")
-
-    colors = ["#d73027" if x < 0 else "#1a9850" for x in most_impacted["occupation_impact"]]
+    most_impacted = impact_report_df.nlargest(30, "occupation_impact").sort_values("occupation_impact")
+    colors = [DEMAND_PALETTE.get(d, "#888888") for d in most_impacted["dominant_demand"]]
     bars = plt.barh(most_impacted["Title"], most_impacted["occupation_impact"], color=colors)
-    plt.axvline(0, color="black", linewidth=1)
-    plt.title("Most Impacted Occupations", fontsize=16, pad=20)
-    plt.xlabel("Occupation Impact Score", fontsize=12)
+    plt.title("Most Impacted Occupations (Top 30 by Displacement Impact)", fontsize=16, pad=20)
+    plt.xlabel("Net Displacement Impact Score", fontsize=12)
     plt.ylabel("", fontsize=12)
 
     for bar in bars:
         width = bar.get_width()
-        label_x_pos = width - 0.02 if width < 0 else width + 0.02
-        ha = "right" if width < 0 else "left"
-        plt.text(label_x_pos, bar.get_y() + bar.get_height() / 2, f"{width:.0%}", va="center", ha=ha, fontsize=10)
+        plt.text(width + 0.001, bar.get_y() + bar.get_height() / 2, f"{width:.1%}", va="center", ha="left", fontsize=9)
 
     plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    legend_handles = [Patch(color=DEMAND_PALETTE[dt], label=dt) for dt in ["Bounded", "Unbounded", "Adversarial"]]
+    plt.legend(handles=legend_handles, title="Dominant Demand Type", loc="lower right")
     plt.tight_layout()
     plt.savefig(f"{output_dir}/most_impacted_jobs.png", dpi=300)
     plt.close()
@@ -74,17 +70,14 @@ def main():
         s=15,
     )
 
-    x_vals = np.array([clean_impact_report_df["eloundou_exposure_mid"].min(), clean_impact_report_df["eloundou_exposure_mid"].max()])
-    plt.plot(x_vals, -x_vals, "--", color="grey", label="Naive Baseline (Impact = −Exposure)")
-
     plt.title("Eloundou et al. Exposure vs. Model Impact Score", fontsize=16, pad=20)
     plt.xlabel("Eloundou et al. Exposure Estimate (mid)", fontsize=12)
     plt.ylabel("Model Occupation Impact Score", fontsize=12)
-    plt.axhline(0, color="black", linewidth=0.5, linestyle=":")
     plt.legend(title="Dominant Demand Type")
 
+    # Occupations where Eloundou predicts high exposure but our model finds low impact (rebound absorbed)
     clean_impact_report_df["difference_from_naive"] = (
-        clean_impact_report_df["occupation_impact"] + clean_impact_report_df["eloundou_exposure_mid"]
+        clean_impact_report_df["eloundou_exposure_mid"] - clean_impact_report_df["occupation_impact"]
     )
     outliers = clean_impact_report_df.nlargest(5, "difference_from_naive")
 
@@ -111,14 +104,14 @@ def main():
 
     plt.barh(outliers_sorted["Title"], outliers_sorted["difference_from_naive"], color="#4575b4")
     plt.title("Where the Model Diverges Most from the Naive Exposure Baseline", fontsize=16, pad=20)
-    plt.xlabel("Divergence from Naive Baseline (Model Impact + Exposure Estimate)", fontsize=12)
+    plt.xlabel("Divergence from Naive Baseline (Exposure Estimate − Model Impact)", fontsize=12)
     plt.ylabel("")
 
     for i, row in outliers_sorted.iterrows():
         plt.text(
-            row["difference_from_naive"] - 0.02,
+            row["difference_from_naive"] * 0.95,
             list(outliers_sorted["Title"]).index(row["Title"]),
-            f"Impact: {row['occupation_impact']:.0%} | Exposure: {row['eloundou_exposure_mid']:.0%}",
+            f"Impact: {row['occupation_impact']:.1%} | Exposure: {row['eloundou_exposure_mid']:.0%}",
             va="center",
             ha="right",
             color="white",

@@ -8,9 +8,9 @@
 
 Each dot is one occupation. The x-axis plots how exposed that occupation's tasks are to AI according to a published estimate from prior literature (Eloundou et al.), and the y-axis shows the impact score this model predicts for that same occupation.
 
-The dashed diagonal line is the **naive baseline**: if AI exposure always caused job displacement, impact would equal minus exposure — every point would fall on that line.
+The y-axis is the model's net displacement impact score — always ≥ 0, where higher means greater structural disruption. Adversarial and Unbounded occupations cluster near zero (rebound absorbs displacement); Bounded occupations sit higher (little or no rebound).
 
-Most points sit well above the naive baseline. This gap is the core finding of the model: raw exposure alone is a poor predictor of labor market impact, because the *type* of demand underlying those tasks changes whether AI augments or displaces the workers doing them.
+The core finding of the model: raw exposure alone is a poor predictor of labor market impact, because the *type* of demand underlying those tasks changes how much of the AI-driven displacement actually persists after rebound.
 
 ## What the Eloundou et al. exposure estimate is
 
@@ -22,10 +22,10 @@ That paper does not model demand type — it treats all exposure as equally risk
 
 Colors indicate each occupation's **dominant demand type** — the classification that carries the most task-importance weight for that occupation:
 
-- **Red (Bounded):** Tasks where AI can complete the work to a fixed endpoint. Demand falls once the backlog clears — displacement risk.
-- **Orange (Unbounded):** Tasks where capacity savings get reinvested into doing more. Demand grows — expansion.
-- **Green (Adversarial):** Tasks driven by a counterparty that escalates in response (e.g., fraud, compliance, security). Demand grows with AI capability — expansion.
+- **Red (Bounded):** Tasks where AI can complete the work to a fixed endpoint. No rebound — impact stays high.
+- **Orange (Unbounded):** Tasks where capacity savings get reinvested into doing more. Partial rebound reduces impact.
+- **Green (Adversarial):** Tasks driven by a counterparty that escalates in response (e.g., fraud, compliance, security). Full rebound — impact near zero.
 
 ## What "diverges from the naive baseline" means
 
-Positive model impact + high exposure = the occupation sits far above the dashed line. This means the model predicts expansion even though prior literature flagged the occupation as highly exposed. The top labeled outliers (Market Research Analysts, Computer Programmers, etc.) all fall into Unbounded or Adversarial demand types — the AI exposure accelerates their work rather than replacing the need for it.
+High Eloundou exposure + low model impact = the model is more optimistic than prior literature would suggest. The labeled outliers (Market Research Analysts, Computer Programmers, etc.) all fall into Unbounded or Adversarial demand types — their rebound absorbs most of the predicted displacement, even though their raw AI task exposure is high.

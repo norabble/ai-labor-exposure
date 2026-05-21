@@ -14,12 +14,16 @@ Individual occupation-level validation is noisy: a single occupation's growth ca
 
 ## What the correlation statistics mean
 
-**Employment panel (left):** r = 0.283, p = 0.202. The model's sector-level employment predictions point in the right direction but do not reach statistical significance. This is consistent with the broader picture across all validation charts: AI-driven employment effects are not yet detectable in BLS data through 2025. This could mean the effects are still ahead of us, or that the model's employment predictions are wrong.
+**Employment panel (left):** r = −0.200, p = 0.373. No statistically significant relationship between sector-level model impact scores and composite employment growth. This is consistent with the broader picture: AI-driven employment effects are not yet detectable in BLS data through 2025.
 
-**Wage panel (right):** r = −0.485, p = 0.022. Sectors where the model predicts negative net impact (Bounded-dominated sectors) show relatively lower composite wage growth; sectors with positive predicted impact (Unbounded/Adversarial-dominated) show higher wage growth. The negative sign reflects the direction of the impact score: negative impact = more Bounded = weaker wages.
+**Wage panel (right):** r = −0.139, p = 0.537. No statistically significant relationship at the sector level either. The sign is in the expected direction (higher displacement impact → weaker wage growth), but the magnitude is small and the p-value is well above conventional significance thresholds.
 
-This is the strongest statistical signal in the entire validation suite. One interpretation: even if headcounts haven't changed yet, the wage data may be picking up early signals of structural pressure — Bounded-sector workers seeing less wage growth, Unbounded/Adversarial workers seeing a productivity premium. Another interpretation: the wage pattern reflects pre-existing sector dynamics that happen to correlate with our classifications, rather than AI effects specifically.
+These results differ from a previously-reported finding (r = −0.485, p = 0.022) that was produced by the signed impact model, where Bounded sectors had strongly negative scores and Adversarial sectors had strongly positive ones — creating wider contrast against wage growth. The current non-negative model compresses that contrast, and the sector-level wage signal does not survive the reformulation.
 
-## Jackknife robustness
+There are three honest interpretations of the absence of signal:
 
-The wage result (r = −0.485, p = 0.022) was tested with leave-one-out jackknife resampling: the correlation was re-computed 22 times, each time dropping a different sector. In all 22 cases the p-value remained below 0.05 — the result is not driven by any single sector. This is notable given n = 22 and a 3-year observation window.
+**AI adoption hasn't reached the scale needed to show up in aggregate wage data yet.** The BLS data runs through 2025, and widespread AI-driven workforce restructuring likely takes years to manifest in compensation trends.
+
+**Observed AI usage has been concentrated in Unbounded and Adversarial tasks.** If AI is being used mostly in expansion-type work, the displacement signal in Bounded sectors will be minimal — not because displacement won't happen, but because it isn't happening yet at scale.
+
+**The model or data could be wrong.** The demand type classifications rest on assumptions about which tasks are Bounded vs. Unbounded. If those labels are systematically off for large sectors, the model's sector-level predictions may not reflect reality.

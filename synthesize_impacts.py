@@ -9,20 +9,15 @@ Core logic
 ──────────
 For each task that has measured AI penetration:
 
-  • Adversarial  → demand bounces back quickly (arms race refills the work)
-                   net_impact = +penetration * ADVERSARIAL_REBOUND
+  task_impact = penetration × (1 − rebound_fraction)
 
-  • Unbounded    → demand recovers but with a delay (backlog absorbs savings,
-                   though some structural reduction happens first)
-                   net_impact = +penetration * UNBOUNDED_REBOUND  (partial)
+  • Adversarial  → rebound = 1.0 → task_impact = 0     (arms race fully refills work)
+  • Unbounded    → rebound = 0.5 → task_impact = 0.5×p  (backlog absorbs half)
+  • Bounded      → rebound = 0.0 → task_impact = 1.0×p  (permanent displacement)
 
-  • Bounded      → demand is permanently reduced; time saved means fewer
-                   workers needed with no offsetting expansion
-                   net_impact = -penetration * BOUNDED_DECLINE
-
-The occupation-level score is the penetration-weighted average of task
-net_impacts, giving a number between -1 (full labour displacement) and
-+1 (full demand expansion).
+The occupation-level score is the importance-weighted average of task impacts,
+ranging from 0 (no net displacement) to ~max(penetration) (fully Bounded with
+high AI coverage). Higher scores indicate greater structural disruption.
 
 Inputs:
   • data/output/classified_all_tasks.csv
@@ -37,17 +32,16 @@ import os
 
 import pandas as pd
 
-# ── Rebound / decline multipliers ────────────────────────────────────────────
-# These are intentionally interpretable parameters you can tune.
+# ── Rebound fractions ────────────────────────────────────────────────────────
+# task_impact = penetration × (1 − rebound). Tune these to adjust the model.
 #
-#  ADVERSARIAL_REBOUND  = 1.0  → full task rebound; no net job loss
-#  UNBOUNDED_REBOUND    = 0.5  → partial rebound; the backlog absorbs half the
-#                                AI savings, the other half reduces headcount
-#  BOUNDED_DECLINE      = 1.0  → full labour reduction; no rebound at all
+#  ADVERSARIAL_REBOUND  = 1.0  → full rebound; task_impact → 0
+#  UNBOUNDED_REBOUND    = 0.5  → half absorbed; task_impact = 0.5×penetration
+#  BOUNDED_REBOUND      = 0.0  → no rebound; task_impact = penetration
 
 ADVERSARIAL_REBOUND = 1.0
 UNBOUNDED_REBOUND = 0.5
-BOUNDED_DECLINE = 1.0
+BOUNDED_REBOUND = 0.0
 
 OUTPUT_PATH = "data/output/occupation_impact_report.csv"
 
@@ -90,24 +84,21 @@ def load_and_match() -> pd.DataFrame:
 
 def compute_task_impact(task_dataframe: pd.DataFrame) -> pd.DataFrame:
     """
-    net_impact is positive (demand expansion) or negative (labour reduction).
-    Tasks with zero penetration contribute 0 to the score.
+    task_impact = penetration × (1 − rebound). Always ≥ 0; higher means more
+    structural disruption. Tasks with zero penetration contribute 0.
     """
+    _rebound = {"Adversarial": ADVERSARIAL_REBOUND, "Unbounded": UNBOUNDED_REBOUND, "Bounded": BOUNDED_REBOUND}
 
     def _impact(row) -> float:
         penetration_value = row["penetration"]
         if penetration_value == 0:
             return 0.0
-        demand_type = row["Demand Type"]
-        if demand_type == "Adversarial":
-            return penetration_value * ADVERSARIAL_REBOUND  # bounces back fully → no net loss
-        elif demand_type == "Unbounded":
-            return penetration_value * UNBOUNDED_REBOUND  # partially rebound → mild net gain
-        elif demand_type == "Bounded":
-            return -penetration_value * BOUNDED_DECLINE  # full reduction → negative impact
-        return 0.0  # ERROR rows
+        rebound = _rebound.get(row["Demand Type"], None)
+        if rebound is None:
+            return 0.0  # ERROR rows
+        return penetration_value * (1 - rebound)
 
-    task_dataframe["task_net_impact"] = task_dataframe.apply(_impact, axis=1) * task_dataframe["task_importance"]
+    task_dataframe["task_impact"] = task_dataframe.apply(_impact, axis=1) * task_dataframe["task_importance"]
     return task_dataframe
 
 
@@ -140,7 +131,7 @@ def rollup_to_occupation(task_dataframe: pd.DataFrame) -> pd.DataFrame:
                         else 0
                     ),
                     "max_penetration": g["penetration"].max(),
-                    "occupation_impact": (g["task_net_impact"].sum() / g["task_importance"].sum() if g["task_importance"].sum() > 0 else 0),
+                    "occupation_impact": (g["task_impact"].sum() / g["task_importance"].sum() if g["task_importance"].sum() > 0 else 0),
                 }
             )
         )
@@ -196,11 +187,10 @@ def merge_eloundou(occupation_data_df: pd.DataFrame) -> pd.DataFrame:
 # ── 5. Derive narrative label from occupation_impact score ────────────────────
 
 IMPACT_THRESHOLDS = {
-    "Strong Decline (Efficiency Transition)": lambda s, p: s < -0.02 and p > 0.05,
-    "Mild Decline": lambda s, p: s < -0.005 and p > 0.02,
-    "The Arms Race (Stable / Inflation)": lambda s, p: s >= 0.05,
-    "The Infinite Frontier (Expansion)": lambda s, p: 0.005 <= s < 0.05,
-    "Limited AI Impact": lambda s, p: True,  # fallback
+    "High Displacement Risk": lambda s, p: s > 0.04 and p > 0.05,
+    "Moderate Displacement Risk": lambda s, p: s > 0.01 and p > 0.02,
+    "Low Displacement Risk": lambda s, p: s > 0.002,
+    "Minimal AI Impact": lambda s, p: True,  # fallback
 }
 
 
@@ -225,8 +215,8 @@ def synthesize():
     # Narrative
     occupation_data_df["impact_narrative"] = occupation_data_df.apply(derive_narrative, axis=1)
 
-    # Sort: most negative impact first (highest displacement risk), then expansionary
-    occupation_data_df = occupation_data_df.sort_values("occupation_impact", ascending=True)
+    # Sort: highest impact first (most displacement)
+    occupation_data_df = occupation_data_df.sort_values("occupation_impact", ascending=False)
 
     os.makedirs("data/output", exist_ok=True)
     occupation_data_df.to_csv(OUTPUT_PATH, index=False)
@@ -251,15 +241,15 @@ def synthesize():
     exposure_display_df["mean_penetration"] = exposure_display_df["mean_penetration"].map("{:.0%}".format)
     print(exposure_display_df.to_string(index=False))
 
-    print("\n── Top 15: Highest Displacement Risk (most negative impact score) ──")
+    print("\n── Top 15: Highest Displacement Risk ──")
     top_decline = occupation_data_df.head(15)[["Title", "dominant_demand", "mean_penetration", "occupation_impact", "impact_narrative"]]
     print(top_decline.to_string(index=False))
 
-    print("\n── Top 15: Highest Expansion / Resilience (most positive impact score) ──")
-    top_expand = occupation_data_df.tail(15).sort_values("occupation_impact", ascending=False)[
+    print("\n── Top 15: Lowest Impact (Most Resilient) ──")
+    top_resilient = occupation_data_df.tail(15).sort_values("occupation_impact", ascending=True)[
         ["Title", "dominant_demand", "mean_penetration", "occupation_impact", "impact_narrative"]
     ]
-    print(top_expand.to_string(index=False))
+    print(top_resilient.to_string(index=False))
 
     return occupation_data_df
 

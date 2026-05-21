@@ -46,11 +46,16 @@ The pipeline has two distinct phases:
 **Task matching is text-based.** The Anthropic task penetration dataset has no Task IDs, so `synthesize_impacts.py` joins O\*NET tasks to Anthropic penetration scores by lowercased exact text match. This is intentional, not a gap.
 
 **Three demand types drive the model.** The core economic logic lives in `synthesize_impacts.py`:
-- `Bounded` → `net_impact = -penetration × BOUNDED_DECLINE` (permanent displacement)
-- `Unbounded` → `net_impact = +penetration × UNBOUNDED_REBOUND` (backlog absorbs savings)
-- `Adversarial` → `net_impact = +penetration × ADVERSARIAL_REBOUND` (arms race refills work)
 
-The three multipliers (`BOUNDED_DECLINE=1.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSARIAL_REBOUND=1.0`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
+```
+task_impact = penetration × (1 − rebound_fraction)
+```
+
+- `Bounded` → rebound = 0.0 → full displacement, no absorption
+- `Unbounded` → rebound = 0.5 → half absorbed by backlog expansion
+- `Adversarial` → rebound = 1.0 → fully absorbed by arms-race escalation
+
+`occupation_impact` is the importance-weighted mean of task impacts — always ≥ 0, with higher values indicating greater structural disruption. The three rebound constants (`BOUNDED_REBOUND=0.0`, `UNBOUNDED_REBOUND=0.5`, `ADVERSARIAL_REBOUND=1.0`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
 
 ## Release Pipeline
 
@@ -82,8 +87,8 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 
 | File | Produced by | Purpose |
 |------|-------------|---------|
-| `most_impacted_jobs.png` | `generate_plots.py` | Horizontal bar chart of top 15 highest- and lowest-impact occupations. |
-| `prior_exposure_vs_model_impact.png` | `generate_plots.py` | Scatter of Eloundou et al. exposure vs. model impact score, colored by dominant demand type. Dashed naive baseline shows where model diverges from "exposure = displacement." See `docs/charts/prior_exposure_vs_model_impact.md`. |
+| `most_impacted_jobs.png` | `generate_plots.py` | Horizontal bar chart of top 30 occupations by displacement impact, colored by dominant demand type. |
+| `prior_exposure_vs_model_impact.png` | `generate_plots.py` | Scatter of Eloundou et al. exposure vs. model impact score, colored by dominant demand type. Shows where demand type causes the model to diverge from naive exposure-as-displacement. See `docs/charts/prior_exposure_vs_model_impact.md`. |
 | `model_vs_naive_divergence.png` | `generate_plots.py` | Top 5 occupations where the model departs most from the naive exposure baseline. See `docs/charts/model_vs_naive_divergence.md`. |
 | `usage_by_demand_type.png` | `generate_plots.py` | Stacked bar: Claude conversation share by demand type, with each bar stacked by occupational category (SOC major group). Task share shown as a simple reference bar alongside. |
 | `task_importance_vs_penetration.png` | `generate_plots.py` | Grouped boxplot: task importance score by demand type, split by whether the task has AI penetration > 0. |
@@ -94,7 +99,7 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `exposure_share_by_group.png` | `validate_bls.py` | Same as above but each bar shows the group's share of total economy-wide AI exposure volume. |
 | `employment_by_demand_type.png` | `validate_bls.py` | Bar chart: total U.S. workers in each dominant demand type bucket, annotated with % of modeled workforce and mean impact score. |
 | `wage_quartile_demand_type.png` | `validate_bls.py` | Two-panel: (left) employment-weighted demand type share by wage quartile; (right) employment-weighted mean model impact score by quartile. |
-| `observed_ai_usage_vs_model_impact.png` | `validate_bls.py` | Scatter of observed AI task coverage vs. model impact score. Weak aggregate r (0.166) reflects Adversarial/Unbounded and Bounded occupations pulling in opposite directions. See `docs/charts/observed_ai_usage_vs_model_impact.md`. |
+| `observed_ai_usage_vs_model_impact.png` | `validate_bls.py` | Scatter of observed AI task coverage vs. model impact score. Strong r (0.712): Bounded occupations with high penetration dominate the upper-right; Adversarial/Unbounded cluster near zero regardless of coverage. See `docs/charts/observed_ai_usage_vs_model_impact.md`. |
 | `sector_adjusted_employment_growth.png` | `validate_bls.py` | 2×2 grid: model impact vs. employment growth residual (occupation minus employment-weighted sector mean) per period. See `docs/charts/sector_adjusted_growth.md`. |
 | `sector_adjusted_wage_growth.png` | `validate_bls.py` | Same layout as above for wage growth residuals. |
 | `sector_level_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite growth. Wage r=−0.485, p=0.022, jackknife-robust. See `docs/charts/sector_level_validation.md`. |

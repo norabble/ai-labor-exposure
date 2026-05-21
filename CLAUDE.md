@@ -39,6 +39,10 @@ The pipeline has two distinct phases:
 3. `generate_plots` — produces visualizations from the impact report
 4. `validate_bls` — correlates model predictions against actual BLS employment/wage trends
 
+## Project Goal
+
+This project produces a **structural exposure score** — a current snapshot of which occupations are most exposed to AI-driven demand change, stratified by demand type. It is not a displacement prediction. Testing against BLS employment data is an ongoing confidence check; null results are expected. See `docs/framework.md` for the full conceptual framework, exposure type taxonomy, and demand type definitions.
+
 ## Key Design Decisions
 
 **BLS downloads require Node.js.** BLS blocks plain HTTP requests; `download_bls.js` uses Puppeteer (headless Chrome) to bypass this. The Python `requests` approach will not work. The 2024 data is only available as `oesm24all.zip` (all areas); `analyze_bls.py` filters it to national cross-industry rows (`AREA_TYPE==1`, `OWN_CODE==1235`, `NAICS=='000000'`).
@@ -48,14 +52,14 @@ The pipeline has two distinct phases:
 **Three demand types drive the model.** The core economic logic lives in `synthesize_impacts.py`:
 
 ```
-task_impact = penetration × (1 − rebound_fraction)
+rebound_adjusted_exposure = observed_penetration × (1 − rebound_fraction)
 ```
 
-- `Bounded` → rebound = 0.0 → full displacement, no absorption
-- `Unbounded` → rebound = 0.5 → half absorbed by backlog expansion
-- `Adversarial` → rebound = 1.0 → fully absorbed by arms-race escalation
+- `Bounded` → rebound = 0.1 → productivity gain does not feed back into demand for the task; most exposure is structural
+- `Unbounded` → rebound = 0.7 → productivity gain feeds back into demand (non-zero-sum); most exposure is absorbed
+- `Adversarial` → rebound = 0.9 → subset of Unbounded; demand growth is zero-sum (arms-race escalation); nearly all exposure is absorbed
 
-`occupation_impact` is the importance-weighted mean of task impacts — always ≥ 0, with higher values indicating greater structural disruption. The three rebound constants (`BOUNDED_REBOUND=0.1`, `UNBOUNDED_REBOUND=0.7`, `ADVERSARIAL_REBOUND=0.9`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters. See `docs/model_vs_observed_exposure.md` for a comparison of the model's predictive value against raw observed AI task coverage.
+`occupation_impact` is the importance-weighted mean of rebound-adjusted task exposures — always ≥ 0, with higher values indicating greater structural AI exposure. The three rebound constants (`BOUNDED_REBOUND=0.1`, `UNBOUNDED_REBOUND=0.7`, `ADVERSARIAL_REBOUND=0.9`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters; they are structural priors pending calibration against historical elasticity data. See `docs/model_vs_observed_exposure.md` for a comparison against raw observed AI task coverage.
 
 ## Release Pipeline
 

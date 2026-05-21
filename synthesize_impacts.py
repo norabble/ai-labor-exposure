@@ -39,9 +39,9 @@ import pandas as pd
 #  UNBOUNDED_REBOUND    = 0.5  → half absorbed; task_impact = 0.5×penetration
 #  BOUNDED_REBOUND      = 0.0  → no rebound; task_impact = penetration
 
-ADVERSARIAL_REBOUND = 1.0
-UNBOUNDED_REBOUND = 0.5
-BOUNDED_REBOUND = 0.0
+ADVERSARIAL_REBOUND = 0.9
+UNBOUNDED_REBOUND = 0.7
+BOUNDED_REBOUND = 0.1
 
 OUTPUT_PATH = "data/output/occupation_impact_report.csv"
 

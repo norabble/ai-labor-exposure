@@ -11,6 +11,7 @@ compares against the naive Eloundou exposure baseline.
 Inputs:
   • data/output/bls_trends.csv          (from analyze_bls.py)
   • data/output/occupation_impact_report.csv
+  • data/raw/cps/table_a19.html         (optional — from download_data.py)
 
 Outputs (saved to data/output/visualizations/):
   • model_vs_actual_employment_growth.png      — model impact vs. YoY employment growth per period
@@ -26,6 +27,7 @@ Outputs (saved to data/output/visualizations/):
   • high_risk_concentration.png               — bubble chart of high displacement-pressure occupations
   • exposure_volume_by_group.png              — employment-weighted AI exposure by SOC group
   • exposure_share_by_group.png               — share of total AI exposure by SOC group
+  • cps_2026_direction.png                    — CPS Apr 2025→Apr 2026 employment direction by major group
 """
 
 import math
@@ -170,6 +172,109 @@ def _make_subplot_figure(
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
+
+
+# CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
+_CPS_TO_SOC_MAJOR: dict[str, str] = {
+    "management occupations": "11",
+    "business and financial operations occupations": "13",
+    "computer and mathematical occupations": "15",
+    "architecture and engineering occupations": "17",
+    "life, physical, and social science occupations": "19",
+    "community and social service occupations": "21",
+    "legal occupations": "23",
+    "education, training, and library occupations": "25",
+    "arts, design, entertainment, sports, and media occupations": "27",
+    "healthcare practitioners and technical occupations": "29",
+    "healthcare support occupations": "31",
+    "protective service occupations": "33",
+    "food preparation and serving related occupations": "35",
+    "building and grounds cleaning and maintenance occupations": "37",
+    "personal care and service occupations": "39",
+    "sales and related occupations": "41",
+    "office and administrative support occupations": "43",
+    "farming, fishing, and forestry occupations": "45",
+    "construction and extraction occupations": "47",
+    "installation, maintenance, and repair occupations": "49",
+    "production occupations": "51",
+    "transportation and material moving occupations": "53",
+}
+
+
+def _plot_cps_2026_direction(output_dir: str, exposure_group_df: pd.DataFrame) -> None:
+    """Parse CPS Table A-19 and produce a major-group employment direction chart.
+
+    Data source: BLS CPS monthly Table A-19, Apr 2025 vs. Apr 2026.
+    This is a directional indicator only — not BLS OEWS; wage data unavailable.
+    """
+    cps_path = "data/raw/cps/table_a19.html"
+    if not os.path.exists(cps_path):
+        print("  Skipping CPS 2026 direction chart — data/raw/cps/table_a19.html not found.")
+        print("  Run: uv run download_data.py  (or make download-data) to fetch it.")
+        return
+
+    tables = pd.read_html(cps_path)
+    raw_cps_df = tables[0]
+
+    # Multi-level columns: extract occupation name and Total 16+ Apr 2025 / Apr 2026
+    occupation_col = raw_cps_df.columns[0]
+    apr_2025_col = raw_cps_df.columns[1]  # Total, 16 years and over, Apr. 2025
+    apr_2026_col = raw_cps_df.columns[2]  # Total, 16 years and over, Apr. 2026
+
+    cps_parsed_df = raw_cps_df[[occupation_col, apr_2025_col, apr_2026_col]].copy()
+    cps_parsed_df.columns = ["occupation", "apr_2025", "apr_2026"]
+    cps_parsed_df = cps_parsed_df.dropna(subset=["occupation"])
+    cps_parsed_df["occupation_lower"] = cps_parsed_df["occupation"].str.lower().str.strip()
+
+    cps_parsed_df["soc_major"] = cps_parsed_df["occupation_lower"].map(_CPS_TO_SOC_MAJOR)
+    cps_mapped_df = cps_parsed_df.dropna(subset=["soc_major"]).copy()
+
+    cps_mapped_df["apr_2025"] = pd.to_numeric(cps_mapped_df["apr_2025"], errors="coerce")
+    cps_mapped_df["apr_2026"] = pd.to_numeric(cps_mapped_df["apr_2026"], errors="coerce")
+    cps_mapped_df = cps_mapped_df.dropna(subset=["apr_2025", "apr_2026"])
+    cps_mapped_df["emp_growth_apr25_apr26"] = (cps_mapped_df["apr_2026"] - cps_mapped_df["apr_2025"]) / cps_mapped_df["apr_2025"]
+
+    # Merge with exposure group data for demand type coloring
+    group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
+    group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
+    cps_chart_df = cps_mapped_df.merge(group_demand_df, on="soc_major", how="left")
+    cps_chart_df = cps_chart_df.sort_values("emp_growth_apr25_apr26", ascending=True)
+
+    # Print summary table
+    print("\n── CPS Table A-19: Major Group Employment Direction (Apr 2025 → Apr 2026) ──")
+    print("   (CPS monthly survey — directional indicator only; not BLS OEWS)\n")
+    display_df = cps_chart_df[["occupation", "apr_2025", "apr_2026", "emp_growth_apr25_apr26", "group_dominant_demand"]].copy()
+    display_df["apr_2025"] = display_df["apr_2025"].map("{:,.0f}".format)
+    display_df["apr_2026"] = display_df["apr_2026"].map("{:,.0f}".format)
+    display_df["emp_growth_apr25_apr26"] = display_df["emp_growth_apr25_apr26"].map("{:+.1%}".format)
+    print(display_df.to_string(index=False))
+
+    # Chart
+    bar_colors = [DEMAND_PALETTE.get(d, "grey") for d in cps_chart_df["group_dominant_demand"]]
+    short_labels = [SOC_MAJOR_GROUPS.get(row["soc_major"], row["occupation"])[:40] for _, row in cps_chart_df.iterrows()]
+
+    fig, ax_cps = plt.subplots(figsize=(12, 9))
+    bars = ax_cps.barh(short_labels, cps_chart_df["emp_growth_apr25_apr26"], color=bar_colors, edgecolor="white", linewidth=0.5)
+
+    for bar_rect, growth_val in zip(bars, cps_chart_df["emp_growth_apr25_apr26"]):
+        x_pos = growth_val + (0.001 if growth_val >= 0 else -0.001)
+        ha = "left" if growth_val >= 0 else "right"
+        ax_cps.text(x_pos, bar_rect.get_y() + bar_rect.get_height() / 2, f"{growth_val:+.1%}", va="center", ha=ha, fontsize=8)
+
+    ax_cps.axvline(0, color="black", linewidth=0.8)
+    ax_cps.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
+    ax_cps.set_xlabel("Employment Growth Apr 2025 → Apr 2026", fontsize=10)
+    ax_cps.set_title(
+        "Major Group Employment Direction: Apr 2025 → Apr 2026\nCPS Table A-19 (monthly survey) — directional indicator only; not BLS OEWS",
+        fontsize=11,
+    )
+
+    legend_handles_cps = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+    ax_cps.legend(handles=legend_handles_cps, title="Dominant Demand Type", fontsize=9, loc="lower right")
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/cps_2026_direction.png", dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"\n  Saved {output_dir}/cps_2026_direction.png")
 
 
 def main():
@@ -818,6 +923,10 @@ def main():
     plt.tight_layout()
     plt.savefig(f"{output_dir}/high_risk_concentration.png", dpi=300, bbox_inches="tight")
     plt.close()
+
+    # ── CPS 2026 directional indicator ───────────────────────────────────────
+    exposure_group_csv_df = pd.read_csv("data/output/exposure_volume_by_group.csv")
+    _plot_cps_2026_direction(output_dir, exposure_group_csv_df)
 
 
 if __name__ == "__main__":

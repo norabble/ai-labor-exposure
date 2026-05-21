@@ -65,7 +65,7 @@ Push a `v*` tag to cut a GitHub release with all pipeline outputs attached as as
 git tag v1.0 && git push origin v1.0
 ```
 
-The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic, and BLS data, then runs `analyze → synthesize → plot → validate`. Classification is skipped — the pre-computed results live in `seeds/classified_all_tasks.csv` and are copied into place before the pipeline runs. To update the seed after a re-classification, copy `data/output/classified_all_tasks.csv` to `seeds/` and commit it.
+The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic, BLS, and CPS data, then runs `analyze → synthesize → plot → validate`. Classification is skipped — the pre-computed results live in `seeds/classified_all_tasks.csv` and are copied into place before the pipeline runs. To update the seed after a re-classification, copy `data/output/classified_all_tasks.csv` to `seeds/` and commit it.
 
 BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch if the download script changes.
 
@@ -105,6 +105,7 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `sector_level_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite growth. Wage r=−0.485, p=0.022, jackknife-robust. See `docs/charts/sector_level_validation.md`. |
 | `top_risk_trajectories.png` | `validate_bls.py` | Line chart of 2022–2025 BLS employment trajectories for top 10 most-negative-impact occupations, indexed to 100 at 2022. Each line annotated with model prediction vs. actual change. |
 | `high_risk_concentration.png` | `validate_bls.py` | Bubble chart: displacement pressure vs. employment share for occupations above 5% threshold. Bubble size ∝ AI exposure volume. See `docs/charts/high_risk_concentration.md`. |
+| `cps_2026_direction.png` | `validate_bls.py` | Horizontal bar: Apr 2025→Apr 2026 employment growth by SOC major group, from BLS CPS Table A-19. Directional indicator only — not BLS OEWS. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_2026_direction.md`. |
 
 ## Coding Standards
 

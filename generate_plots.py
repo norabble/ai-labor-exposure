@@ -33,7 +33,9 @@ def main():
     os.makedirs(output_dir, exist_ok=True)
 
     occupation_exposure_df = pd.read_csv("data/output/occupation_exposure_report.csv")
-    clean_exposure_df = occupation_exposure_df.dropna(subset=["eloundou_exposure_mid", "occupation_exposure"]).copy()
+    _has_eloundou = "eloundou_exposure_mid" in occupation_exposure_df.columns
+    if _has_eloundou:
+        clean_exposure_df = occupation_exposure_df.dropna(subset=["eloundou_exposure_mid", "occupation_exposure"]).copy()
 
     sns.set_theme(style="whitegrid")
 
@@ -58,68 +60,71 @@ def main():
     plt.savefig(f"{output_dir}/highest_exposure_occupations.png", dpi=300)
     plt.close()
 
-    # 2. Theoretical Exposure vs. Rebound-Adjusted Exposure
-    plt.figure(figsize=(12, 10))
-    sns.scatterplot(
-        data=clean_exposure_df,
-        x="eloundou_exposure_mid",
-        y="occupation_exposure",
-        hue="dominant_demand",
-        palette=DEMAND_PALETTE,
-        alpha=0.5,
-        s=15,
-    )
-
-    plt.title("Theoretical Exposure vs. Rebound-Adjusted Exposure", fontsize=16, pad=20)
-    plt.xlabel("Theoretical Exposure (Eloundou et al. estimate)", fontsize=12)
-    plt.ylabel("Rebound-Adjusted Exposure Score", fontsize=12)
-    plt.legend(title="Dominant Demand Type")
-
-    clean_exposure_df["difference_from_naive"] = clean_exposure_df["eloundou_exposure_mid"] - clean_exposure_df["occupation_exposure"]
-    outliers = clean_exposure_df.nlargest(5, "difference_from_naive")
-
-    for _, row in outliers.iterrows():
-        plt.annotate(
-            row["Title"],
-            (row["eloundou_exposure_mid"], row["occupation_exposure"]),
-            xytext=(12, 6),
-            textcoords="offset points",
-            fontsize=8,
-            alpha=0.9,
-            arrowprops={"arrowstyle": "->", "color": "grey", "lw": 0.8},
+    if _has_eloundou:
+        # 2. Theoretical Exposure vs. Rebound-Adjusted Exposure
+        plt.figure(figsize=(12, 10))
+        sns.scatterplot(
+            data=clean_exposure_df,
+            x="eloundou_exposure_mid",
+            y="occupation_exposure",
+            hue="dominant_demand",
+            palette=DEMAND_PALETTE,
+            alpha=0.5,
+            s=15,
         )
 
-    plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-    plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}/theoretical_vs_rebound_adjusted_exposure.png", dpi=300)
-    plt.close()
+        plt.title("Theoretical Exposure vs. Rebound-Adjusted Exposure", fontsize=16, pad=20)
+        plt.xlabel("Theoretical Exposure (Eloundou et al. estimate)", fontsize=12)
+        plt.ylabel("Rebound-Adjusted Exposure Score", fontsize=12)
+        plt.legend(title="Dominant Demand Type")
 
-    # 3. Occupations most different from naive exposure prediction
-    plt.figure(figsize=(14, 8))
-    outliers_sorted = outliers.sort_values("difference_from_naive", ascending=True)
+        clean_exposure_df["difference_from_naive"] = clean_exposure_df["eloundou_exposure_mid"] - clean_exposure_df["occupation_exposure"]
+        outliers = clean_exposure_df.nlargest(5, "difference_from_naive")
 
-    plt.barh(outliers_sorted["Title"], outliers_sorted["difference_from_naive"], color="#4575b4")
-    plt.title("Where the Model Diverges Most from the Naive Exposure Baseline", fontsize=16, pad=20)
-    plt.xlabel("Divergence from Naive Baseline (Theoretical Exposure − Rebound-Adjusted Exposure)", fontsize=12)
-    plt.ylabel("")
+        for _, row in outliers.iterrows():
+            plt.annotate(
+                row["Title"],
+                (row["eloundou_exposure_mid"], row["occupation_exposure"]),
+                xytext=(12, 6),
+                textcoords="offset points",
+                fontsize=8,
+                alpha=0.9,
+                arrowprops={"arrowstyle": "->", "color": "grey", "lw": 0.8},
+            )
 
-    for i, row in outliers_sorted.iterrows():
-        plt.text(
-            row["difference_from_naive"] * 0.95,
-            list(outliers_sorted["Title"]).index(row["Title"]),
-            f"Rebound-adjusted: {row['occupation_exposure']:.1%} | Theoretical: {row['eloundou_exposure_mid']:.0%}",
-            va="center",
-            ha="right",
-            color="white",
-            fontweight="bold",
-            fontsize=9,
-        )
+        plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/theoretical_vs_rebound_adjusted_exposure.png", dpi=300)
+        plt.close()
 
-    plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}/model_vs_naive_divergence.png", dpi=300)
-    plt.close()
+        # 3. Occupations most different from naive exposure prediction
+        plt.figure(figsize=(14, 8))
+        outliers_sorted = outliers.sort_values("difference_from_naive", ascending=True)
+
+        plt.barh(outliers_sorted["Title"], outliers_sorted["difference_from_naive"], color="#4575b4")
+        plt.title("Where the Model Diverges Most from the Naive Exposure Baseline", fontsize=16, pad=20)
+        plt.xlabel("Divergence from Naive Baseline (Theoretical Exposure − Rebound-Adjusted Exposure)", fontsize=12)
+        plt.ylabel("")
+
+        for pos, (_, row) in enumerate(outliers_sorted.iterrows()):
+            plt.text(
+                row["difference_from_naive"] * 0.95,
+                pos,
+                f"Rebound-adjusted: {row['occupation_exposure']:.1%} | Theoretical: {row['eloundou_exposure_mid']:.0%}",
+                va="center",
+                ha="right",
+                color="white",
+                fontweight="bold",
+                fontsize=9,
+            )
+
+        plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/model_vs_naive_divergence.png", dpi=300)
+        plt.close()
+    else:
+        print("  Skipping Eloundou charts — eloundou_exposure_mid not in report (run with eloundou_exposure.csv present).")
 
     # 4. Claude conversation share by demand type, stacked by occupational category
     classified_path = "data/output/classified_all_tasks.csv"

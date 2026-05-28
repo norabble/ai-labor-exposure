@@ -40,6 +40,22 @@ class TestComputeTaskExposure:
         result = compute_task_exposure(_task_df([(0.5, "Bounded", 3.0)]))
         assert result["task_exposure"].iloc[0] == pytest.approx(0.5 * (1 - BOUNDED_REBOUND) * 3.0)
 
+    def test_bounded_exposure_exceeds_unbounded_exceeds_adversarial(self):
+        """Ordering invariant: catches transposed rebound constants that the individual value tests above would miss."""
+        result = compute_task_exposure(
+            _task_df(
+                [
+                    (0.5, "Bounded", 1.0),
+                    (0.5, "Unbounded", 1.0),
+                    (0.5, "Adversarial", 1.0),
+                ]
+            )
+        )
+        bounded = result.loc[result["Demand Type"] == "Bounded", "task_exposure"].iloc[0]
+        unbounded = result.loc[result["Demand Type"] == "Unbounded", "task_exposure"].iloc[0]
+        adversarial = result.loc[result["Demand Type"] == "Adversarial", "task_exposure"].iloc[0]
+        assert bounded > unbounded > adversarial
+
 
 class TestDeriveExposureTier:
     def _row(self, score, penetration):

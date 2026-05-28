@@ -208,7 +208,7 @@ def _parse_cps_a19() -> pd.DataFrame | None:
     if not os.path.exists(cps_path):
         return None
 
-    raw_cps_df = pd.read_html(cps_path)[0]
+    raw_cps_df = pd.read_html(cps_path, flavor="bs4")[0]
 
     # Multi-level columns: col 0 = occupation name, col 1 = Total 16+ Apr 2025, col 2 = Total 16+ Apr 2026
     cps_parsed_df = raw_cps_df.iloc[:, [0, 1, 2]].copy()
@@ -359,20 +359,16 @@ def main():
 
     occupation_exposure_df["OCC_CODE"] = occupation_exposure_df["O*NET-SOC Code"].astype(str).str.split(".").str[0]
 
-    aggregated_exposure_df = (
-        occupation_exposure_df.groupby("OCC_CODE")
-        .agg(
-            {
-                "occupation_exposure": "mean",
-                "Title": "first",
-                "mean_penetration": "mean",
-                "eloundou_exposure_mid": "mean",
-                "dominant_demand": "first",
-                "dominant_strength": "first",
-            }
-        )
-        .reset_index()
-    )
+    _agg_dict: dict = {
+        "occupation_exposure": "mean",
+        "Title": "first",
+        "mean_penetration": "mean",
+        "dominant_demand": "first",
+        "dominant_strength": "first",
+    }
+    if "eloundou_exposure_mid" in occupation_exposure_df.columns:
+        _agg_dict["eloundou_exposure_mid"] = "mean"
+    aggregated_exposure_df = occupation_exposure_df.groupby("OCC_CODE").agg(_agg_dict).reset_index()
 
     merged_validation_df = pd.merge(aggregated_exposure_df, bls_trends_df, on="OCC_CODE", how="inner")
 
@@ -581,15 +577,15 @@ def main():
         sorted_df = plot_df.sort_values(value_col, ascending=True)
         bar_colors = [DEMAND_PALETTE.get(demand_type, "grey") for demand_type in sorted_df["group_dominant_demand"]]
         fig, ax = plt.subplots(figsize=(12, 9))
-        bars = ax.barh(sorted_df["group_name"], sorted_df[value_col] * 100, color=bar_colors, alpha=0.85)
+        bars = ax.barh(sorted_df["group_name"], sorted_df[value_col], color=bar_colors, alpha=0.85)
         ax.set_xlabel(xlabel, fontsize=10)
         ax.set_title(title, fontsize=12)
-        ax.xaxis.set_major_formatter(PercentFormatter(xmax=100, decimals=1))
+        ax.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
         legend_handles = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
         ax.legend(handles=legend_handles, title="Dominant Demand Type", fontsize=9, title_fontsize=9, loc="lower right")
         for bar, (_, row) in zip(bars, sorted_df.iterrows()):
             ax.text(
-                bar.get_width() + 0.05,
+                bar.get_width() + 0.001,
                 bar.get_y() + bar.get_height() / 2,
                 f"{row[value_col]:.1%}",
                 va="center",
@@ -672,12 +668,12 @@ def main():
     ax.set_title(
         f"U.S. Workers by Dominant AI Demand Type ({latest_year})\n"
         "Classified by the demand type with the most task importance weight\n"
-        "Predicted demand Δ = model's net labor demand change (positive = expansion, negative = displacement)",
+        "Higher score = greater structural AI exposure (non-negative; does not predict net demand direction)",
         fontsize=10,
         pad=12,
     )
     for bar, (_, row) in zip(emp_bars, demand_emp_df.iterrows()):
-        label = f"{row['workers_millions']:.1f}M\n({row['pct_of_modeled']:.0%} of modeled)\nPredicted demand Δ: {row['mean_exposure']:.1%}"
+        label = f"{row['workers_millions']:.1f}M\n({row['pct_of_modeled']:.0%} of modeled)\nMean exposure: {row['mean_exposure']:.1%}"
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.8, label, ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/employment_by_demand_type.png", dpi=300, bbox_inches="tight")
@@ -747,8 +743,7 @@ def main():
     legend_handles_wq = [Patch(facecolor=DEMAND_PALETTE[d], label=d) for d in ["Bounded", "Unbounded", "Adversarial"]]
     ax_stack.legend(handles=legend_handles_wq, title="Demand Type", fontsize=9)
 
-    impact_colors = ["#d73027" if v < 0 else "#1a9850" for v in quartile_impact_series.values]
-    impact_bars = ax_impact.bar(range(4), quartile_impact_series.values, color=impact_colors, alpha=0.85, width=0.55)
+    impact_bars = ax_impact.bar(range(4), quartile_impact_series.values, color="#1a9850", alpha=0.85, width=0.55)
     ax_impact.set_xticks([0, 1, 2, 3])
     ax_impact.set_xticklabels(quartile_labels, fontsize=9)
     ax_impact.axhline(0, color="black", linewidth=0.8)
@@ -756,13 +751,12 @@ def main():
     ax_impact.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
     ax_impact.set_title(f"Mean Rebound-Adjusted Exposure Score by Wage Quartile ({latest_year})\n(employment-weighted)", fontsize=11)
     for bar, val in zip(impact_bars, quartile_impact_series.values):
-        offset = 0.001 if val >= 0 else -0.001
         ax_impact.text(
             bar.get_x() + bar.get_width() / 2,
-            val + offset,
+            val + 0.001,
             f"{val:.1%}",
             ha="center",
-            va="bottom" if val >= 0 else "top",
+            va="bottom",
             fontsize=9,
         )
 
@@ -1003,11 +997,10 @@ def main():
     plt.close()
 
     # ── CPS 2026 directional indicator + model comparison ────────────────────
-    exposure_group_csv_df = pd.read_csv("data/output/exposure_volume_by_group.csv")
     cps_mapped_df = _parse_cps_a19()
     if cps_mapped_df is not None:
-        _plot_cps_2026_direction(output_dir, cps_mapped_df, exposure_group_csv_df)
-        _plot_cps_model_vs_actual(output_dir, cps_mapped_df, merged_validation_df, exposure_group_csv_df)
+        _plot_cps_2026_direction(output_dir, cps_mapped_df, group_rollup_df)
+        _plot_cps_model_vs_actual(output_dir, cps_mapped_df, merged_validation_df, group_rollup_df)
     else:
         print("  Skipping CPS charts — data/raw/cps/table_a19.html not found.")
         print("  Run: uv run download_data.py  (or make download-data) to fetch it.")

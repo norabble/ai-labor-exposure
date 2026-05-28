@@ -1,8 +1,8 @@
-# Observed AI Task Coverage vs. Model Impact Score
+# Observed AI Task Coverage vs. Rebound-Adjusted Exposure Score
 
-**File:** `observed_ai_usage_vs_model_impact.png`
+**File:** `observed_vs_rebound_adjusted_exposure.png`
 
-![Observed AI Task Coverage vs. Model Impact Score](images/observed_ai_usage_vs_model_impact.png)
+![Observed AI Task Coverage vs. Rebound-Adjusted Exposure Score](images/observed_vs_rebound_adjusted_exposure.png)
 
 ## What this chart shows
 

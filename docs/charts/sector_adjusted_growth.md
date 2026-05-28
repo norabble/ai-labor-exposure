@@ -28,11 +28,11 @@ For each occupation, the sector mean growth is the employment-weighted average g
 residual = occupation_growth − employment_weighted_sector_mean_growth
 ```
 
-A positive residual means the occupation outperformed its sector peers; a negative residual means it underperformed. If the model's impact score predicts anything real at the occupation level, it should predict these residuals better than it predicts raw growth.
+A positive residual means the occupation outperformed its sector peers; a negative residual means it underperformed. If the model's rebound-adjusted exposure score predicts anything real at the occupation level, it should predict these residuals better than it predicts raw growth.
 
 ## Interpreting the correlation statistics
 
-Each subplot shows a Pearson r and p-value for the model impact score vs. the growth residual in that period. A small r (close to zero) with a high p-value means the model's occupation-specific prediction is not showing up in the BLS data.
+Each subplot shows a Pearson r and p-value for the rebound-adjusted exposure score vs. the growth residual in that period. A small r (close to zero) with a high p-value means the model's occupation-specific prediction is not showing up in the BLS data.
 
 There are several plausible explanations:
 

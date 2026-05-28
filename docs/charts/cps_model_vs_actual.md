@@ -6,7 +6,7 @@
 
 ## What this chart shows
 
-Each dot is one SOC major occupation group (n = 22). The x-axis is the employment-weighted mean `occupation_impact` score for that group — a model prediction of structural displacement pressure. The y-axis is actual employment growth in that group from April 2025 to April 2026, measured by BLS CPS Table A-19.
+Each dot is one SOC major occupation group (n = 22). The x-axis is the employment-weighted mean `occupation_exposure` score for that group — a model prediction of structural structural exposure pressure. The y-axis is actual employment growth in that group from April 2025 to April 2026, measured by BLS CPS Table A-19.
 
 This is a major-group level validation: can the model's aggregated displacement predictions distinguish which broad occupation categories are shrinking vs. growing in 2025–2026?
 
@@ -15,7 +15,7 @@ This is a major-group level validation: can the model's aggregated displacement 
 For each major group:
 
 ```
-group_impact = Σ(occupation_impact × BLS_employment) / Σ(BLS_employment)
+group_impact = Σ(occupation_exposure × BLS_employment) / Σ(BLS_employment)
 ```
 
 where the sum runs over all occupations in `merged_validation_df` that belong to that 2-digit SOC group. Employment weights come from the most recent OEWS annual data (May 2025 = `TOT_EMP_25`).

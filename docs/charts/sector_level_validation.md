@@ -6,7 +6,7 @@
 
 ## What this chart shows
 
-Each bubble is one of the 22 BLS major occupational groups (e.g., "Healthcare Practitioners," "Computer and Mathematical"). The x-axis is the sector's employment-weighted mean model impact score; the y-axis is its composite employment or wage growth. Bubble size scales with total employment in the sector.
+Each bubble is one of the 22 BLS major occupational groups (e.g., "Healthcare Practitioners," "Computer and Mathematical"). The x-axis is the sector's employment-weighted mean rebound-adjusted exposure score; the y-axis is its composite employment or wage growth. Bubble size scales with total employment in the sector.
 
 ## Why sector aggregation strengthens the test
 
@@ -14,7 +14,7 @@ Individual occupation-level validation is noisy: a single occupation's growth ca
 
 ## What the correlation statistics mean
 
-**Employment panel (left):** r = −0.200, p = 0.373. No statistically significant relationship between sector-level model impact scores and composite employment growth. This is consistent with the broader picture: AI-driven employment effects are not yet detectable in BLS data through 2025.
+**Employment panel (left):** r = −0.200, p = 0.373. No statistically significant relationship between sector-level rebound-adjusted exposure scores and composite employment growth. This is consistent with the broader picture: AI-driven employment effects are not yet detectable in BLS data through 2025.
 
 **Wage panel (right):** r = −0.139, p = 0.537. No statistically significant relationship at the sector level either. The sign is in the expected direction (higher displacement impact → weaker wage growth), but the magnitude is small and the p-value is well above conventional significance thresholds.
 

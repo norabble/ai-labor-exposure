@@ -4,7 +4,7 @@
 
 This compares two predictors of BLS employment and wage growth:
 
-1. **Model impact score** (`occupation_impact`) — this model's demand-type-adjusted net displacement score, computed as `penetration × (1 − rebound_fraction)` per task, rolled up to occupation level.
+1. **Rebound-adjusted exposure score** (`occupation_exposure`) — this model's demand-type-adjusted rebound-adjusted exposure score, computed as `penetration × (1 − rebound_fraction)` per task, rolled up to occupation level.
 2. **Observed AI task coverage** — Anthropic's empirical measure of what fraction of an occupation's O\*NET tasks appear in actual Claude conversation logs (`anthropic_job_exposure.csv`).
 
 The question: does classifying demand type (Bounded / Unbounded / Adversarial) add predictive value over simply knowing how much AI coverage an occupation already has?
@@ -42,7 +42,7 @@ Restricting to occupations with actual Anthropic task coverage sharpens the sign
 
 `*` p < 0.05, `**` p < 0.01, `***` p < 0.001
 
-The model's advantage is largest in 2024→2025, where r = −0.219 vs. −0.175 for raw coverage. The gap reflects demand type doing real work: an Unbounded or Adversarial occupation with the same raw coverage as a Bounded one receives a lower impact score, and that discount turns out to be predictively correct — those occupations are not losing employment at the same rate.
+The model's advantage is largest in 2024→2025, where r = −0.219 vs. −0.175 for raw coverage. The gap reflects demand type doing real work: an Unbounded or Adversarial occupation with the same raw coverage as a Bounded one receives a lower exposure score, and that discount turns out to be predictively correct — those occupations are not losing employment at the same rate.
 
 ## The 2024→2025 signal is strengthening over time
 
@@ -75,13 +75,13 @@ For wage growth, the model does not add value over raw coverage and in some case
 | Wage 2023→2024 | −0.081 | −0.040 |
 | Wage composite | −0.087 | **−0.145*** |
 
-Raw observed coverage is the stronger wage predictor, and the model gets the sign wrong in 2022→2023 among penetrated occupations. This makes conceptual sense: wage growth is shaped by productivity premiums and labor scarcity across all demand types, not just displacement pressure. The model discounts Adversarial and Unbounded coverage toward zero — but workers in those roles may be seeing wage gains precisely *because* of that coverage. Stripping it out hurts wage prediction.
+Raw observed coverage is the stronger wage predictor, and the model gets the sign wrong in 2022→2023 among penetrated occupations. This makes conceptual sense: wage growth is shaped by productivity premiums and labor scarcity across all demand types, not just structural exposure pressure. The model discounts Adversarial and Unbounded coverage toward zero — but workers in those roles may be seeing wage gains precisely *because* of that coverage. Stripping it out hurts wage prediction.
 
 ## Summary
 
 | Outcome | Better predictor |
 |---------|-----------------|
-| Employment growth (especially 2024→2025) | **Model impact score** |
+| Employment growth (especially 2024→2025) | **Rebound-adjusted exposure score** |
 | Wage growth | **Observed AI task coverage** |
 
-The model adds predictive value specifically where it is designed to — employment displacement — by using demand type to distinguish coverage that will reduce headcount from coverage that will be absorbed. For wages, the raw signal from observed AI usage is more informative than the adjusted impact score.
+The model adds predictive value specifically where it is designed to — structural exposure pressure on employment — by using demand type to distinguish coverage that will reduce headcount from coverage that will be absorbed. For wages, the raw signal from observed AI usage is more informative than the rebound-adjusted exposure score.

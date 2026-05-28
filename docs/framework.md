@@ -83,7 +83,7 @@ rebound fraction:
 rebound_adjusted_exposure = observed_penetration × (1 − rebound_fraction)
 ```
 
-This is the primary output of this model (`occupation_impact` in the codebase).
+This is the primary output of this model (`occupation_exposure` in the codebase).
 
 **Properties:**
 - Addresses the *rebound signal* gap in observed exposure by applying a
@@ -198,7 +198,7 @@ when that becomes available.
 
 ## Naming Conventions (Pending)
 
-The current codebase uses `occupation_impact` and narrative labels like "High
+The current codebase uses `occupation_exposure` and narrative labels like "High
 Displacement Risk" that imply prediction rather than structural description.
 Renaming to better reflect the structural exposure framing (e.g., "High
 Structural Exposure") is under consideration. This document will be updated when

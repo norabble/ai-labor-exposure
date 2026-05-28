@@ -5,30 +5,30 @@ Validates the occupation impact model against actual BLS employment and wage
 trends across multiple year periods.
 
 For each growth period (YoY pairs + composite), computes Pearson correlation
-between our occupation_impact score and real-world growth outcomes, and
+between our occupation_exposure score and real-world growth outcomes, and
 compares against the naive Eloundou exposure baseline.
 
 Inputs:
   • data/output/bls_trends.csv          (from analyze_bls.py)
-  • data/output/occupation_impact_report.csv
+  • data/output/occupation_exposure_report.csv
   • data/raw/cps/table_a19.html         (optional — from download_data.py)
 
 Outputs (saved to data/output/visualizations/):
-  • model_vs_actual_employment_growth.png      — model impact vs. YoY employment growth per period
-  • model_vs_actual_wage_growth.png            — model impact vs. YoY wage growth per period
+  • model_vs_actual_employment_growth.png      — exposure score vs. YoY employment growth per period
+  • model_vs_actual_wage_growth.png            — exposure score vs. YoY wage growth per period
   • employment_vs_wage_growth_by_demand_type.png — composite emp vs wage growth, colored by demand type
-  • sector_adjusted_employment_growth.png      — model impact vs. sector-adjusted employment growth
-  • sector_adjusted_wage_growth.png            — model impact vs. sector-adjusted wage growth
+  • sector_adjusted_employment_growth.png      — exposure score vs. sector-adjusted employment growth
+  • sector_adjusted_wage_growth.png            — exposure score vs. sector-adjusted wage growth
   • employment_by_demand_type.png              — workers by dominant demand type bucket
   • wage_quartile_demand_type.png              — demand type share and mean impact by wage quartile
-  • observed_ai_usage_vs_model_impact.png      — observed AI task coverage vs. model impact score
+  • observed_vs_rebound_adjusted_exposure.png      — observed AI task coverage vs. rebound-adjusted exposure score
   • sector_level_validation.png               — sector-level labeled bubble scatter (n=22 sectors)
-  • top_risk_trajectories.png                 — 2022-2025 employment index for top 10 at-risk occupations
-  • high_risk_concentration.png               — bubble chart of high displacement-pressure occupations
+  • top_exposure_trajectories.png                 — 2022-2025 employment index for top 10 highest-exposure occupations
+  • high_exposure_concentration.png               — bubble chart of high displacement-pressure occupations
   • exposure_volume_by_group.png              — employment-weighted AI exposure by SOC group
   • exposure_share_by_group.png               — share of total AI exposure by SOC group
   • cps_2026_direction.png                    — CPS Apr 2025→Apr 2026 employment direction by major group
-  • cps_model_vs_actual.png                   — scatter: employment-weighted model impact vs. CPS growth, major group level
+  • cps_model_vs_actual.png                   — scatter: employment-weighted exposure score vs. CPS growth, major group level
 """
 
 import math
@@ -56,7 +56,7 @@ def _label(period: str) -> str:
 
 def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool) -> pd.DataFrame:
     """Drop NaN/inf and remove extreme outliers for a single growth column."""
-    clean_df = merged_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[growth_col, "occupation_impact"])
+    clean_df = merged_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[growth_col, "occupation_exposure"])
     if growth_col.startswith("emp_growth"):
         upper = 2.0 if is_composite else 1.0
         lower = -0.75 if is_composite else -0.5
@@ -66,7 +66,7 @@ def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool) -> pd.D
 
 def _correlations(clean_df: pd.DataFrame, growth_col: str) -> tuple[float, float, float, float]:
     """Return (r_impact, p_impact, r_eloundou, p_eloundou) for a growth column."""
-    r_impact, p_impact = stats.pearsonr(clean_df["occupation_impact"], clean_df[growth_col])
+    r_impact, p_impact = stats.pearsonr(clean_df["occupation_exposure"], clean_df[growth_col])
     r_eloundou, p_eloundou = stats.pearsonr(clean_df["eloundou_exposure_mid"], clean_df[growth_col])
     return r_impact, p_impact, r_eloundou, p_eloundou
 
@@ -117,7 +117,7 @@ def _make_subplot_figure(
         # Colored scatter by demand type, then regression lines overlaid
         sns.scatterplot(
             data=clean_df,
-            x="occupation_impact",
+            x="occupation_exposure",
             y=growth_col,
             hue="dominant_demand",
             palette=DEMAND_PALETTE,
@@ -128,7 +128,7 @@ def _make_subplot_figure(
         )
         sns.regplot(
             data=clean_df,
-            x="occupation_impact",
+            x="occupation_exposure",
             y=growth_col,
             scatter=False,
             line_kws={"color": "steelblue", "linewidth": 1.5},
@@ -140,7 +140,7 @@ def _make_subplot_figure(
                 continue
             sns.regplot(
                 data=subset_df,
-                x="occupation_impact",
+                x="occupation_exposure",
                 y=growth_col,
                 scatter=False,
                 ci=None,
@@ -149,7 +149,7 @@ def _make_subplot_figure(
             )
 
         ax.set_title(f"{_label(period)}\nr={r_impact:.3f} (p={p_impact:.3f})", fontsize=11)
-        ax.set_xlabel("Model Occupation Impact Score", fontsize=10)
+        ax.set_xlabel("Rebound-Adjusted Exposure Score", fontsize=10)
         ax.set_ylabel(ylabel if subplot_idx % ncols == 0 else "", fontsize=10)
         ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
         ax.axvline(0, color="grey", linestyle="--", linewidth=0.8)
@@ -169,7 +169,7 @@ def _make_subplot_figure(
                 loc="upper right",
             )
 
-    fig.suptitle(f"Model Impact Score vs. {ylabel}", fontsize=13, y=1.02)
+    fig.suptitle(f"Rebound-Adjusted Exposure Score vs. {ylabel}", fontsize=13, y=1.02)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
@@ -270,21 +270,21 @@ def _plot_cps_model_vs_actual(
     merged_validation_df: pd.DataFrame,
     exposure_group_df: pd.DataFrame,
 ) -> None:
-    """Scatter of employment-weighted model impact vs. CPS Apr 2025→Apr 2026 growth, major group level."""
+    """Scatter of employment-weighted exposure score vs. CPS Apr 2025→Apr 2026 growth, major group level."""
     emp_col = next((c for c in ["TOT_EMP_25", "TOT_EMP_24", "TOT_EMP_23"] if c in merged_validation_df.columns), None)
     if emp_col is None:
         print("  Skipping CPS model comparison — no employment column found.")
         return
 
-    valid_df = merged_validation_df.dropna(subset=["occupation_impact", emp_col]).copy()
+    valid_df = merged_validation_df.dropna(subset=["occupation_exposure", emp_col]).copy()
     valid_df["soc_major"] = valid_df["OCC_CODE"].str[:2]
 
-    group_impact_df = (
+    group_exposure_df = (
         valid_df.groupby("soc_major")
         .apply(
             lambda g: pd.Series(
                 {
-                    "group_impact": (g["occupation_impact"] * g[emp_col]).sum() / g[emp_col].sum(),
+                    "group_exposure": (g["occupation_exposure"] * g[emp_col]).sum() / g[emp_col].sum(),
                     "n_occupations": len(g),
                 }
             ),
@@ -296,12 +296,12 @@ def _plot_cps_model_vs_actual(
     group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
     group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
 
-    comparison_df = group_impact_df.merge(cps_mapped_df[["soc_major", "emp_growth_apr25_apr26"]], on="soc_major").merge(
+    comparison_df = group_exposure_df.merge(cps_mapped_df[["soc_major", "emp_growth_apr25_apr26"]], on="soc_major").merge(
         group_demand_df, on="soc_major", how="left"
     )
     comparison_df["group_label"] = comparison_df["soc_major"].map(SOC_MAJOR_GROUPS)
 
-    cps_r, cps_p = stats.pearsonr(comparison_df["group_impact"], comparison_df["emp_growth_apr25_apr26"])
+    cps_r, cps_p = stats.pearsonr(comparison_df["group_exposure"], comparison_df["emp_growth_apr25_apr26"])
 
     print(f"\n── CPS Model vs. Actual (Major Group Level, n={len(comparison_df)}) ──")
     print(f"Pearson r = {cps_r:.3f}, p = {cps_p:.4f}")
@@ -309,7 +309,7 @@ def _plot_cps_model_vs_actual(
     dot_colors = [DEMAND_PALETTE.get(d, "grey") for d in comparison_df["group_dominant_demand"]]
     fig, ax_cps_scatter = plt.subplots(figsize=(11, 8))
     ax_cps_scatter.scatter(
-        comparison_df["group_impact"],
+        comparison_df["group_exposure"],
         comparison_df["emp_growth_apr25_apr26"],
         c=dot_colors,
         s=90,
@@ -321,7 +321,7 @@ def _plot_cps_model_vs_actual(
         label_text = scatter_row["group_label"][:28] if pd.notna(scatter_row["group_label"]) else scatter_row["soc_major"]
         ax_cps_scatter.annotate(
             label_text,
-            (scatter_row["group_impact"], scatter_row["emp_growth_apr25_apr26"]),
+            (scatter_row["group_exposure"], scatter_row["emp_growth_apr25_apr26"]),
             xytext=(5, 3),
             textcoords="offset points",
             fontsize=7.5,
@@ -329,14 +329,14 @@ def _plot_cps_model_vs_actual(
         )
     sns.regplot(
         data=comparison_df,
-        x="group_impact",
+        x="group_exposure",
         y="emp_growth_apr25_apr26",
         scatter=False,
         ax=ax_cps_scatter,
         line_kws={"color": "steelblue", "linewidth": 1.5},
     )
     ax_cps_scatter.axhline(0, color="grey", linestyle="--", linewidth=0.8)
-    ax_cps_scatter.set_xlabel("Employment-Weighted Mean Model Impact Score", fontsize=10)
+    ax_cps_scatter.set_xlabel("Employment-Weighted Mean Rebound-Adjusted Exposure Score", fontsize=10)
     ax_cps_scatter.set_ylabel("Employment Growth Apr 2025 → Apr 2026 (CPS)", fontsize=10)
     ax_cps_scatter.set_title(
         f"Model Impact vs. CPS Employment Growth — Major Group Level\n"
@@ -355,15 +355,15 @@ def _plot_cps_model_vs_actual(
 
 def main():
     bls_trends_df = pd.read_csv("data/output/bls_trends.csv")
-    occupation_impact_df = pd.read_csv("data/output/occupation_impact_report.csv")
+    occupation_exposure_df = pd.read_csv("data/output/occupation_exposure_report.csv")
 
-    occupation_impact_df["OCC_CODE"] = occupation_impact_df["O*NET-SOC Code"].astype(str).str.split(".").str[0]
+    occupation_exposure_df["OCC_CODE"] = occupation_exposure_df["O*NET-SOC Code"].astype(str).str.split(".").str[0]
 
-    aggregated_impact_df = (
-        occupation_impact_df.groupby("OCC_CODE")
+    aggregated_exposure_df = (
+        occupation_exposure_df.groupby("OCC_CODE")
         .agg(
             {
-                "occupation_impact": "mean",
+                "occupation_exposure": "mean",
                 "Title": "first",
                 "mean_penetration": "mean",
                 "eloundou_exposure_mid": "mean",
@@ -374,7 +374,7 @@ def main():
         .reset_index()
     )
 
-    merged_validation_df = pd.merge(aggregated_impact_df, bls_trends_df, on="OCC_CODE", how="inner")
+    merged_validation_df = pd.merge(aggregated_exposure_df, bls_trends_df, on="OCC_CODE", how="inner")
 
     # Detect all growth periods from columns in bls_trends
     emp_growth_cols = [c for c in merged_validation_df.columns if c.startswith("emp_growth_")]
@@ -516,12 +516,12 @@ def main():
             if raw_col not in merged_validation_df.columns or ss_col not in merged_validation_df.columns:
                 continue
             is_composite = period == "composite"
-            raw_clean = _clean(merged_validation_df, raw_col, is_composite).dropna(subset=["occupation_impact"])
-            ss_clean = merged_validation_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[ss_col, "occupation_impact"])
+            raw_clean = _clean(merged_validation_df, raw_col, is_composite).dropna(subset=["occupation_exposure"])
+            ss_clean = merged_validation_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[ss_col, "occupation_exposure"])
             if len(raw_clean) < 10 or len(ss_clean) < 10:
                 continue
-            r_raw, _ = stats.pearsonr(raw_clean["occupation_impact"], raw_clean[raw_col])
-            r_ss, _ = stats.pearsonr(ss_clean["occupation_impact"], ss_clean[ss_col])
+            r_raw, _ = stats.pearsonr(raw_clean["occupation_exposure"], raw_clean[raw_col])
+            r_ss, _ = stats.pearsonr(ss_clean["occupation_exposure"], ss_clean[ss_col])
             print(f"{_label(period):<28} {label:<8} {r_raw:>7.3f} {r_ss:>7.3f} {r_ss - r_raw:>+7.3f}")
 
     # ── AI exposure volume ────────────────────────────────────────────────────
@@ -646,7 +646,7 @@ def main():
         exposure_volume_df.groupby("dominant_demand")
         .agg(
             total_workers=(latest_emp_col, "sum"),
-            mean_impact=("occupation_impact", "mean"),
+            mean_exposure=("occupation_exposure", "mean"),
             n_occupations=("OCC_CODE", "count"),
         )
         .reindex(["Bounded", "Unbounded", "Adversarial"])
@@ -677,7 +677,7 @@ def main():
         pad=12,
     )
     for bar, (_, row) in zip(emp_bars, demand_emp_df.iterrows()):
-        label = f"{row['workers_millions']:.1f}M\n({row['pct_of_modeled']:.0%} of modeled)\nPredicted demand Δ: {row['mean_impact']:.1%}"
+        label = f"{row['workers_millions']:.1f}M\n({row['pct_of_modeled']:.0%} of modeled)\nPredicted demand Δ: {row['mean_exposure']:.1%}"
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.8, label, ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/employment_by_demand_type.png", dpi=300, bbox_inches="tight")
@@ -687,8 +687,10 @@ def main():
     emp_display_df = demand_emp_df.copy()
     emp_display_df["workers_millions"] = emp_display_df["workers_millions"].map("{:.1f}M".format)
     emp_display_df["pct_of_modeled"] = emp_display_df["pct_of_modeled"].map("{:.0%}".format)
-    emp_display_df["mean_impact"] = emp_display_df["mean_impact"].map("{:.1%}".format)
-    print(emp_display_df[["dominant_demand", "workers_millions", "pct_of_modeled", "mean_impact", "n_occupations"]].to_string(index=False))
+    emp_display_df["mean_exposure"] = emp_display_df["mean_exposure"].map("{:.1%}".format)
+    print(
+        emp_display_df[["dominant_demand", "workers_millions", "pct_of_modeled", "mean_exposure", "n_occupations"]].to_string(index=False)
+    )
 
     # ── Wage quartile × demand type ──────────────────────────────────────────
     latest_wage_col = f"A_MEDIAN_{latest_emp_col.replace('TOT_EMP_', '')}"
@@ -715,7 +717,7 @@ def main():
     # Employment-weighted mean impact per quartile
     quartile_impact_series = (
         wage_quartile_df.groupby("quartile")
-        .apply(lambda g: (g["occupation_impact"] * g[latest_emp_col]).sum() / g[latest_emp_col].sum())
+        .apply(lambda g: (g["occupation_exposure"] * g[latest_emp_col]).sum() / g[latest_emp_col].sum())
         .rename("weighted_impact")
         .reindex(quartile_labels)
     )
@@ -752,7 +754,7 @@ def main():
     ax_impact.axhline(0, color="black", linewidth=0.8)
     ax_impact.set_ylabel("Employment-Weighted Mean Impact Score", fontsize=10)
     ax_impact.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
-    ax_impact.set_title(f"Mean Model Impact Score by Wage Quartile ({latest_year})\n(employment-weighted)", fontsize=11)
+    ax_impact.set_title(f"Mean Rebound-Adjusted Exposure Score by Wage Quartile ({latest_year})\n(employment-weighted)", fontsize=11)
     for bar, val in zip(impact_bars, quartile_impact_series.values):
         offset = 0.001 if val >= 0 else -0.001
         ax_impact.text(
@@ -772,33 +774,33 @@ def main():
     anthropic_job_path = "data/raw/anthropic_job_exposure.csv"
     if os.path.exists(anthropic_job_path):
         anthropic_exp_df = pd.read_csv(anthropic_job_path)
-        anthropic_merged_df = aggregated_impact_df.merge(
+        anthropic_merged_df = aggregated_exposure_df.merge(
             anthropic_exp_df[["occ_code", "observed_exposure"]],
             left_on="OCC_CODE",
             right_on="occ_code",
             how="inner",
-        ).dropna(subset=["occupation_impact", "observed_exposure", "dominant_demand"])
+        ).dropna(subset=["occupation_exposure", "observed_exposure", "dominant_demand"])
 
-        pearson_r, pearson_p = stats.pearsonr(anthropic_merged_df["observed_exposure"], anthropic_merged_df["occupation_impact"])
+        pearson_r, pearson_p = stats.pearsonr(anthropic_merged_df["observed_exposure"], anthropic_merged_df["occupation_exposure"])
 
         plt.figure(figsize=(12, 10))
         sns.scatterplot(
             data=anthropic_merged_df,
             x="observed_exposure",
-            y="occupation_impact",
+            y="occupation_exposure",
             hue="dominant_demand",
             palette=DEMAND_PALETTE,
             alpha=0.55,
             s=20,
         )
         # High-coverage occupations with high displacement impact (Bounded-dominated)
-        high_impact_outliers = anthropic_merged_df.nlargest(5, "occupation_impact")
+        high_impact_outliers = anthropic_merged_df.nlargest(5, "occupation_exposure")
         # High-coverage occupations where rebound keeps model impact low (Adversarial/Unbounded)
-        low_impact_outliers = anthropic_merged_df[anthropic_merged_df["observed_exposure"] > 0.3].nsmallest(3, "occupation_impact")
+        low_impact_outliers = anthropic_merged_df[anthropic_merged_df["observed_exposure"] > 0.3].nsmallest(3, "occupation_exposure")
         for _, row in pd.concat([high_impact_outliers, low_impact_outliers]).drop_duplicates("OCC_CODE").iterrows():
             plt.annotate(
                 row["Title"],
-                (row["observed_exposure"], row["occupation_impact"]),
+                (row["observed_exposure"], row["occupation_exposure"]),
                 xytext=(10, 5),
                 textcoords="offset points",
                 fontsize=7.5,
@@ -807,7 +809,7 @@ def main():
             )
 
         plt.title(
-            f"Observed AI Task Coverage vs. Model Impact Score\n"
+            f"Observed AI Task Coverage vs. Rebound-Adjusted Exposure Score\n"
             f"Pearson r = {pearson_r:.3f} (p = {pearson_p:.3f}, n = {len(anthropic_merged_df)})",
             fontsize=13,
         )
@@ -817,7 +819,7 @@ def main():
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.legend(title="Dominant Demand Type")
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/observed_ai_usage_vs_model_impact.png", dpi=300)
+        plt.savefig(f"{output_dir}/observed_vs_rebound_adjusted_exposure.png", dpi=300)
         plt.close()
 
         print(f"\n── Anthropic Exposure vs. Our Impact (n={len(anthropic_merged_df)}) ──")
@@ -834,7 +836,7 @@ def main():
 
         sector_agg_df = pd.DataFrame(
             {
-                "sector_impact": _sector_weighted_mean("occupation_impact"),
+                "sector_exposure": _sector_weighted_mean("occupation_exposure"),
                 "emp_growth": _sector_weighted_mean("emp_growth_composite"),
                 "wage_growth": _sector_weighted_mean("wage_growth_composite"),
             }
@@ -851,11 +853,11 @@ def main():
             .drop_duplicates("soc_group")[["soc_group", "dominant_demand"]]
         )
         sector_agg_df = sector_agg_df.merge(sector_dominant_df, on="soc_group").dropna(
-            subset=["sector_impact", "emp_growth", "wage_growth"]
+            subset=["sector_exposure", "emp_growth", "wage_growth"]
         )
 
-        sector_r_emp, sector_p_emp = stats.pearsonr(sector_agg_df["sector_impact"], sector_agg_df["emp_growth"])
-        sector_r_wage, sector_p_wage = stats.pearsonr(sector_agg_df["sector_impact"], sector_agg_df["wage_growth"])
+        sector_r_emp, sector_p_emp = stats.pearsonr(sector_agg_df["sector_exposure"], sector_agg_df["emp_growth"])
+        sector_r_wage, sector_p_wage = stats.pearsonr(sector_agg_df["sector_exposure"], sector_agg_df["wage_growth"])
 
         fig, (ax_emp_s, ax_wage_s) = plt.subplots(1, 2, figsize=(16, 8))
         bubble_size_scale = 1500 / sector_agg_df["total_emp"].max()
@@ -866,7 +868,7 @@ def main():
         ]:
             bubble_colors_s = [DEMAND_PALETTE.get(d, "grey") for d in sector_agg_df["dominant_demand"]]
             ax_s.scatter(
-                sector_agg_df["sector_impact"],
+                sector_agg_df["sector_exposure"],
                 sector_agg_df[growth_col_s],
                 s=(sector_agg_df["total_emp"] * bubble_size_scale).clip(30),
                 c=bubble_colors_s,
@@ -877,7 +879,7 @@ def main():
             for _, row_s in sector_agg_df.iterrows():
                 ax_s.annotate(
                     row_s["soc_group"],
-                    (row_s["sector_impact"], row_s[growth_col_s]),
+                    (row_s["sector_exposure"], row_s[growth_col_s]),
                     xytext=(5, 3),
                     textcoords="offset points",
                     fontsize=6.5,
@@ -907,7 +909,7 @@ def main():
         print(f"Wage:       r = {sector_r_wage:.3f}, p = {sector_p_wage:.3f}  (jackknife-robust)")
 
     # ── Employment trajectories for top-risk occupations ─────────────────────
-    top_risk_df = aggregated_impact_df.nlargest(10, "occupation_impact")[["OCC_CODE", "Title", "occupation_impact"]]
+    top_risk_df = aggregated_exposure_df.nlargest(10, "occupation_exposure")[["OCC_CODE", "Title", "occupation_exposure"]]
     trajectory_emp_cols = [c for c in ["TOT_EMP_22", "TOT_EMP_23", "TOT_EMP_24", "TOT_EMP_25"] if c in bls_trends_df.columns]
     trajectory_years = [int("20" + c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
     trajectory_df = top_risk_df.merge(bls_trends_df[["OCC_CODE"] + trajectory_emp_cols], on="OCC_CODE", how="inner")
@@ -924,7 +926,7 @@ def main():
         color = color_cycle[i % len(color_cycle)]
         ax_traj.plot(trajectory_years, indexed, color=color, linewidth=1.8, marker="o", markersize=4)
         actual_change = (emp_values[-1] - base_emp) / base_emp
-        endpoint_label = f"{occ_row['Title'][:32]}\nmodel: {occ_row['occupation_impact']:.0%} / actual: {actual_change:.0%}"
+        endpoint_label = f"{occ_row['Title'][:32]}\nmodel: {occ_row['occupation_exposure']:.0%} / actual: {actual_change:.0%}"
         ax_traj.annotate(
             endpoint_label,
             (trajectory_years[-1], indexed[-1]),
@@ -945,12 +947,12 @@ def main():
     )
     ax_traj.set_xticks(trajectory_years)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/top_risk_trajectories.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{output_dir}/top_exposure_trajectories.png", dpi=300, bbox_inches="tight")
     plt.close()
 
     # ── High-risk concentration bubble chart ─────────────────────────────────
     occ_pct_bounded_df = (
-        occupation_impact_df.assign(OCC_CODE=occupation_impact_df["O*NET-SOC Code"].astype(str).str.split(".").str[0])
+        occupation_exposure_df.assign(OCC_CODE=occupation_exposure_df["O*NET-SOC Code"].astype(str).str.split(".").str[0])
         .groupby("OCC_CODE")
         .agg(pct_bounded=("pct_bounded", "mean"), dominant_demand=("dominant_demand", "first"), Title=("Title", "first"))
         .reset_index()
@@ -985,10 +987,10 @@ def main():
             fontsize=7,
             alpha=0.9,
         )
-    ax_bubble.set_xlabel("Displacement Pressure (share of Bounded tasks × mean AI penetration)", fontsize=10)
+    ax_bubble.set_xlabel("Structural Exposure Pressure (share of Bounded tasks × mean AI penetration)", fontsize=10)
     ax_bubble.set_ylabel("Employment Share of Modeled Workforce", fontsize=10)
     ax_bubble.set_title(
-        f"High-Risk Occupation Concentration (displacement pressure > 5%)\n"
+        f"High-Risk Occupation Concentration (structural exposure pressure > 5%)\n"
         f"Bubble size ∝ AI exposure volume; n = {len(high_risk_bubble_df)} occupations",
         fontsize=12,
     )
@@ -997,7 +999,7 @@ def main():
     legend_handles_b = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
     ax_bubble.legend(handles=legend_handles_b, title="Dominant Demand Type", fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/high_risk_concentration.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{output_dir}/high_exposure_concentration.png", dpi=300, bbox_inches="tight")
     plt.close()
 
     # ── CPS 2026 directional indicator + model comparison ────────────────────

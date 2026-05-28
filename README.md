@@ -64,29 +64,31 @@ Stages:
 | Stage | Input | Output |
 |-------|-------|--------|
 | `analyze` | `data/raw/bls/*.zip` | `data/output/bls_trends.csv` |
-| `synthesize` | classified tasks + penetration data | `data/output/occupation_impact_report.csv` |
-| `plot` | occupation impact report | `data/output/visualizations/*.png` |
-| `validate` | impact report + BLS trends | correlation statistics + validation plots |
+| `synthesize` | classified tasks + penetration data | `data/output/occupation_exposure_report.csv` |
+| `plot` | occupation exposure report | `data/output/visualizations/*.png` |
+| `validate` | exposure report + BLS trends | correlation statistics + validation plots |
 
 ## Model
 
-The occupation-level impact score is a task-importance-weighted average of per-task net impacts:
+The occupation-level rebound-adjusted exposure score is a task-importance-weighted average of per-task exposures:
 
 ```
-Adversarial task:  net_impact = +penetration × ADVERSARIAL_REBOUND  (default 1.0)
-Unbounded task:    net_impact = +penetration × UNBOUNDED_REBOUND    (default 0.5)
-Bounded task:      net_impact = −penetration × BOUNDED_DECLINE      (default 1.0)
+task_exposure = penetration × (1 − rebound_fraction) × task_importance
+
+Bounded:     rebound = 0.1  →  90% of penetration is structural exposure
+Unbounded:   rebound = 0.7  →  30% structural; demand expansion absorbs the rest
+Adversarial: rebound = 0.9  →  10% structural; arms-race escalation absorbs the rest
 ```
 
-Scores range from −1 (full displacement) to +1 (full demand expansion). The rebound/decline multipliers in `synthesize_impacts.py` are intentionally exposed as tunable parameters.
+Scores are non-negative; higher values indicate greater structural exposure pressure. The rebound fractions in `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
 
 ## Outputs
 
-- **`occupation_impact_report.csv`** — Per-occupation impact score, demand type breakdown, penetration metrics, and narrative label
-- **`visualizations/most_impacted_jobs.png`** — Top 15 highest/lowest impact occupations
-- **`visualizations/exposure_vs_impact.png`** — Our model vs. naive Eloundou exposure-only prediction
-- **`visualizations/bls_emp_growth_vs_impact.png`** — Predicted impact vs. actual BLS employment growth
-- **`visualizations/bls_wage_growth_vs_impact.png`** — Predicted impact vs. actual BLS wage growth
+- **`occupation_exposure_report.csv`** — Per-occupation rebound-adjusted exposure score, dominant demand type, penetration metrics, and exposure tier
+- **`visualizations/highest_exposure_occupations.png`** — Top 30 occupations by structural AI exposure
+- **`visualizations/theoretical_vs_rebound_adjusted_exposure.png`** — This model vs. Eloundou et al. theoretical exposure
+- **`visualizations/model_vs_actual_employment_growth.png`** — Model exposure score vs. actual BLS employment growth
+- **`visualizations/model_vs_actual_wage_growth.png`** — Model exposure score vs. actual BLS wage growth
 
 ## Development
 

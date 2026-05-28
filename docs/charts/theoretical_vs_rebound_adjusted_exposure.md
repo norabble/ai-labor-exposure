@@ -1,8 +1,8 @@
-# Prior Exposure vs. Model Impact Score
+# Prior Exposure vs. Rebound-Adjusted Exposure Score
 
-**File:** `prior_exposure_vs_model_impact.png`
+**File:** `theoretical_vs_rebound_adjusted_exposure.png`
 
-![Eloundou et al. Exposure vs. Model Impact Score](images/prior_exposure_vs_model_impact.png)
+![Eloundou et al. Exposure vs. Rebound-Adjusted Exposure Score](images/theoretical_vs_rebound_adjusted_exposure.png)
 
 ## What this chart shows
 

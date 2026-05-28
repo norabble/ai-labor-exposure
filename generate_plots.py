@@ -1,19 +1,19 @@
 """
 generate_plots.py
 ─────────────────
-Generates visualizations from the occupation impact report.
+Generates visualizations from the occupation exposure report.
 
 Inputs:
-  • data/output/occupation_impact_report.csv
+  • data/output/occupation_exposure_report.csv
   • data/output/classified_all_tasks.csv          (for usage_by_demand_type chart)
   • data/raw/anthropic_task_conversation_pct.csv  (for usage_by_demand_type chart)
 
 Outputs (saved to data/output/visualizations/):
-  • most_impacted_jobs.png               — Top 15 highest/lowest impact occupations
-  • prior_exposure_vs_model_impact.png   — Eloundou et al. exposure vs. model impact score
-  • model_vs_naive_divergence.png        — Occupations where model diverges most from naive baseline
-  • usage_by_demand_type.png             — Claude conversation share vs. task share by demand type
-  • task_importance_vs_penetration.png   — Task importance vs. AI penetration by demand type
+  • highest_exposure_occupations.png          — Top 30 occupations by structural AI exposure
+  • theoretical_vs_rebound_adjusted_exposure.png — Eloundou et al. theoretical exposure vs. rebound-adjusted score
+  • model_vs_naive_divergence.png             — Occupations where model diverges most from naive baseline
+  • usage_by_demand_type.png                  — Claude conversation share vs. task share by demand type
+  • task_importance_vs_penetration.png        — Task importance vs. AI penetration by demand type
 """
 
 import os
@@ -32,19 +32,19 @@ def main():
     output_dir = "data/output/visualizations"
     os.makedirs(output_dir, exist_ok=True)
 
-    impact_report_df = pd.read_csv("data/output/occupation_impact_report.csv")
-    clean_impact_report_df = impact_report_df.dropna(subset=["eloundou_exposure_mid", "occupation_impact"]).copy()
+    occupation_exposure_df = pd.read_csv("data/output/occupation_exposure_report.csv")
+    clean_exposure_df = occupation_exposure_df.dropna(subset=["eloundou_exposure_mid", "occupation_exposure"]).copy()
 
     sns.set_theme(style="whitegrid")
 
-    # 1. Most Impacted Occupations (Top 30 by displacement impact)
+    # 1. Highest Structural Exposure Occupations (Top 30)
     plt.figure(figsize=(14, 12))
 
-    most_impacted = impact_report_df.nlargest(30, "occupation_impact").sort_values("occupation_impact")
-    colors = [DEMAND_PALETTE.get(d, "#888888") for d in most_impacted["dominant_demand"]]
-    bars = plt.barh(most_impacted["Title"], most_impacted["occupation_impact"], color=colors)
-    plt.title("Most Impacted Occupations (Top 30 by Displacement Impact)", fontsize=16, pad=20)
-    plt.xlabel("Net Displacement Impact Score", fontsize=12)
+    most_exposed = occupation_exposure_df.nlargest(30, "occupation_exposure").sort_values("occupation_exposure")
+    colors = [DEMAND_PALETTE.get(d, "#888888") for d in most_exposed["dominant_demand"]]
+    bars = plt.barh(most_exposed["Title"], most_exposed["occupation_exposure"], color=colors)
+    plt.title("Highest Structural AI Exposure (Top 30 Occupations)", fontsize=16, pad=20)
+    plt.xlabel("Rebound-Adjusted Exposure Score", fontsize=12)
     plt.ylabel("", fontsize=12)
 
     for bar in bars:
@@ -55,36 +55,33 @@ def main():
     legend_handles = [Patch(color=DEMAND_PALETTE[dt], label=dt) for dt in ["Bounded", "Unbounded", "Adversarial"]]
     plt.legend(handles=legend_handles, title="Dominant Demand Type", loc="lower right")
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/most_impacted_jobs.png", dpi=300)
+    plt.savefig(f"{output_dir}/highest_exposure_occupations.png", dpi=300)
     plt.close()
 
-    # 2. Eloundou Exposure vs. Full Model Impact
+    # 2. Theoretical Exposure vs. Rebound-Adjusted Exposure
     plt.figure(figsize=(12, 10))
     sns.scatterplot(
-        data=clean_impact_report_df,
+        data=clean_exposure_df,
         x="eloundou_exposure_mid",
-        y="occupation_impact",
+        y="occupation_exposure",
         hue="dominant_demand",
         palette=DEMAND_PALETTE,
         alpha=0.5,
         s=15,
     )
 
-    plt.title("Eloundou et al. Exposure vs. Model Impact Score", fontsize=16, pad=20)
-    plt.xlabel("Eloundou et al. Exposure Estimate (mid)", fontsize=12)
-    plt.ylabel("Model Occupation Impact Score", fontsize=12)
+    plt.title("Theoretical Exposure vs. Rebound-Adjusted Exposure", fontsize=16, pad=20)
+    plt.xlabel("Theoretical Exposure (Eloundou et al. estimate)", fontsize=12)
+    plt.ylabel("Rebound-Adjusted Exposure Score", fontsize=12)
     plt.legend(title="Dominant Demand Type")
 
-    # Occupations where Eloundou predicts high exposure but our model finds low impact (rebound absorbed)
-    clean_impact_report_df["difference_from_naive"] = (
-        clean_impact_report_df["eloundou_exposure_mid"] - clean_impact_report_df["occupation_impact"]
-    )
-    outliers = clean_impact_report_df.nlargest(5, "difference_from_naive")
+    clean_exposure_df["difference_from_naive"] = clean_exposure_df["eloundou_exposure_mid"] - clean_exposure_df["occupation_exposure"]
+    outliers = clean_exposure_df.nlargest(5, "difference_from_naive")
 
     for _, row in outliers.iterrows():
         plt.annotate(
             row["Title"],
-            (row["eloundou_exposure_mid"], row["occupation_impact"]),
+            (row["eloundou_exposure_mid"], row["occupation_exposure"]),
             xytext=(12, 6),
             textcoords="offset points",
             fontsize=8,
@@ -95,7 +92,7 @@ def main():
     plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/prior_exposure_vs_model_impact.png", dpi=300)
+    plt.savefig(f"{output_dir}/theoretical_vs_rebound_adjusted_exposure.png", dpi=300)
     plt.close()
 
     # 3. Occupations most different from naive exposure prediction
@@ -104,14 +101,14 @@ def main():
 
     plt.barh(outliers_sorted["Title"], outliers_sorted["difference_from_naive"], color="#4575b4")
     plt.title("Where the Model Diverges Most from the Naive Exposure Baseline", fontsize=16, pad=20)
-    plt.xlabel("Divergence from Naive Baseline (Exposure Estimate − Model Impact)", fontsize=12)
+    plt.xlabel("Divergence from Naive Baseline (Theoretical Exposure − Rebound-Adjusted Exposure)", fontsize=12)
     plt.ylabel("")
 
     for i, row in outliers_sorted.iterrows():
         plt.text(
             row["difference_from_naive"] * 0.95,
             list(outliers_sorted["Title"]).index(row["Title"]),
-            f"Impact: {row['occupation_impact']:.1%} | Exposure: {row['eloundou_exposure_mid']:.0%}",
+            f"Rebound-adjusted: {row['occupation_exposure']:.1%} | Theoretical: {row['eloundou_exposure_mid']:.0%}",
             va="center",
             ha="right",
             color="white",

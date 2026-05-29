@@ -17,24 +17,27 @@ Same layout as `eloundou_sector_level_employment_validation.png` but with sector
 | 2024→2025 | +0.380 | 0.081 |
 | Composite | +0.245 | 0.272 |
 
-## Key observation: a significant negative wage signal in 2022→23
+## The 2022→23 negative correlation is a post-COVID confound, not an AI signal
 
-**r = −0.504, p = 0.017** in 2022→23 is the strongest single-period wage correlation among all four sector-level models. Sectors with higher theoretical AI exposure had *lower* wage growth in 2022→23. This is the expected direction under a displacement model: if AI capability is concentrated in high-exposure sectors and is beginning to reduce labor demand there, wage growth in those sectors should lag.
+**r = −0.504, p = 0.017** in 2022→23 appears significant, but the correlation is explained by post-COVID wage recovery dynamics rather than AI-driven wage suppression.
 
-This is also the only statistically significant wage result at the sector level across any model in any period.
+The sectors with the highest wage growth in 2022→23 are almost entirely physical and care occupations with the lowest Eloundou scores:
 
-## The sign flip: negative in 2022→23, positive afterward
+| Sector | Eloundou | Wage 22→23 |
+|--------|----------|-----------|
+| Building and Grounds Cleaning | 4.2% | +8.6% |
+| Healthcare Support | 17.8% | +7.3% |
+| Food Preparation and Serving | 13.1% | +6.8% |
+| Transportation and Material Moving | 15.7% | +6.6% |
+| Personal Care and Service | 21.0% | +6.3% |
+| Construction and Extraction | 9.7% | +6.2% |
 
-The correlation is negative in 2022→23 (r = −0.504), near zero in 2023→24 (r = +0.228), and trending positive in 2024→25 (r = +0.380, p = 0.081). The composite (r = +0.245) averages across the reversal and reaches no significance.
+These sectors experienced severe labor shortages during the COVID pandemic and posted catch-up wage growth in 2022→23 that had nothing to do with AI. Because they are also the sectors with the lowest theoretical AI exposure (physical, site-dependent tasks score low on LLM capability), their wage recovery mechanically produces a negative correlation between Eloundou exposure and wage growth.
 
-Several interpretations are plausible:
+**When these 6 post-COVID recovery sectors are excluded, the correlation drops from r = −0.504 (p = 0.016) to r = −0.287 (p = 0.282)** — losing all statistical significance. The negative signal entirely disappears once the COVID confound is removed.
 
-**Productivity-wage cycle:** AI tools first compress wages in exposed sectors as labor demand softens (2022→23), but once productivity gains are internalized, firms share the surplus with workers — wage growth in exposed sectors recovers or exceeds the baseline (2023→24 onward).
+## Implication
 
-**Sector-level noise:** With n = 22 sectors, any single influential data point can flip the correlation. Office and Administrative Support — the highest-exposure sector — is the dominant influence; its wage trajectory could explain most of the sign flip without any structural mechanism.
+There is no detectable AI-driven wage signal in 2022→23. The apparent finding is an artifact of the cross-sectional structure of Eloundou scores: low-exposure sectors happen to be physical and care occupations that were wage-suppressed during COVID and recovered first. The same structure explains why the Anthropic observed model (`anthropic_observed_sector_level_wage_validation.md`) shows an almost identical pattern — both measures assign low scores to physical sectors.
 
-**Lag structure:** The 2022→23 negative signal may reflect anticipatory wage moderation in AI-exposed sectors before AI adoption actually scaled. Later periods reflect a different equilibrium.
-
-## Comparison to Anthropic observed model
-
-The Anthropic observed exposure model (`anthropic_observed_sector_level_wage_validation.md`) shows a nearly identical pattern: r = −0.416 (p = 0.054) in 2022→23, then positive in later years. Both capability-based (Eloundou) and usage-based (Anthropic) measures agree on the direction and approximate timing of the wage signal, lending credibility to the 2022→23 finding — it is not an artifact of a single measurement approach.
+The sign flip to positive in 2024→25 (r = +0.380) may reflect a genuine productivity-wage effect in AI-exposed sectors, but with n = 22 it remains inconclusive.

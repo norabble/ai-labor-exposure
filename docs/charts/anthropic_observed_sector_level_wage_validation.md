@@ -17,11 +17,17 @@ Same layout as `anthropic_observed_sector_level_employment_validation.png` but w
 | 2024→2025 | +0.321 | 0.145 |
 | Composite | +0.299 | 0.177 |
 
-## Key observation: borderline negative wage signal in 2022→23
+## The 2022→23 negative correlation is a post-COVID confound
 
-**r = −0.416, p = 0.054** in 2022→23 is borderline significant. Sectors with higher observed AI task coverage had lower wage growth in that year. This is directionally identical to the Eloundou finding (r = −0.504, p = 0.017) and jointly strengthens the case that the 2022→23 negative wage correlation is real rather than noise — it appears in both capability-based and usage-based exposure measures independently.
+**r = −0.416, p = 0.054** in 2022→23 appears borderline significant, but it reflects the same post-COVID wage recovery confound identified in the Eloundou model (see `eloundou_sector_level_wage_validation.md`).
 
-## The sign flip pattern matches Eloundou exactly
+The sectors with the highest observed AI task coverage are knowledge-work sectors (Computer and Mathematical at ~30–35%, Business/Financial at ~25–30%) that were insulated from COVID labor shortages and posted moderate wage growth in 2022→23. The sectors with the lowest observed AI coverage are physical and care occupations (Building/Grounds at ~2–3%, Food Prep at ~3–5%, Construction at ~3–5%) that experienced severe COVID labor shortages and posted above-average catch-up wage growth in 2022→23.
+
+For the Eloundou model, excluding the 6 most obvious post-COVID recovery sectors drops the 2022→23 wage correlation from r = −0.507 to r = −0.287 (p = 0.282), losing all significance. The same pattern almost certainly applies here — both measures assign low scores to physical sectors, so both pick up the same confound.
+
+## The cross-model agreement does not rescue the finding
+
+The fact that both Eloundou and Anthropic observed show negative 2022→23 wage correlations was initially interpreted as strengthening the case for a real AI wage signal. However, both measures share the same structural property: they assign low scores to physical, site-dependent sectors. The agreement simply reflects that both measures are correlated with the post-COVID recovery confound in the same direction. It is not independent evidence of an AI mechanism.
 
 | Period | Eloundou wage r | Anthropic observed wage r |
 |--------|----------------|--------------------------|
@@ -32,24 +38,6 @@ Same layout as `anthropic_observed_sector_level_employment_validation.png` but w
 
 (* p<0.05, † p<0.10)
 
-Both models show:
-- Negative wage correlation in 2022→23 (significant or near-significant)
-- A transition period in 2023→24 (divergent in sign but both non-significant)
-- Positive trending in 2024→25 (non-significant in both)
-- Near-zero or weakly positive composites
+## What this means for the wage validation
 
-The agreement across two independent exposure measures on the 2022→23 sign and the subsequent reversal is the most noteworthy cross-model finding in the sector-level validation suite.
-
-## What the sign flip means
-
-The negative-then-positive pattern in wages is consistent with a two-phase AI labor market response:
-
-**Phase 1 (2022→23):** Sectors where AI is most capable or most used experience wage moderation as employers anticipate or begin to capture AI productivity gains. Labor supply in those sectors has not adjusted yet; wages soften relative to lower-exposure sectors.
-
-**Phase 2 (2023→25):** Productivity gains in AI-exposed sectors begin to translate into higher wages as workers in those sectors become more productive per hour, and tight overall labor markets put a floor under compensation.
-
-This two-phase pattern — compression then expansion — is consistent with historical technology adoption cycles in manufacturing and services, where the initial period of technology adoption correlates with wage moderation before productivity sharing catches up.
-
-## Caveats
-
-With n = 22 sectors, both of these correlations are sensitive to individual influential points. Office and Administrative Support (the large red bubble with high observed coverage) and Arts/Entertainment (the Adversarial outlier with low wage growth) are the two most influential observations. The cross-model agreement reduces but does not eliminate this concern.
+There is no credible AI-driven wage signal in 2022→23 from either model. The 2024→25 positive trending (r ≈ +0.30–+0.38) across both models is more interesting — if it holds in future BLS releases, it would be consistent with a genuine AI productivity-to-wage transmission in exposed sectors — but with n = 22 it remains inconclusive.

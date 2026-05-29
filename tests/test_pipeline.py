@@ -1,6 +1,7 @@
 import pandas as pd
 import pytest
 
+from synthesize_dynamic import compute_dynamic_equilibrium
 from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
     BOUNDED_REBOUND,
@@ -131,3 +132,60 @@ class TestRollupToOccupation:
         )
         result = rollup_to_occupation(df)
         assert result.iloc[0]["occupation_exposure"] == pytest.approx(0.99 / 3.0)
+
+    def test_contribution_identity(self):
+        """bounded + unbounded + adversarial contributions must equal occupation_exposure."""
+        df = self._occ_df(
+            [
+                ("11-1011.00", "Chief Executives", "Bounded", 0.5, 2.0, 0.9),
+                ("11-1011.00", "Chief Executives", "Unbounded", 0.3, 1.0, 0.09),
+                ("11-1011.00", "Chief Executives", "Adversarial", 0.4, 1.0, 0.04),
+            ]
+        )
+        result = rollup_to_occupation(df)
+        row = result.iloc[0]
+        contribution_sum = (
+            row["bounded_exposure_contribution"] + row["unbounded_exposure_contribution"] + row["adversarial_exposure_contribution"]
+        )
+        assert contribution_sum == pytest.approx(row["occupation_exposure"])
+
+
+class TestDynamicEquilibrium:
+    def _fixture_df(self):
+        """Three occupations: pure Bounded loser, mixed, pure Unbounded gainer."""
+        return pd.DataFrame(
+            {
+                "OCC_CODE": ["11-0000", "13-0000", "15-0000"],
+                "Title": ["Managers", "Business Ops", "Computer"],
+                "dominant_demand": ["Bounded", "Bounded", "Unbounded"],
+                "dominant_strength": [1.0, 0.5, 1.0],
+                "employment": [1000.0, 2000.0, 500.0],
+                "occupation_exposure": [0.3, 0.15, 0.05],
+                "pct_bounded": [1.0, 0.5, 0.0],
+                "pct_unbounded": [0.0, 0.5, 1.0],
+                "pct_adversarial": [0.0, 0.0, 0.0],
+                "bounded_exposure_contribution": [0.3, 0.1, 0.0],
+                "unbounded_exposure_contribution": [0.0, 0.05, 0.05],
+                "adversarial_exposure_contribution": [0.0, 0.0, 0.0],
+            }
+        )
+
+    def test_conservation_sums_to_zero(self):
+        result = compute_dynamic_equilibrium(self._fixture_df(), "employment")
+        assert result["net_employment_change_workers"].sum() == pytest.approx(0.0, abs=1e-6)
+
+    def test_pure_unbounded_gains_workers(self):
+        result = compute_dynamic_equilibrium(self._fixture_df(), "employment")
+        unbounded_row = result[result["OCC_CODE"] == "15-0000"].iloc[0]
+        assert unbounded_row["net_employment_change"] > 0
+
+    def test_pure_bounded_loses_workers(self):
+        result = compute_dynamic_equilibrium(self._fixture_df(), "employment")
+        bounded_row = result[result["OCC_CODE"] == "11-0000"].iloc[0]
+        assert bounded_row["net_employment_change"] < 0
+
+    def test_zero_unbounded_capacity_raises(self):
+        no_unbounded_df = self._fixture_df().copy()
+        no_unbounded_df["pct_unbounded"] = 0.0
+        with pytest.raises(ValueError, match="No Unbounded capacity"):
+            compute_dynamic_equilibrium(no_unbounded_df, "employment")

@@ -86,6 +86,7 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `exposure_volume_by_occupation.csv` | `validate_bls.py` | Per-occupation `employment_share × mean_penetration` (`exposure_volume`), sorted descending. Shows where AI exposure is landing in the workforce. |
 | `exposure_volume_by_group.csv` | `validate_bls.py` | Same metric rolled up to SOC major group. Includes `group_dominant_demand` and `pct_of_total_exposure`. |
 | `employment_by_demand_type.csv` | `validate_bls.py` | Total workers, % of modeled workforce, mean occupation impact, and occupation count for each dominant demand type. |
+| `occupation_dynamic_model_report.csv` | `validate_bls.py` | Dynamic labor equilibrium model output. Signed `net_employment_change` per occupation (negative = net loser, positive = net gainer); employment-weighted sum = 0 by construction. Includes `gross_displacement`, `absorption`, contribution columns, and `pct_unbounded` for transparency. |
 
 ### Visualizations — `data/output/visualizations/`
 
@@ -109,6 +110,14 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `sector_level_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite growth. Wage r=−0.485, p=0.022, jackknife-robust. See `docs/charts/sector_level_validation.md`. |
 | `top_exposure_trajectories.png` | `validate_bls.py` | Line chart of 2022–2025 BLS employment trajectories for top 10 highest-exposure occupations, indexed to 100 at 2022. Each line annotated with model exposure score vs. actual employment change. |
 | `high_exposure_concentration.png` | `validate_bls.py` | Bubble chart: structural exposure pressure vs. employment share for occupations above 5% threshold. Bubble size ∝ AI exposure volume. See `docs/charts/high_exposure_concentration.md`. |
+| `dynamic_model_net_change_distribution.png` | `validate_bls.py` / `synthesize_dynamic.py` | Histogram of signed `net_employment_change` across all matched occupations, layered by dominant demand type. Annotates zero line and economy-wide mean. See `docs/charts/dynamic_model_net_change_distribution.md`. |
+| `dynamic_model_winners_losers.png` | `validate_bls.py` / `synthesize_dynamic.py` | Diverging horizontal bar: top 20 occupations by net employment gain vs. top 20 by net employment loss, colored by dominant demand type. See `docs/charts/dynamic_model_winners_losers.md`. |
+| `dynamic_vs_rebound_model_comparison.png` | `validate_bls.py` / `synthesize_dynamic.py` | Scatter of `occupation_exposure` (x, existing model, ≥ 0) vs `net_employment_change` (y, dynamic model, signed). Shows how the two models reorder occupations. See `docs/charts/dynamic_vs_rebound_model_comparison.md`. |
+| `dynamic_model_vs_actual_employment_growth.png` | `validate_bls.py` | 2×2 grid: dynamic model `net_employment_change` vs. YoY employment growth for each period. See `docs/charts/dynamic_model_growth_validation.md`. |
+| `dynamic_model_vs_actual_wage_growth.png` | `validate_bls.py` | Same layout as above for median wage growth. See `docs/charts/dynamic_model_growth_validation.md`. |
+| `dynamic_model_sector_adjusted_employment_growth.png` | `validate_bls.py` | 2×2 grid: dynamic model `net_employment_change` vs. sector-adjusted employment growth residual per period. See `docs/charts/dynamic_model_growth_validation.md`. |
+| `dynamic_model_sector_adjusted_wage_growth.png` | `validate_bls.py` | Same layout as above for sector-adjusted wage growth residuals. See `docs/charts/dynamic_model_growth_validation.md`. |
+| `dynamic_sector_level_validation.png` | `validate_bls.py` / `synthesize_dynamic.py` | 2-panel bubble scatter: employment-weighted sector mean `net_employment_change` vs. composite growth. Employment r=+0.528, p=0.012 — the strongest sector-level signal in the pipeline. See `docs/charts/dynamic_sector_level_validation.md`. |
 | `cps_2026_direction.png` | `validate_bls.py` | Horizontal bar: Apr 2025→Apr 2026 employment growth by SOC major group, from BLS CPS Table A-19. Directional indicator only — not BLS OEWS. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_2026_direction.md`. |
 | `cps_model_vs_actual.png` | `validate_bls.py` | Scatter: employment-weighted model impact per SOC major group vs. CPS Apr 2025→Apr 2026 growth. Major-group level validation against CPS data. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_model_vs_actual.md`. |
 

@@ -44,6 +44,13 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
 from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
+from synthesize_dynamic import (
+    compute_dynamic_equilibrium,
+    plot_dynamic_sector_level_validation,
+    plot_dynamic_vs_rebound_comparison,
+    plot_net_change_distribution,
+    plot_winners_losers,
+)
 
 
 def _label(period: str) -> str:
@@ -54,9 +61,9 @@ def _label(period: str) -> str:
     return f"20{parts[0]}→20{parts[1]}"
 
 
-def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool) -> pd.DataFrame:
+def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool, score_col: str = "occupation_exposure") -> pd.DataFrame:
     """Drop NaN/inf and remove extreme outliers for a single growth column."""
-    clean_df = merged_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[growth_col, "occupation_exposure"])
+    clean_df = merged_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[growth_col, score_col])
     if growth_col.startswith("emp_growth"):
         upper = 2.0 if is_composite else 1.0
         lower = -0.75 if is_composite else -0.5
@@ -89,6 +96,8 @@ def _make_subplot_figure(
     periods: list[str],
     ylabel: str,
     output_path: str,
+    score_col: str = "occupation_exposure",
+    xlabel: str = "Rebound-Adjusted Exposure Score",
 ) -> None:
     n_periods = len(periods)
     ncols = min(n_periods, 2)
@@ -110,14 +119,14 @@ def _make_subplot_figure(
     for subplot_idx, (ax, period) in enumerate(zip(axes_flat, periods)):
         growth_col = f"{growth_type}_growth_{period}"
         is_composite = period == "composite"
-        clean_df = _clean(merged_df, growth_col, is_composite)
+        clean_df = _clean(merged_df, growth_col, is_composite, score_col=score_col)
 
-        r_impact, p_impact, _, _ = _correlations(clean_df, growth_col)
+        r_impact, p_impact = stats.pearsonr(clean_df[score_col], clean_df[growth_col])
 
         # Colored scatter by demand type, then regression lines overlaid
         sns.scatterplot(
             data=clean_df,
-            x="occupation_exposure",
+            x=score_col,
             y=growth_col,
             hue="dominant_demand",
             palette=DEMAND_PALETTE,
@@ -128,7 +137,7 @@ def _make_subplot_figure(
         )
         sns.regplot(
             data=clean_df,
-            x="occupation_exposure",
+            x=score_col,
             y=growth_col,
             scatter=False,
             line_kws={"color": "steelblue", "linewidth": 1.5},
@@ -140,7 +149,7 @@ def _make_subplot_figure(
                 continue
             sns.regplot(
                 data=subset_df,
-                x="occupation_exposure",
+                x=score_col,
                 y=growth_col,
                 scatter=False,
                 ci=None,
@@ -149,7 +158,7 @@ def _make_subplot_figure(
             )
 
         ax.set_title(f"{_label(period)}\nr={r_impact:.3f} (p={p_impact:.3f})", fontsize=11)
-        ax.set_xlabel("Rebound-Adjusted Exposure Score", fontsize=10)
+        ax.set_xlabel(xlabel, fontsize=10)
         ax.set_ylabel(ylabel if subplot_idx % ncols == 0 else "", fontsize=10)
         ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
         ax.axvline(0, color="grey", linestyle="--", linewidth=0.8)
@@ -169,7 +178,7 @@ def _make_subplot_figure(
                 loc="upper right",
             )
 
-    fig.suptitle(f"Rebound-Adjusted Exposure Score vs. {ylabel}", fontsize=13, y=1.02)
+    fig.suptitle(f"{xlabel} vs. {ylabel}", fontsize=13, y=1.02)
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
@@ -365,6 +374,13 @@ def main():
         "mean_penetration": "mean",
         "dominant_demand": "first",
         "dominant_strength": "first",
+        # Demand-type exposure contributions for the dynamic equilibrium model
+        "bounded_exposure_contribution": "mean",
+        "unbounded_exposure_contribution": "mean",
+        "adversarial_exposure_contribution": "mean",
+        "pct_bounded": "mean",
+        "pct_unbounded": "mean",
+        "pct_adversarial": "mean",
     }
     if "eloundou_exposure_mid" in occupation_exposure_df.columns:
         _agg_dict["eloundou_exposure_mid"] = "mean"
@@ -520,10 +536,65 @@ def main():
             r_ss, _ = stats.pearsonr(ss_clean["occupation_exposure"], ss_clean[ss_col])
             print(f"{_label(period):<28} {label:<8} {r_raw:>7.3f} {r_ss:>7.3f} {r_ss - r_raw:>+7.3f}")
 
+    # ── Dynamic labor equilibrium model ──────────────────────────────────────
+    latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
+    dynamic_equilibrium_df = compute_dynamic_equilibrium(merged_validation_df, latest_emp_col)
+    dynamic_equilibrium_df.to_csv("data/output/occupation_dynamic_model_report.csv", index=False)
+    print("\nSaved dynamic model report → data/output/occupation_dynamic_model_report.csv")
+    plot_net_change_distribution(dynamic_equilibrium_df, output_dir)
+    plot_winners_losers(dynamic_equilibrium_df, output_dir)
+    plot_dynamic_vs_rebound_comparison(dynamic_equilibrium_df, output_dir)
+
+    # Join growth columns from merged_validation_df so the dynamic model can be
+    # validated against the same BLS actuals as the rebound-adjusted model.
+    growth_cols = [c for c in merged_validation_df.columns if "growth" in c]
+    dynamic_validation_df = dynamic_equilibrium_df.merge(
+        merged_validation_df[["OCC_CODE"] + growth_cols],
+        on="OCC_CODE",
+        how="inner",
+    )
+
+    _make_subplot_figure(
+        dynamic_validation_df,
+        "emp",
+        emp_periods,
+        "Year-over-Year Employment Growth",
+        f"{output_dir}/dynamic_model_vs_actual_employment_growth.png",
+        score_col="net_employment_change",
+        xlabel="Net Employment Change (dynamic model)",
+    )
+    _make_subplot_figure(
+        dynamic_validation_df,
+        "wage",
+        wage_periods,
+        "Year-over-Year Median Wage Growth",
+        f"{output_dir}/dynamic_model_vs_actual_wage_growth.png",
+        score_col="net_employment_change",
+        xlabel="Net Employment Change (dynamic model)",
+    )
+    _make_subplot_figure(
+        dynamic_validation_df,
+        "ss_emp",
+        emp_periods,
+        "Employment Growth Residual (occupation minus sector average)",
+        f"{output_dir}/dynamic_model_sector_adjusted_employment_growth.png",
+        score_col="net_employment_change",
+        xlabel="Net Employment Change (dynamic model)",
+    )
+    _make_subplot_figure(
+        dynamic_validation_df,
+        "ss_wage",
+        wage_periods,
+        "Wage Growth Residual (occupation minus sector average)",
+        f"{output_dir}/dynamic_model_sector_adjusted_wage_growth.png",
+        score_col="net_employment_change",
+        xlabel="Net Employment Change (dynamic model)",
+    )
+    plot_dynamic_sector_level_validation(dynamic_validation_df, latest_emp_col, output_dir)
+
     # ── AI exposure volume ────────────────────────────────────────────────────
     # exposure_volume = (occupation employment / total modeled employment) × mean_penetration
     # Gives each occupation's contribution to economy-wide AI exposure as a fraction of total employment.
-    latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
     latest_year = latest_emp_col.replace("TOT_EMP_", "20")
     exposure_volume_df = merged_validation_df.dropna(subset=[latest_emp_col, "mean_penetration"]).copy()
     total_modeled_emp = exposure_volume_df[latest_emp_col].sum()

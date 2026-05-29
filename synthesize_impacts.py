@@ -115,28 +115,48 @@ def rollup_to_occupation(task_dataframe: pd.DataFrame) -> pd.DataFrame:
     # Exclude ERROR rows from aggregation
     valid_tasks_df = task_dataframe[task_dataframe["Demand Type"] != "ERROR"].copy()
 
-    occupation_aggregation_df = (
-        valid_tasks_df.groupby(["O*NET-SOC Code", "Title"])
-        .apply(
-            lambda g: pd.Series(
+    def _aggregate_occupation_group(occupation_group: pd.DataFrame) -> pd.Series:
+        total_importance = occupation_group["task_importance"].sum()
+        if total_importance == 0:
+            return pd.Series(
                 {
-                    "total_tasks": len(g),
-                    "total_importance": g["task_importance"].sum(),
-                    "weighted_bounded": g.loc[g["Demand Type"] == "Bounded", "task_importance"].sum(),
-                    "weighted_unbounded": g.loc[g["Demand Type"] == "Unbounded", "task_importance"].sum(),
-                    "weighted_adversarial": g.loc[g["Demand Type"] == "Adversarial", "task_importance"].sum(),
-                    "mean_penetration": (
-                        (g["penetration"] * g["task_importance"]).sum() / g["task_importance"].sum()
-                        if g["task_importance"].sum() > 0
-                        else 0
-                    ),
-                    "max_penetration": g["penetration"].max(),
-                    "occupation_exposure": (g["task_exposure"].sum() / g["task_importance"].sum() if g["task_importance"].sum() > 0 else 0),
+                    "total_tasks": len(occupation_group),
+                    "total_importance": 0.0,
+                    "weighted_bounded": 0.0,
+                    "weighted_unbounded": 0.0,
+                    "weighted_adversarial": 0.0,
+                    "mean_penetration": 0.0,
+                    "max_penetration": occupation_group["penetration"].max(),
+                    "occupation_exposure": 0.0,
+                    "bounded_exposure_contribution": 0.0,
+                    "unbounded_exposure_contribution": 0.0,
+                    "adversarial_exposure_contribution": 0.0,
                 }
             )
+        return pd.Series(
+            {
+                "total_tasks": len(occupation_group),
+                "total_importance": total_importance,
+                "weighted_bounded": occupation_group.loc[occupation_group["Demand Type"] == "Bounded", "task_importance"].sum(),
+                "weighted_unbounded": occupation_group.loc[occupation_group["Demand Type"] == "Unbounded", "task_importance"].sum(),
+                "weighted_adversarial": occupation_group.loc[occupation_group["Demand Type"] == "Adversarial", "task_importance"].sum(),
+                "mean_penetration": (occupation_group["penetration"] * occupation_group["task_importance"]).sum() / total_importance,
+                "max_penetration": occupation_group["penetration"].max(),
+                "occupation_exposure": occupation_group["task_exposure"].sum() / total_importance,
+                "bounded_exposure_contribution": occupation_group.loc[occupation_group["Demand Type"] == "Bounded", "task_exposure"].sum()
+                / total_importance,
+                "unbounded_exposure_contribution": occupation_group.loc[
+                    occupation_group["Demand Type"] == "Unbounded", "task_exposure"
+                ].sum()
+                / total_importance,
+                "adversarial_exposure_contribution": occupation_group.loc[
+                    occupation_group["Demand Type"] == "Adversarial", "task_exposure"
+                ].sum()
+                / total_importance,
+            }
         )
-        .reset_index()
-    )
+
+    occupation_aggregation_df = valid_tasks_df.groupby(["O*NET-SOC Code", "Title"]).apply(_aggregate_occupation_group).reset_index()
 
     occupation_aggregation_df["pct_bounded"] = occupation_aggregation_df["weighted_bounded"] / occupation_aggregation_df["total_importance"]
     occupation_aggregation_df["pct_unbounded"] = (

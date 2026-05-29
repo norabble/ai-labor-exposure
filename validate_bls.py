@@ -1016,6 +1016,37 @@ def main():
         print(f"\n── Anthropic Exposure vs. Our Impact (n={len(anthropic_merged_df)}) ──")
         print(f"Pearson r = {pearson_r:.3f}, p = {pearson_p:.4f}")
 
+        # Sector-level validation for Anthropic observed exposure
+        anthropic_sector_df = anthropic_merged_df.merge(
+            merged_validation_df[["OCC_CODE", "soc_major", latest_emp_col] + [c for c in merged_validation_df.columns if "growth" in c]],
+            on="OCC_CODE",
+            how="inner",
+        )
+        _make_sector_subplot_figure(
+            anthropic_sector_df,
+            score_col="observed_exposure",
+            growth_type="emp",
+            periods=emp_periods,
+            employment_col=latest_emp_col,
+            soc_major_col="soc_major",
+            output_path=f"{output_dir}/anthropic_observed_sector_level_employment_validation.png",
+            xlabel="Sector Mean Observed AI Task Coverage",
+            ylabel="Sector Mean Employment Growth",
+            suptitle="Sector-Level Validation: Anthropic Observed Exposure vs. Employment Growth",
+        )
+        _make_sector_subplot_figure(
+            anthropic_sector_df,
+            score_col="observed_exposure",
+            growth_type="wage",
+            periods=wage_periods,
+            employment_col=latest_emp_col,
+            soc_major_col="soc_major",
+            output_path=f"{output_dir}/anthropic_observed_sector_level_wage_validation.png",
+            xlabel="Sector Mean Observed AI Task Coverage",
+            ylabel="Sector Mean Wage Growth",
+            suptitle="Sector-Level Validation: Anthropic Observed Exposure vs. Wage Growth",
+        )
+
     # ── Sector-level validation ───────────────────────────────────────────────
     if "emp_growth_composite" in merged_validation_df.columns:
         sector_source_df = merged_validation_df.dropna(subset=[latest_emp_col]).copy()
@@ -1124,6 +1155,33 @@ def main():
             ylabel="Sector Mean Wage Growth",
             suptitle="Sector-Level Validation: Rebound-Adjusted Exposure vs. Wage Growth",
         )
+
+        # Sector-level validation for Eloundou theoretical exposure
+        if "eloundou_exposure_mid" in merged_validation_df.columns:
+            _make_sector_subplot_figure(
+                merged_validation_df,
+                score_col="eloundou_exposure_mid",
+                growth_type="emp",
+                periods=emp_periods,
+                employment_col=latest_emp_col,
+                soc_major_col="soc_major",
+                output_path=f"{output_dir}/eloundou_sector_level_employment_validation.png",
+                xlabel="Sector Mean Eloundou Theoretical Exposure",
+                ylabel="Sector Mean Employment Growth",
+                suptitle="Sector-Level Validation: Eloundou Theoretical Exposure vs. Employment Growth",
+            )
+            _make_sector_subplot_figure(
+                merged_validation_df,
+                score_col="eloundou_exposure_mid",
+                growth_type="wage",
+                periods=wage_periods,
+                employment_col=latest_emp_col,
+                soc_major_col="soc_major",
+                output_path=f"{output_dir}/eloundou_sector_level_wage_validation.png",
+                xlabel="Sector Mean Eloundou Theoretical Exposure",
+                ylabel="Sector Mean Wage Growth",
+                suptitle="Sector-Level Validation: Eloundou Theoretical Exposure vs. Wage Growth",
+            )
 
     # ── Employment trajectories for top-risk occupations ─────────────────────
     top_risk_df = aggregated_exposure_df.nlargest(10, "occupation_exposure")[["OCC_CODE", "Title", "occupation_exposure"]]

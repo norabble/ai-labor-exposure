@@ -184,6 +184,106 @@ def _make_subplot_figure(
     plt.close()
 
 
+def _make_sector_subplot_figure(
+    merged_df: pd.DataFrame,
+    score_col: str,
+    growth_type: str,
+    periods: list[str],
+    employment_col: str,
+    soc_major_col: str,
+    output_path: str,
+    xlabel: str,
+    ylabel: str,
+    suptitle: str,
+) -> None:
+    """
+    2×2 grid of sector-level bubble scatters, one panel per period.
+    Each panel: employment-weighted sector mean of score_col (x) vs. sector mean
+    growth (y). Bubble size ∝ sector employment; sectors labeled by name.
+    """
+    n_periods = len(periods)
+    ncols = min(n_periods, 2)
+    nrows = math.ceil(n_periods / ncols)
+    fig, axes_grid = plt.subplots(nrows, ncols, figsize=(8 * ncols, 7 * nrows), sharey=False)
+
+    if nrows == 1 and ncols == 1:
+        axes_flat = [axes_grid]
+    elif nrows == 1 or ncols == 1:
+        axes_flat = list(axes_grid)
+    else:
+        axes_flat = [ax for row in axes_grid for ax in row]
+
+    for ax in axes_flat[n_periods:]:
+        ax.set_visible(False)
+
+    for subplot_idx, (ax, period) in enumerate(zip(axes_flat, periods)):
+        growth_col = f"{growth_type}_growth_{period}"
+        if growth_col not in merged_df.columns:
+            ax.set_visible(False)
+            continue
+
+        sector_source_df = merged_df.dropna(subset=[score_col, employment_col, growth_col]).copy()
+        sector_source_df["soc_group"] = sector_source_df[soc_major_col].map(SOC_MAJOR_GROUPS).fillna("Other")
+
+        def _weighted_mean(col: str, group_df: pd.DataFrame) -> float:
+            return (group_df[col] * group_df[employment_col]).sum() / group_df[employment_col].sum()
+
+        sector_agg_rows = []
+        for soc_group, group_df in sector_source_df.groupby("soc_group"):
+            sector_agg_rows.append(
+                {
+                    "soc_group": soc_group,
+                    "sector_score": _weighted_mean(score_col, group_df),
+                    "sector_growth": _weighted_mean(growth_col, group_df),
+                    "total_emp": group_df[employment_col].sum(),
+                    "dominant_demand": group_df.groupby("dominant_demand")[employment_col].sum().idxmax(),
+                }
+            )
+        sector_agg_df = pd.DataFrame(sector_agg_rows).dropna(subset=["sector_score", "sector_growth"])
+
+        if len(sector_agg_df) < 3:
+            ax.set_visible(False)
+            continue
+
+        sector_r, sector_p = stats.pearsonr(sector_agg_df["sector_score"], sector_agg_df["sector_growth"])
+        bubble_size_scale = 1200 / sector_agg_df["total_emp"].max()
+        bubble_colors = [DEMAND_PALETTE.get(d, "grey") for d in sector_agg_df["dominant_demand"]]
+
+        ax.scatter(
+            sector_agg_df["sector_score"],
+            sector_agg_df["sector_growth"],
+            s=(sector_agg_df["total_emp"] * bubble_size_scale).clip(20),
+            c=bubble_colors,
+            alpha=0.75,
+            edgecolors="white",
+            linewidths=0.5,
+        )
+        for _, sector_row in sector_agg_df.iterrows():
+            ax.annotate(
+                sector_row["soc_group"],
+                (sector_row["sector_score"], sector_row["sector_growth"]),
+                xytext=(4, 3),
+                textcoords="offset points",
+                fontsize=6,
+                alpha=0.85,
+            )
+        ax.axhline(0, color="grey", linestyle="--", linewidth=0.8)
+        ax.axvline(0, color="grey", linestyle="--", linewidth=0.8)
+        ax.set_xlabel(xlabel if subplot_idx >= n_periods - ncols else "", fontsize=9)
+        ax.set_ylabel(ylabel if subplot_idx % ncols == 0 else "", fontsize=9)
+        ax.set_title(f"{_label(period)}\nr={sector_r:.3f} (p={sector_p:.3f}), n={len(sector_agg_df)}", fontsize=10)
+        ax.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+        ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+
+    legend_handles = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+    axes_flat[n_periods - 1].legend(handles=legend_handles, title="Dominant Demand Type", fontsize=7, loc="lower right")
+
+    fig.suptitle(suptitle, fontsize=12, y=1.02)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
+
 # CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
 _CPS_TO_SOC_MAJOR: dict[str, str] = {
     "management occupations": "11",
@@ -592,6 +692,32 @@ def main():
     )
     plot_dynamic_sector_level_validation(dynamic_validation_df, latest_emp_col, output_dir)
 
+    dynamic_validation_df["soc_major"] = dynamic_validation_df["OCC_CODE"].str[:2]
+    _make_sector_subplot_figure(
+        dynamic_validation_df,
+        score_col="net_employment_change",
+        growth_type="emp",
+        periods=emp_periods,
+        employment_col=latest_emp_col,
+        soc_major_col="soc_major",
+        output_path=f"{output_dir}/dynamic_sector_level_employment_validation.png",
+        xlabel="Sector Mean Net Employment Change (dynamic model)",
+        ylabel="Sector Mean Employment Growth",
+        suptitle="Sector-Level Validation: Dynamic Net Employment Change vs. Employment Growth",
+    )
+    _make_sector_subplot_figure(
+        dynamic_validation_df,
+        score_col="net_employment_change",
+        growth_type="wage",
+        periods=wage_periods,
+        employment_col=latest_emp_col,
+        soc_major_col="soc_major",
+        output_path=f"{output_dir}/dynamic_sector_level_wage_validation.png",
+        xlabel="Sector Mean Net Employment Change (dynamic model)",
+        ylabel="Sector Mean Wage Growth",
+        suptitle="Sector-Level Validation: Dynamic Net Employment Change vs. Wage Growth",
+    )
+
     # ── AI exposure volume ────────────────────────────────────────────────────
     # exposure_volume = (occupation employment / total modeled employment) × mean_penetration
     # Gives each occupation's contribution to economy-wide AI exposure as a fraction of total employment.
@@ -972,6 +1098,32 @@ def main():
         print(f"\n── Sector-Level Validation (n={len(sector_agg_df)}) ──")
         print(f"Employment: r = {sector_r_emp:.3f}, p = {sector_p_emp:.3f}")
         print(f"Wage:       r = {sector_r_wage:.3f}, p = {sector_p_wage:.3f}  (jackknife-robust)")
+
+        merged_validation_df["soc_group"] = merged_validation_df["soc_major"].map(SOC_MAJOR_GROUPS).fillna("Other")
+        _make_sector_subplot_figure(
+            merged_validation_df,
+            score_col="occupation_exposure",
+            growth_type="emp",
+            periods=emp_periods,
+            employment_col=latest_emp_col,
+            soc_major_col="soc_major",
+            output_path=f"{output_dir}/sector_level_employment_validation.png",
+            xlabel="Sector Mean Rebound-Adjusted Exposure Score",
+            ylabel="Sector Mean Employment Growth",
+            suptitle="Sector-Level Validation: Rebound-Adjusted Exposure vs. Employment Growth",
+        )
+        _make_sector_subplot_figure(
+            merged_validation_df,
+            score_col="occupation_exposure",
+            growth_type="wage",
+            periods=wage_periods,
+            employment_col=latest_emp_col,
+            soc_major_col="soc_major",
+            output_path=f"{output_dir}/sector_level_wage_validation.png",
+            xlabel="Sector Mean Rebound-Adjusted Exposure Score",
+            ylabel="Sector Mean Wage Growth",
+            suptitle="Sector-Level Validation: Rebound-Adjusted Exposure vs. Wage Growth",
+        )
 
     # ── Employment trajectories for top-risk occupations ─────────────────────
     top_risk_df = aggregated_exposure_df.nlargest(10, "occupation_exposure")[["OCC_CODE", "Title", "occupation_exposure"]]

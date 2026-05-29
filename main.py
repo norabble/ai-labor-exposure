@@ -33,9 +33,9 @@ def run_pipeline(stages: list[str]) -> None:
     total = len(stages)
     for i, stage in enumerate(stages, 1):
         label, fn = runners[stage]
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  Stage {i}/{total}: {label}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         fn()
 
 

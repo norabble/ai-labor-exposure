@@ -68,9 +68,11 @@ Stages:
 | `plot` | occupation exposure report | `data/output/visualizations/*.png` |
 | `validate` | exposure report + BLS trends | correlation statistics + validation plots |
 
-## Model
+## Models
 
-The occupation-level rebound-adjusted exposure score is a task-importance-weighted average of per-task exposures:
+### Rebound-adjusted exposure (static)
+
+The occupation-level exposure score is a task-importance-weighted average of per-task exposures:
 
 ```
 task_exposure = penetration × (1 − rebound_fraction) × task_importance
@@ -82,13 +84,30 @@ Adversarial: rebound = 0.9  →  10% structural; arms-race escalation absorbs th
 
 Scores are non-negative; higher values indicate greater structural exposure pressure. The rebound fractions in `synthesize_impacts.py` are intentionally exposed as tunable research parameters.
 
+### Dynamic labor equilibrium (macro)
+
+A second model holds total employment constant and redistributes Bounded + Adversarial displacement economy-wide into Unbounded-capacity occupations:
+
+```
+gross_displacement  = bounded_exposure_contribution + adversarial_exposure_contribution
+absorption          = (pct_unbounded / economy_avg_pct_unbounded) × total_displaced
+net_employment_change = absorption − gross_displacement
+```
+
+The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.528 (p = 0.012) for composite employment growth, strengthening to r ≈ +0.54 (p < 0.01) in 2023→24 and 2024→25.
+
 ## Outputs
 
-- **`occupation_exposure_report.csv`** — Per-occupation rebound-adjusted exposure score, dominant demand type, penetration metrics, and exposure tier
-- **`visualizations/highest_exposure_occupations.png`** — Top 30 occupations by structural AI exposure
-- **`visualizations/theoretical_vs_rebound_adjusted_exposure.png`** — This model vs. Eloundou et al. theoretical exposure
-- **`visualizations/model_vs_actual_employment_growth.png`** — Model exposure score vs. actual BLS employment growth
-- **`visualizations/model_vs_actual_wage_growth.png`** — Model exposure score vs. actual BLS wage growth
+| File | Description |
+|------|-------------|
+| `occupation_exposure_report.csv` | Per-occupation rebound-adjusted exposure score, demand type breakdown, penetration metrics, and exposure tier |
+| `occupation_dynamic_model_report.csv` | Dynamic equilibrium model — signed `net_employment_change` per occupation; employment-weighted sum = 0 |
+| `bls_trends.csv` | BLS employment and wage growth by occupation (2022–2025) |
+| `exposure_volume_by_occupation.csv` | Employment-weighted AI exposure by occupation |
+| `exposure_volume_by_group.csv` | Same metric rolled up to SOC major group |
+| `employment_by_demand_type.csv` | Workers in each demand type bucket with mean exposure scores |
+
+Visualizations (30+ charts) are saved to `data/output/visualizations/`. See [CLAUDE.md](CLAUDE.md#outputs-reference) for the full list with descriptions.
 
 ## Development
 

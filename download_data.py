@@ -99,8 +99,13 @@ def download_cps_a19():
     (in thousands). It is a directional indicator only — not BLS OEWS.
     """
     print("Downloading BLS CPS Table A-19 (monthly major-group employment)...")
-    response = requests.get(CPS_TABLE_A19_URL, headers={"User-Agent": "Mozilla/5.0"})
-    response.raise_for_status()
+    try:
+        response = requests.get(CPS_TABLE_A19_URL, headers={"User-Agent": "Mozilla/5.0"})
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as exc:
+        print(f"Warning: CPS Table A-19 download failed ({exc}) — skipping.")
+        print("  CPS charts will be omitted from this run.")
+        return
     os.makedirs("data/raw/cps", exist_ok=True)
     with open("data/raw/cps/table_a19.html", "w", encoding="utf-8") as f:
         f.write(response.text)

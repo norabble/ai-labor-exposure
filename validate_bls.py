@@ -583,7 +583,7 @@ def main():
     # ── Shift-share validation ────────────────────────────────────────────────
     # Decompose observed growth into sector trend + occupation-specific residual.
     # Correlating our model against the residual removes sector-cycle noise and
-    # gives a cleaner test of whether occupation_impact predicts anything beyond
+    # gives a cleaner test of whether occupation_exposure predicts anything beyond
     # what the sector average already explains.
     merged_validation_df["soc_major"] = merged_validation_df["OCC_CODE"].str[:2]
     ss_weight_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]

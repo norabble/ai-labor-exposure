@@ -129,6 +129,6 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 
 From `CONTRIBUTING.md` — these are enforced by pre-commit:
 
-- **No generic abbreviations**: never `df`, `res`, `tmp`, `val`. Use `occupation_impact_df`, `task_penetration_response`, etc.
+- **No generic abbreviations**: never `df`, `res`, `tmp`, `val`. Use `occupation_exposure_df`, `task_penetration_response`, etc.
 - **Domain terminology**: variable names must reflect what they contain (`penetration_value`, `demand_type`, `onet_tasks_df`)
 - **Module docstrings**: every Python file must have a module-level docstring describing its name, purpose, inputs, and outputs

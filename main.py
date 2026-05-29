@@ -5,7 +5,7 @@ Pipeline entry point for the AI Labor Exposure analysis.
 
 Stages (run in order after classification):
   analyze    — Process BLS OEWS zip files → data/output/bls_trends.csv
-  synthesize — Match classified tasks to AI penetration → data/output/occupation_impact_report.csv
+  synthesize — Match classified tasks to AI penetration → data/output/occupation_exposure_report.csv
   plot       — Generate visualizations → data/output/visualizations/
   validate   — Correlate model predictions with actual BLS employment/wage trends
 

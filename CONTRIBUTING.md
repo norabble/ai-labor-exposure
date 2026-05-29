@@ -10,7 +10,7 @@ We adhere to a high standard of descriptive and clear variable naming to ensure 
 
 1. **Avoid Generic Abbreviations:** Do not use generic abbreviations like `df`, `res`, `tmp`, `val`, `z`, or `f`. Instead, describe what the variable represents.
    - *Bad:* `df = pd.read_csv(...)`
-   - *Good:* `occupation_impact_df = pd.read_csv(...)`
+   - *Good:* `occupation_exposure_df = pd.read_csv(...)`
 
 2. **Be Specific:** If you have multiple similar data structures, use descriptive prefixes or suffixes to differentiate them.
    - *Bad:* `path_22`, `path_23`, `df1`, `df2`

@@ -30,3 +30,6 @@ htmlcov/
 .idea/
 .DS_Store
 *.log
+
+# Claude Code runtime artifacts
+.claude/scheduled_tasks.lock

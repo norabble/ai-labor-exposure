@@ -6,11 +6,18 @@ across the codebase, documentation, and outputs.
 
 ## Project Goal
 
-This project produces a **structural exposure score** — a current snapshot of
-which occupations are most exposed to AI-driven demand change, stratified by
-the type of demand response expected. It is *not* a displacement prediction.
+This project produces two complementary model outputs:
 
-The distinction matters:
+1. **Structural exposure score** (`occupation_exposure`) — a cross-sectional
+   snapshot of which occupations are most exposed to AI-driven demand change,
+   stratified by demand type. It is *not* a displacement prediction.
+
+2. **Dynamic net employment change** (`net_employment_change`) — a macro-level
+   redistribution model that holds total employment constant and routes displaced
+   labor into Unbounded-capacity occupations. Produces a signed score per
+   occupation summing to zero economy-wide.
+
+The distinction between exposure and prediction matters:
 
 - A **structural exposure score** describes the economic character of an
   occupation's AI-exposed work right now. It does not assert that employment
@@ -19,11 +26,13 @@ The distinction matters:
   accounts for adoption rates, complementary skill adjustments, wage
   equilibration, policy responses, and macroeconomic context.
 
-The model is tested against BLS employment data as an ongoing confidence check:
-does the structural categorization correlate with real-world outcomes at all? A
-null result is expected and not damaging — the effects of AI on labor markets
-may not yet be detectable in aggregate annual data. A non-null correlation is
-fortuitous evidence that the structural categories are tracking something real.
+Both models are tested against BLS employment data as ongoing confidence
+checks. A null result at the occupation level is expected and not damaging —
+the effects of AI on labor markets may not yet be detectable in annual
+occupation-level data. The dynamic model does show a significant sector-level
+employment signal (r ≈ +0.53, p < 0.02 in 2023→24 and 2024→25), which
+constitutes evidence that the sector-level demand-type composition is tracking
+something real.
 
 ## Exposure Type Taxonomy
 
@@ -83,7 +92,8 @@ rebound fraction:
 rebound_adjusted_exposure = observed_penetration × (1 − rebound_fraction)
 ```
 
-This is the primary output of this model (`occupation_exposure` in the codebase).
+This is the primary output of the static model (`occupation_exposure` in the
+codebase).
 
 **Properties:**
 - Addresses the *rebound signal* gap in observed exposure by applying a
@@ -196,10 +206,78 @@ remainder as persistent structural exposure. They are intentionally exposed as
 tunable research parameters and should be calibrated against elasticity data
 when that becomes available.
 
-## Naming Conventions (Pending)
+## Dynamic Labor Equilibrium Model
 
-The current codebase uses `occupation_exposure` and narrative labels like "High
-Displacement Risk" that imply prediction rather than structural description.
-Renaming to better reflect the structural exposure framing (e.g., "High
-Structural Exposure") is under consideration. This document will be updated when
-that decision is made.
+The dynamic model is a second output layer that builds on the rebound-adjusted
+exposure inputs to model economy-wide labor redistribution under a
+total-employment-constant assumption.
+
+### Core assumption
+
+If total employment is held fixed, labor displaced from Bounded and Adversarial
+tasks must flow somewhere. The dynamic model routes that displaced labor into
+Unbounded-capacity occupations, in proportion to each occupation's share of
+total economy-wide Unbounded-weighted employment.
+
+### Computation
+
+For each occupation *o*, the rebound-adjusted exposure contributions are already
+decomposed by demand type:
+
+```
+gross_displacement_o = bounded_exposure_contribution_o
+                     + adversarial_exposure_contribution_o
+
+total_displaced = Σ_o(employment_o × gross_displacement_o) / Σ_o(employment_o)
+
+absorption_o = (pct_unbounded_o / economy_weighted_avg_pct_unbounded)
+             × total_displaced
+
+net_employment_change_o = absorption_o − gross_displacement_o
+```
+
+The employment-weighted sum of `net_employment_change` is zero by construction
+(verified by assertion at runtime). Occupations with above-average Unbounded
+capacity gain workers; Bounded-heavy occupations lose them.
+
+### Relationship to the rebound-adjusted model
+
+The two models are complementary:
+
+| Property | Rebound-adjusted | Dynamic |
+|----------|-----------------|---------|
+| Output range | ≥ 0 (structural pressure) | signed (redistribution) |
+| Unbounded treatment | Small positive exposure (0.3×penetration) | Absorption sink |
+| Adversarial treatment | Near-zero exposure (0.1×penetration) | Displacement source |
+| Conservation | None | Sums to zero by construction |
+| Validated at sector level | No significant signal | r ≈ +0.53, p < 0.02 (2023→25) |
+
+The rebound-adjusted model identifies *which occupations are under structural
+pressure*; the dynamic model identifies *where net labor flows* under a
+conservation constraint.
+
+### Scope and limitations
+
+**Scope:** The model operates on the ~770 BLS-matched occupations. Conservation
+holds within this subset, not the full labor force.
+
+**Absorption proportional to headcount, not skill adjacency.** The current
+absorption formula routes displaced workers to all Unbounded occupations
+proportionally to `pct_unbounded × employment`. This means a displaced medical
+records specialist is modeled as partially flowing into Cardiologists —
+occupations with high Unbounded capacity and large employment. This is
+economically incoherent over any near-to-medium-term horizon: workers cannot
+retrain into high-credential professions in a single market cycle.
+
+The model is better understood as identifying *which sectors absorb displaced
+labor* (the sector-level signal is real) than as predicting *occupation-specific
+flows* (the occupation-level signal is not detectable in current BLS data). A
+future version of the model would weight absorption by occupational adjacency or
+retraining feasibility, which would shift predicted gains from high-credential
+Unbounded occupations (Surgeons, Cardiologists) toward lower-credential Unbounded
+occupations that are more accessible to displaced workers.
+
+**Static penetration data.** The `bounded_exposure_contribution` inputs come
+from time-averaged AI penetration scores. They capture the accumulated state of
+AI adoption rather than a real-time flow signal, limiting the model's ability to
+predict near-term occupation-specific dynamics.

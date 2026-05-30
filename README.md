@@ -17,6 +17,52 @@
 | **Unbounded** | Efficiency unlocks a backlog of unmet demand; output expands | Programming, Science, Healthcare |
 | **Adversarial** | Zero-sum competition; time saved is reinvested to stay ahead | Law, Sales, Marketing, Cybersecurity |
 
+## Key Findings
+
+The pipeline produces two model outputs and tests both against BLS employment and
+wage data (2022–2025). What the demand-type lens buys you:
+
+**Sectors with the most Unbounded "absorption capacity" are measurably gaining
+employment.** The dynamic equilibrium model's signed `net_employment_change`
+score correlates with actual BLS sector employment growth at **r = +0.528
+(p = 0.012)** economy-wide, strengthening to **r ≈ +0.54 (p < 0.01)** in both
+2023→24 and 2024→25. This is the strongest signal in the project — and it only
+emerges once tasks are stratified by demand type. Raw "AI can do this task"
+coverage shows no comparable sector signal (r = +0.19, n.s.).
+
+![Dynamic model sector-level employment validation](docs/charts/images/dynamic_sector_level_employment_validation.png)
+
+**Demand type sharpens the displacement signal on employment — and it's
+growing.** Among occupations with measured AI penetration, the rebound-adjusted
+exposure score predicts 2024→25 employment decline better than raw coverage
+(r = −0.219 vs. −0.175), and that correlation has strengthened every year since
+2022. The hardest-hit high-exposure occupations include Computer Programmers
+(−16%), Technical Writers (−18%), and Statistical Assistants (−20%).
+
+![Highest-exposure occupations](docs/charts/images/highest_exposure_occupations.png)
+
+**Occupation-level effects are real but small; the economy-wide redistribution is
+where the structure shows up.** Individual-occupation correlations are weak
+(|r| < 0.22) — expected, since AI's labor effects are only beginning to surface
+in annual data. Aggregating to sectors, where the redistribution constraint
+binds, is where the model earns its keep.
+
+**Wages show no AI signal.** Apparent negative wage correlations in 2022→23 are a
+post-COVID recovery artifact (physical and care sectors catching up after
+pandemic labor shortages), not AI — the signal disappears once those sectors are
+excluded.
+
+### Going deeper
+
+- **[docs/framework.md](docs/framework.md)** — the full conceptual framework:
+  exposure-type taxonomy, demand-type definitions, and the dynamic equilibrium
+  model derivation.
+- **[docs/model_vs_observed_exposure.md](docs/model_vs_observed_exposure.md)** —
+  head-to-head: does demand-type classification beat raw AI coverage at
+  predicting BLS outcomes? Results keyed by outcome × aggregation level.
+- **[docs/charts/](docs/charts/)** — per-figure writeups for all 30+ validation
+  charts, each with correlations, caveats, and interpretation.
+
 ## Prerequisites
 
 - Python 3.12+ with [uv](https://docs.astral.sh/uv/)

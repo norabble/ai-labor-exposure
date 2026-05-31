@@ -1,4 +1,4 @@
-# Model Signal Over Time: Historical Baseline (2015→2025)
+# Model Signal Over Time: Historical Baseline (2005→2025)
 
 **File:** `model_signal_over_time.png`
 
@@ -7,7 +7,7 @@
 ## What this chart shows
 
 Sector-level Pearson r between each model score and YoY BLS employment growth,
-plotted as a time series spanning 2015→2025. Each data point is a correlation
+plotted as a time series spanning 2005→2025. Each data point is a correlation
 across n=22 SOC major sectors (employment-weighted means). Three model lines are
 shown:
 
@@ -23,59 +23,74 @@ the AI era (2022→23 onward); significant periods (p < 0.05) are annotated.
 ## Purpose
 
 This chart answers the primary confound question: **is the AI-era sector signal
-pre-existing, or does it emerge post-2022?** If the model were simply tracking a
-long-running structural transition (e.g., secular shift from Bounded toward
-Unbounded sectors), its sector correlations would be consistent throughout
-2015–2025. If the signal is AI-driven, it should be weak or absent pre-2022 and
-strengthen as AI adoption accumulates.
+pre-existing, or does it emerge post-2022?** A pre-existing structural trend
+would show consistent model correlations throughout 2005–2025. An AI-specific
+effect would show a weak or absent pre-AI signal and a strengthening post-2022.
 
 ## What the chart shows
 
-**Pre-AI era (2015→2022):** All three models show noisy, non-significant signals
-near zero. The rebound-adjusted and observed measures occasionally produce weak
-positive r (opposite of their correct sign), consistent with a pre-existing
-composition effect: knowledge-work sectors that eventually become high-exposure
-were already growing modestly through 2015–2019 for non-AI reasons (tech-sector
-expansion, globalization). There is **no consistent negative signal** for the
-gross models before 2022, which is what a pre-existing structural trend would
-require.
+**The dynamic model tracks a pre-existing structural trend.** The dynamic
+`net_employment_change` score shows significant positive r ≈ +0.43–0.48 in
+2005→06 and 2006→07, well before any AI adoption. Sectors that the dynamic model
+predicts to gain workers (high Unbounded composition) were already growing faster
+in the pre-AI economy. This is the long-running secular transition from Bounded
+(supply-constrained) work toward Unbounded (demand-elastic) work that
+industrialization and technology have driven for decades.
 
-**COVID disruption (2019→20, 2020→21):** Extreme values driven by lockdown-
-induced sector shocks, not AI. Bounded/physical sectors were hit hardest
-(healthcare support, food prep, construction), temporarily pushing the
-rebound-adjusted model toward large negative r. These periods are shaded and
-treated as uninformative for AI trend detection.
+**The AI era amplifies the pre-existing dynamic signal.** In 2023→24 and
+2024→25, the dynamic model's r rises to +0.54 (p < 0.01) — above the pre-AI
+peaks of +0.43–0.48. The signal was already there; AI strengthens it. This is
+consistent with AI accelerating the redistribution of labor toward Unbounded
+sectors rather than creating an entirely new structural break.
 
-**AI era (2022→25):** The dynamic model's r rises to +0.54 (p = 0.009) in
-2023→24 and stays at +0.53 (p = 0.011) in 2024→25 — the strongest signal in
-the pipeline. The rebound-adjusted model reaches −0.41 to −0.54 in the same
-period. Both signals strengthen year-over-year, consistent with accumulating AI
-adoption effects.
+**The rebound-adjusted model shows NO consistent pre-AI signal.** The blue line
+fluctuates near zero or positive throughout 2005–2021 — the wrong sign for a
+gross displacement measure. A pre-existing negative relationship between
+rebound-adjusted exposure and sector employment growth would require occupations
+to be shedding headcount proportional to their exposure score, which only becomes
+visible once AI adoption is substantial. The AI-era negative signal (r ≈ −0.4
+in 2024→25) is genuinely new: the demand-type discount is doing work that
+pre-AI structural factors alone could not produce.
 
-**The sign flip of the rebound-adjusted model is informative.** It goes from
-weakly *positive* in some pre-AI years to *negative* in the AI era. This means
-sectors that were growing before AI (tech-heavy, knowledge-work) have flipped to
-slower employment growth relative to their structural exposure level — consistent
-with AI beginning to compress headcount in the most-exposed occupations.
+**The financial crisis (2007→09)** disrupts both models, as expected from a
+demand shock concentrated in financial, construction, and related sectors. The
+dynamic model flips to weakly negative during this period and recovers gradually.
 
-## What this rules out
+**COVID disruption (2019→20, 2020→21):** Extreme values from lockdown-induced
+sector shocks. Physical sectors (Building/Grounds, Food Prep, Construction)
+were hit hardest, temporarily pushing both gross models toward large negative r
+because those sectors have low AI exposure scores. These periods are uninformative
+for AI trend detection.
 
-The **pre-existing structural transition** hypothesis — that Bounded-to-Unbounded
-sector migration was already underway and our model merely correlates with it —
-predicts a consistent negative r for the gross models before 2022. The data shows
-no such consistency. The signal emerges in the AI era and strengthens within it.
+## What this means for model interpretation
 
-The **COVID confound** hypothesis — that pandemic disruption drives the sector
-correlations — is addressed by the COVID shading. The significant signals are in
-2023→24 and 2024→25, two and three years after COVID disruptions peaked. The
-rebound-adjusted model's sharp negative dip in 2020→21 is the COVID confound;
-the later sustained negative values are not.
+The **dynamic model** is partly tracking a structural property of the economy
+(Unbounded sectors have long grown faster) and partly tracking an AI-amplified
+version of that trend in 2023–25. The pre-AI signal at r ≈ +0.43–0.48 is a
+partial confound: if Unbounded sectors were already growing, the model would
+appear predictive even without AI. The AI-era signal at r ≈ +0.54 is modestly
+above that baseline, suggesting a real incremental contribution from AI adoption
+on top of the existing structural tendency — but not a clean separation.
+
+The **rebound-adjusted model** is not subject to this confound in the same way.
+Its negative AI-era signal (r ≈ −0.40 in 2024→25) has no pre-AI analog,
+suggesting it is more specifically measuring an AI-driven displacement effect
+rather than a pre-existing composition trend.
+
+The **observed AI coverage** model shows weakly positive pre-AI r and small
+negative AI-era r — behaving like the rebound-adjusted model without the
+demand-type discount. Its pre-AI positive values reflect the same composition
+effect as the dynamic model (knowledge-work sectors that eventually attract heavy
+AI usage were already growing). Its AI-era negative values are weaker than the
+rebound-adjusted model's, consistent with the demand-type classification adding
+genuine predictive value beyond raw coverage alone.
 
 ## Survivorship note
 
-The 2015–2021 data joins on OCC_CODE against the 2022 anchor. BLS switched from
-SOC 2010 to SOC 2018 occupation codes at 2019; pre-2019 years retain ~86–87% of
-the 2022 occupation set. The sector-level aggregation (n=22 sectors with hundreds
-of occupations each) is robust to 13–14% individual-occupation attrition. Pre-2019
-sector correlations are computed on the surviving occupations only; sectors with
-insufficient data are excluded from that period's correlation.
+All joins are left-joins anchored at the 2022 occupation set (830 occupations).
+Survivorship against 2022: ~82% for 2005–2009 (SOC 2000 codes), ~83–87% for
+2010–2018 (SOC 2010 codes). Each period's sector correlation is computed on the
+occupations with non-NaN values for both years in that pair; sectors with
+insufficient data are excluded. The sector-level aggregation (n=22 sectors,
+hundreds of occupations each) is robust to the ~13–18% occupation attrition from
+code changes.

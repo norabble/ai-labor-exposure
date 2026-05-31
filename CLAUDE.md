@@ -45,7 +45,7 @@ This project produces a **structural exposure score** — a current snapshot of 
 
 ## Key Design Decisions
 
-**BLS downloads require Node.js.** BLS blocks plain HTTP requests; `download_bls.js` uses Puppeteer (headless Chrome) to bypass this. The Python `requests` approach will not work. The 2024/2025 data is only available as all-areas files (`oesm24all.zip`, `oesm25all.zip`); `analyze_bls.py` filters them to national cross-industry rows (`AREA_TYPE==1`, `OWN_CODE==1235`, `NAICS=='000000'`). Historical files 2015–2021 are national-only and require no such filtering. BLS switched from SOC 2010 to SOC 2018 occupation codes at 2019; joining 2015–2018 onto the 2022 anchor retains ~86–87% of occupations (codes stable across the revision).
+**BLS downloads require Node.js.** BLS blocks plain HTTP requests; `download_bls.js` uses Puppeteer (headless Chrome) to bypass this. The Python `requests` approach will not work. The 2024/2025 data is only available as all-areas files (`oesm24all.zip`, `oesm25all.zip`); `analyze_bls.py` filters them to national cross-industry rows (`AREA_TYPE==1`, `OWN_CODE==1235`, `NAICS=='000000'`). Historical files 2005–2021 are national-only and require no such filtering. SOC code generations: SOC 2000 (2005–2009), SOC 2010 (2010–2018), SOC 2018 (2019+). Survivorship joining against the 2022 anchor: ~82% for 2005–2009, ~83–87% for 2010–2018. Files 2005–2013 are `.xls` format (requires `xlrd`); 2014+ are `.xlsx`.
 
 **Task matching is text-based.** The Anthropic task penetration dataset has no Task IDs, so `synthesize_impacts.py` joins O\*NET tasks to Anthropic penetration scores by lowercased exact text match. This is intentional, not a gap.
 

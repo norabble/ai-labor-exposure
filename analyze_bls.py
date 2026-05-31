@@ -7,6 +7,7 @@ years, plus a composite total change from the anchor year (2022) to the most
 recent year.
 
 Inputs (any subset that exists under data/raw/bls/):
+  • oesm05nat.zip – oesm14nat.zip — deep-history national files (2005–2014; .xls format for 2005–2013)
   • oesm15nat.zip – oesm21nat.zip — historical national files (2015–2021)
   • oesm22nat.zip — 2022 national-only file (merge anchor; composite base)
   • oesm23nat.zip — 2023 national-only file
@@ -24,11 +25,13 @@ Output:
       hist_emp_growth_{yy}_{yy}            — YoY growth for periods before 2022
       hist_emp_growth_pre_ai               — composite from earliest available year → 2022
 
-Note on SOC codes: BLS switched from SOC 2010 to SOC 2018 codes starting
-with 2019 data. Joining 2015–2018 to 2022 retains ~86–87% of occupations
-(codes that did not change). All joins are left-joins anchored at 2022, so
-the existing 2022–2025 result set is preserved; historical columns are NaN
-for occupations whose codes changed.
+Note on SOC codes and file formats:
+  • 2005–2009: SOC 2000 codes, .xls format (requires xlrd), GROUP column (NaN = detailed)
+  • 2010–2013: SOC 2010 codes, .xls format, GROUP column (NaN = detailed)
+  • 2014–2018: SOC 2010 codes, .xlsx format, OCC_GROUP column
+  • 2019+:      SOC 2018 codes, .xlsx format, O_GROUP column
+All joins are left-joins anchored at 2022, preserving the existing 830-occupation result set.
+Survivorship when joining against 2022: ~82% for 2005–2009, ~83–87% for 2010–2018.
 """
 
 import os
@@ -37,6 +40,16 @@ import zipfile
 import pandas as pd
 
 YEAR_CONFIGS = [
+    ("05", "data/raw/bls/oesm05nat.zip"),
+    ("06", "data/raw/bls/oesm06nat.zip"),
+    ("07", "data/raw/bls/oesm07nat.zip"),
+    ("08", "data/raw/bls/oesm08nat.zip"),
+    ("09", "data/raw/bls/oesm09nat.zip"),
+    ("10", "data/raw/bls/oesm10nat.zip"),
+    ("11", "data/raw/bls/oesm11nat.zip"),
+    ("12", "data/raw/bls/oesm12nat.zip"),
+    ("13", "data/raw/bls/oesm13nat.zip"),
+    ("14", "data/raw/bls/oesm14nat.zip"),
     ("15", "data/raw/bls/oesm15nat.zip"),
     ("16", "data/raw/bls/oesm16nat.zip"),
     ("17", "data/raw/bls/oesm17nat.zip"),
@@ -86,11 +99,22 @@ def load_bls_data(zip_path: str) -> pd.DataFrame | None:
     if "NAICS" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["NAICS"].astype(str).str.strip("0") == ""]
 
-    # 2015–2018 files use OCC_GROUP; 2019+ use O_GROUP
+    # Group column varies by era:
+    #   2019+:      O_GROUP == "detailed"
+    #   2012–2018:  OCC_GROUP == "detailed"
+    #   2005–2011:  GROUP column; detailed rows have GROUP == NaN (totals/majors have non-NaN values)
     if "O_GROUP" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["O_GROUP"] == "detailed"]
     elif "OCC_GROUP" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["OCC_GROUP"] == "detailed"]
+    elif "GROUP" in bls_dataframe.columns:
+        bls_dataframe = bls_dataframe[bls_dataframe["GROUP"].isna()]
+
+    # Exclude total/aggregate OCC_CODEs (e.g. "00-0000", "11-0000") that slip
+    # through the NaN GROUP filter in pre-2012 files. No detailed occupation
+    # code ends in 0000.
+    if "OCC_CODE" in bls_dataframe.columns:
+        bls_dataframe = bls_dataframe[~bls_dataframe["OCC_CODE"].astype(str).str.endswith("0000")]
 
     target_columns = ["OCC_CODE", "OCC_TITLE", "TOT_EMP", "A_MEDIAN"]
     available_targets = [c for c in target_columns if c in bls_dataframe.columns]

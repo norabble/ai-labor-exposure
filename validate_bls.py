@@ -28,8 +28,9 @@ Outputs (saved to data/output/visualizations/):
   • exposure_volume_by_group.png              — employment-weighted AI exposure by SOC group
   • exposure_share_by_group.png               — share of total AI exposure by SOC group
   • cps_2026_direction.png                    — CPS Apr 2025→Apr 2026 employment direction by major group
-  • cps_model_vs_actual.png                   — scatter: employment-weighted exposure score vs. CPS growth, major group level
-  • model_signal_over_time.png                — sector-level Pearson r by YoY period (2015→2025) for all three models;
+  • cps_rebound_model_vs_actual.png           — scatter: employment-weighted rebound-adjusted exposure vs. CPS growth, major group level
+  • cps_dynamic_model_vs_actual.png           — scatter: employment-weighted dynamic net employment change vs. CPS growth, major group level
+  • model_signal_over_time.png                — sector-level Pearson r by YoY period (2005→2025) for all three models;
                                                 2022 boundary marked to distinguish pre-AI baseline from AI era
 """
 
@@ -563,24 +564,27 @@ def _plot_cps_2026_direction(output_dir: str, cps_mapped_df: pd.DataFrame, expos
 def _plot_cps_model_vs_actual(
     output_dir: str,
     cps_mapped_df: pd.DataFrame,
-    merged_validation_df: pd.DataFrame,
+    model_df: pd.DataFrame,
     exposure_group_df: pd.DataFrame,
+    score_col: str = "occupation_exposure",
+    xlabel: str = "Employment-Weighted Mean Rebound-Adjusted Exposure Score",
+    output_filename: str = "cps_rebound_model_vs_actual.png",
 ) -> None:
-    """Scatter of employment-weighted exposure score vs. CPS Apr 2025→Apr 2026 growth, major group level."""
-    emp_col = next((c for c in ["TOT_EMP_25", "TOT_EMP_24", "TOT_EMP_23"] if c in merged_validation_df.columns), None)
+    """Scatter of employment-weighted model score vs. CPS Apr 2025→Apr 2026 growth, major group level."""
+    emp_col = next((c for c in ["TOT_EMP_25", "TOT_EMP_24", "TOT_EMP_23"] if c in model_df.columns), None)
     if emp_col is None:
-        print("  Skipping CPS model comparison — no employment column found.")
+        print(f"  Skipping CPS {output_filename} — no employment column found.")
         return
 
-    valid_df = merged_validation_df.dropna(subset=["occupation_exposure", emp_col]).copy()
+    valid_df = model_df.dropna(subset=[score_col, emp_col]).copy()
     valid_df["soc_major"] = valid_df["OCC_CODE"].str[:2]
 
-    group_exposure_df = (
+    group_score_df = (
         valid_df.groupby("soc_major")
         .apply(
             lambda g: pd.Series(
                 {
-                    "group_exposure": (g["occupation_exposure"] * g[emp_col]).sum() / g[emp_col].sum(),
+                    "group_score": (g[score_col] * g[emp_col]).sum() / g[emp_col].sum(),
                     "n_occupations": len(g),
                 }
             ),
@@ -592,20 +596,20 @@ def _plot_cps_model_vs_actual(
     group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
     group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
 
-    comparison_df = group_exposure_df.merge(cps_mapped_df[["soc_major", "emp_growth_apr25_apr26"]], on="soc_major").merge(
+    comparison_df = group_score_df.merge(cps_mapped_df[["soc_major", "emp_growth_apr25_apr26"]], on="soc_major").merge(
         group_demand_df, on="soc_major", how="left"
     )
     comparison_df["group_label"] = comparison_df["soc_major"].map(SOC_MAJOR_GROUPS)
 
-    cps_r, cps_p = stats.pearsonr(comparison_df["group_exposure"], comparison_df["emp_growth_apr25_apr26"])
+    cps_r, cps_p = stats.pearsonr(comparison_df["group_score"], comparison_df["emp_growth_apr25_apr26"])
 
-    print(f"\n── CPS Model vs. Actual (Major Group Level, n={len(comparison_df)}) ──")
+    print(f"\n── CPS {output_filename} (Major Group Level, n={len(comparison_df)}) ──")
     print(f"Pearson r = {cps_r:.3f}, p = {cps_p:.4f}")
 
     dot_colors = [DEMAND_PALETTE.get(d, "grey") for d in comparison_df["group_dominant_demand"]]
     fig, ax_cps_scatter = plt.subplots(figsize=(11, 8))
     ax_cps_scatter.scatter(
-        comparison_df["group_exposure"],
+        comparison_df["group_score"],
         comparison_df["emp_growth_apr25_apr26"],
         c=dot_colors,
         s=90,
@@ -617,7 +621,7 @@ def _plot_cps_model_vs_actual(
         label_text = scatter_row["group_label"][:28] if pd.notna(scatter_row["group_label"]) else scatter_row["soc_major"]
         ax_cps_scatter.annotate(
             label_text,
-            (scatter_row["group_exposure"], scatter_row["emp_growth_apr25_apr26"]),
+            (scatter_row["group_score"], scatter_row["emp_growth_apr25_apr26"]),
             xytext=(5, 3),
             textcoords="offset points",
             fontsize=7.5,
@@ -625,17 +629,17 @@ def _plot_cps_model_vs_actual(
         )
     sns.regplot(
         data=comparison_df,
-        x="group_exposure",
+        x="group_score",
         y="emp_growth_apr25_apr26",
         scatter=False,
         ax=ax_cps_scatter,
         line_kws={"color": "steelblue", "linewidth": 1.5},
     )
     ax_cps_scatter.axhline(0, color="grey", linestyle="--", linewidth=0.8)
-    ax_cps_scatter.set_xlabel("Employment-Weighted Mean Rebound-Adjusted Exposure Score", fontsize=10)
+    ax_cps_scatter.set_xlabel(xlabel, fontsize=10)
     ax_cps_scatter.set_ylabel("Employment Growth Apr 2025 → Apr 2026 (CPS)", fontsize=10)
     ax_cps_scatter.set_title(
-        f"Model Impact vs. CPS Employment Growth — Major Group Level\n"
+        f"Model vs. CPS Employment Growth — Major Group Level\n"
         f"r = {cps_r:.3f}, p = {cps_p:.3f}, n = {len(comparison_df)} groups  |  CPS monthly, not BLS OEWS",
         fontsize=11,
     )
@@ -644,9 +648,9 @@ def _plot_cps_model_vs_actual(
     legend_handles_scatter = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
     ax_cps_scatter.legend(handles=legend_handles_scatter, title="Dominant Demand Type", fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/cps_model_vs_actual.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{output_dir}/{output_filename}", dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"  Saved {output_dir}/cps_model_vs_actual.png")
+    print(f"  Saved {output_dir}/{output_filename}")
 
 
 def main():
@@ -1476,7 +1480,24 @@ def main():
     cps_mapped_df = _parse_cps_a19()
     if cps_mapped_df is not None:
         _plot_cps_2026_direction(output_dir, cps_mapped_df, group_rollup_df)
-        _plot_cps_model_vs_actual(output_dir, cps_mapped_df, merged_validation_df, group_rollup_df)
+        _plot_cps_model_vs_actual(
+            output_dir,
+            cps_mapped_df,
+            merged_validation_df,
+            group_rollup_df,
+            score_col="occupation_exposure",
+            xlabel="Employment-Weighted Mean Rebound-Adjusted Exposure Score",
+            output_filename="cps_rebound_model_vs_actual.png",
+        )
+        _plot_cps_model_vs_actual(
+            output_dir,
+            cps_mapped_df,
+            dynamic_validation_df,
+            group_rollup_df,
+            score_col="net_employment_change",
+            xlabel="Employment-Weighted Mean Net Employment Change (dynamic model)",
+            output_filename="cps_dynamic_model_vs_actual.png",
+        )
     else:
         print("  Skipping CPS charts — data/raw/cps/table_a19.html not found.")
         print("  Run: uv run download_data.py  (or make download-data) to fetch it.")

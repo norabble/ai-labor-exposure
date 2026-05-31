@@ -427,14 +427,14 @@ def plot_model_signal_over_time(
             markersize=6,
             zorder=3,
         )
-        # Annotate significant periods
+        # Annotate significant periods with r and actual p-value
         for xi, yi, pi in zip(xs, ys, ps):
             if pi is not None and pi < 0.05:
                 ax.annotate(
-                    f"r={yi:+.2f}*",
+                    f"r={yi:+.2f}\np={pi:.3f}",
                     (xi, yi),
                     textcoords="offset points",
-                    xytext=(0, 8 if yi >= 0 else -14),
+                    xytext=(0, 8 if yi >= 0 else -22),
                     ha="center",
                     fontsize=7,
                     color=color,
@@ -447,7 +447,7 @@ def plot_model_signal_over_time(
     ax.set_title(
         "Model Predictive Signal Over Time: Sector-Level Correlation with Employment Growth\n"
         "Red shading = COVID-disrupted periods; blue shading = AI era (2022→). "
-        "Significant periods (p<0.05) annotated.",
+        "Significant periods annotated with r and p-value.",
         fontsize=11,
     )
     ax.legend(fontsize=9, loc="lower left")

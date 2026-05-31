@@ -472,6 +472,172 @@ def plot_model_signal_over_time(
     print(f"Saved {output_dir}/model_signal_over_time.png")
 
 
+def plot_model_signal_over_time_occupation(
+    merged_validation_df: pd.DataFrame,
+    dynamic_validation_df: pd.DataFrame,
+    output_dir: str,
+    anthropic_exp_df: pd.DataFrame | None = None,
+) -> None:
+    """
+    Occupation-level Pearson r between each model score and YoY employment growth,
+    plotted as a time series spanning 2005→2025. Unlike the sector-level version,
+    no aggregation step is applied — each occupation is one data point. n varies by
+    period due to historical SOC code survivorship (~82% for 2005–2009, ~83–87%
+    for 2010–2018, higher for 2019+). Significant periods annotated with r, p, and n.
+    """
+
+    # Collect all YoY growth columns in chronological order
+    def _sort_period(col_name: str) -> tuple[int, int]:
+        key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+        if key in ("composite", "pre_ai"):
+            return (99, 0)
+        parts = key.split("_")
+        return (int(parts[0]), int(parts[1]))
+
+    hist_yoy = sorted(
+        [c for c in merged_validation_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
+        key=_sort_period,
+    )
+    current_yoy = sorted(
+        [c for c in merged_validation_df.columns if c.startswith("emp_growth_") and "composite" not in c],
+        key=_sort_period,
+    )
+    all_period_cols = hist_yoy + current_yoy
+
+    if len(all_period_cols) < 2:
+        return
+
+    base_df = merged_validation_df.copy()
+    base_df = base_df.merge(
+        dynamic_validation_df[["OCC_CODE", "net_employment_change"]],
+        on="OCC_CODE",
+        how="left",
+    )
+    has_observed = anthropic_exp_df is not None and "observed_exposure" in anthropic_exp_df.columns
+    if has_observed:
+        obs_col_map = {"occ_code": "OCC_CODE"} if "occ_code" in anthropic_exp_df.columns else {}
+        obs_df = anthropic_exp_df.rename(columns=obs_col_map)[["OCC_CODE", "observed_exposure"]]
+        base_df = base_df.merge(obs_df, on="OCC_CODE", how="left")
+
+    def _occupation_r(emp_col: str, score_col: str) -> tuple[float, float, int] | None:
+        """Compute occupation-level Pearson r for one period and score column."""
+        subset = base_df[[score_col, emp_col]].dropna()
+        if len(subset) < 20:
+            return None
+        r, p = stats.pearsonr(subset[score_col], subset[emp_col])
+        return r, p, len(subset)
+
+    score_configs = [
+        ("occupation_exposure", "Rebound-adjusted (−r = correct)", "steelblue", "-o"),
+        ("net_employment_change", "Dynamic net change (+r = correct)", "darkorange", "-s"),
+    ]
+    if has_observed:
+        score_configs.append(("observed_exposure", "Observed AI coverage (−r = correct)", "seagreen", "-^"))
+
+    period_labels = []
+    for col in all_period_cols:
+        key = col.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+        parts = key.split("_")
+        period_labels.append(f"20{parts[0]}→\n20{parts[1]}")
+
+    r_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
+    p_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
+    n_series: list[int | None] = []
+    for period_col in all_period_cols:
+        period_n = None
+        for score_col, _, _, _ in score_configs:
+            result = _occupation_r(period_col, score_col)
+            if result is not None:
+                r_series[score_col].append(result[0])
+                p_series[score_col].append(result[1])
+                period_n = result[2]
+            else:
+                r_series[score_col].append(None)
+                p_series[score_col].append(None)
+        n_series.append(period_n)
+
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(14, 5))
+
+    x = list(range(len(all_period_cols)))
+
+    covid_cols = ["hist_emp_growth_19_20", "hist_emp_growth_20_21"]
+    for i, col in enumerate(all_period_cols):
+        if col in covid_cols:
+            ax.axvspan(i - 0.4, i + 0.4, alpha=0.12, color="red", zorder=0)
+
+    ai_start = next((i for i, c in enumerate(all_period_cols) if not c.startswith("hist_")), None)
+    if ai_start is not None:
+        ax.axvspan(ai_start - 0.5, len(all_period_cols) - 0.5, alpha=0.08, color="royalblue", zorder=0)
+        ax.axvline(ai_start - 0.5, color="royalblue", linestyle="--", linewidth=1.2, alpha=0.7, label="AI era begins (2022→23)")
+
+    ax.axhline(0, color="grey", linewidth=0.8)
+
+    for score_col, label, color, marker in score_configs:
+        xs = [xi for xi, v in zip(x, r_series[score_col]) if v is not None]
+        ys = [v for v in r_series[score_col] if v is not None]
+        ps = [v for v in p_series[score_col] if v is not None]
+        ax.plot(
+            xs,
+            ys,
+            marker[1:] or "o",
+            marker=marker[1:] if len(marker) > 1 else "o",
+            linestyle="-",
+            color=color,
+            label=label,
+            linewidth=1.6,
+            markersize=6,
+            zorder=3,
+        )
+        for xi, yi, pi in zip(xs, ys, ps):
+            if pi is not None and pi < 0.05:
+                ax.annotate(
+                    f"r={yi:+.2f}\np={pi:.3f}",
+                    (xi, yi),
+                    textcoords="offset points",
+                    xytext=(0, 8 if yi >= 0 else -22),
+                    ha="center",
+                    fontsize=7,
+                    color=color,
+                )
+
+    # Annotate n below each x-tick
+    y_bottom = ax.get_ylim()[0]
+    for xi, n_val in enumerate(n_series):
+        if n_val is not None:
+            ax.text(xi, y_bottom + 0.01, f"n={n_val}", ha="center", va="bottom", fontsize=6, color="dimgrey")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(period_labels, fontsize=8)
+    ax.set_ylabel("Occupation-Level Pearson r", fontsize=10)
+    ax.set_xlabel("YoY Period", fontsize=10)
+    ax.set_title(
+        "Model Predictive Signal Over Time: Occupation-Level Correlation with Employment Growth\n"
+        "Red shading = COVID-disrupted periods; blue shading = AI era (2022→). "
+        "Significant periods annotated with r and p-value. n varies with historical SOC survivorship.",
+        fontsize=11,
+    )
+    ax.legend(fontsize=9, loc="lower left")
+    ax.set_ylim(-0.4, 0.4)
+
+    ax.text(
+        0.01,
+        0.02,
+        "Sign note: rebound-adjusted and observed validate negative (more exposure → less growth);\n"
+        "dynamic net change validates positive (predicted gainers grow). Both directions are 'correct'.",
+        transform=ax.transAxes,
+        fontsize=7,
+        va="bottom",
+        color="dimgrey",
+        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.7},
+    )
+
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/model_signal_over_time_occupation.png", dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {output_dir}/model_signal_over_time_occupation.png")
+
+
 # CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
 _CPS_TO_SOC_MAJOR: dict[str, str] = {
     "management occupations": "11",
@@ -916,6 +1082,7 @@ def main():
         else None
     )
     plot_model_signal_over_time(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df)
+    plot_model_signal_over_time_occupation(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df)
 
     # ── AI exposure volume ────────────────────────────────────────────────────
     # exposure_volume = (occupation employment / total modeled employment) × mean_penetration

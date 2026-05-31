@@ -130,6 +130,7 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `cps_rebound_model_vs_actual.png` | `validate_bls.py` | Scatter: employment-weighted rebound-adjusted exposure score per SOC major group vs. CPS Apr 2025→Apr 2026 growth. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_model_vs_actual.md`. |
 | `cps_dynamic_model_vs_actual.png` | `validate_bls.py` | Scatter: employment-weighted dynamic net employment change per SOC major group vs. CPS Apr 2025→Apr 2026 growth. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_model_vs_actual.md`. |
 | `model_signal_over_time.png` | `validate_bls.py` | Sector-level Pearson r by YoY period (2015→2025) for rebound-adjusted, dynamic, and Anthropic observed models. 2022 boundary and COVID years marked. Tests whether the AI-era signal is pre-existing or emerges post-2022. See `docs/charts/model_signal_over_time.md`. |
+| `model_signal_over_time_occupation.png` | `validate_bls.py` | Same layout as above but occupation-level (no sector aggregation). n varies by period due to historical SOC survivorship, annotated at bottom. Higher power, noisier than sector-level version. See `docs/charts/model_signal_over_time_occupation.md`. |
 
 ## Coding Standards
 

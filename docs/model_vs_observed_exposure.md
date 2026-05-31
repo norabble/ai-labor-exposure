@@ -155,6 +155,31 @@ p < 0.05 in every period from 2023 onward. The explicit conservation constraint 
 routing displaced labor into Unbounded-heavy sectors — is what sharpens the
 diffuse "Unbounded sectors grow" tendency that observed coverage only hints at.
 
+### Confound: pre-existing sector composition
+
+Extending the historical BLS baseline back to 2005 (see `model_signal_over_time.md`)
+reveals that the dynamic model's sector-level r was already elevated **before AI**:
+r ≈ +0.43–0.48 in 2005→06 and 2006→07, well before meaningful AI adoption. Unbounded
+sectors — Computer and Mathematical, Healthcare, Life Sciences — have grown faster
+than Bounded sectors for decades as part of a long-running secular transition in
+the labour market. The dynamic model formalises this tendency and is therefore
+partly tracking a structural property of the economy, not purely an AI-era effect.
+
+The AI-era values (r ≈ +0.53–0.54 in 2023→24 and 2024→25) are modestly above the
+pre-AI peak of +0.43–0.48, consistent with AI accelerating the redistribution
+rather than creating it from scratch. However, three years of post-AI data (2022→25)
+is insufficient to cleanly separate amplification from the secular baseline.
+
+**The rebound-adjusted model is not subject to this confound.** Its negative
+AI-era signal (r ≈ −0.41 in 2023→24) has no pre-AI analog — the blue line
+fluctuates near zero or weakly positive throughout 2005–2021. Demand-type
+discounting is doing work that pre-AI composition cannot account for; the
+sector-level displacement signal appears to be genuinely AI-attributable.
+
+Definitive attribution of the dynamic model's sector signal to AI effects would
+require OEWS 2025→2026 annual data (not yet available), which would add another
+post-AI data point and widen the gap with the pre-AI baseline.
+
 ---
 
 ## Wages: the dynamic model adds nothing

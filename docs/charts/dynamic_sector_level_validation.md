@@ -37,7 +37,7 @@ The composite masks variation across years. See `dynamic_sector_level_employment
 | 2024→2025 | +0.532 | 0.011 |
 | Composite | +0.528 | 0.012 |
 
-The signal is positive in all four periods and statistically significant in three of four. The strengthening from 2022→23 (r = +0.329, p = 0.135) to 2023→24 (r = +0.544, p = 0.009) is consistent with AI adoption having an increasing and measurable effect on sector-level employment outcomes over the observation window.
+The signal is positive in all four periods and statistically significant in three of four. The strengthening from 2022→23 (r = +0.329, p = 0.135) to 2023→24 (r = +0.544, p = 0.009) is consistent with AI adoption having an increasing effect on sector-level employment outcomes — but see the confound note below before treating this as specifically AI-attributable.
 
 ### Wage correlations by period
 
@@ -82,3 +82,11 @@ Sectors in the lower-left include:
 The sector-level r = +0.528 coexists with occupation-level sector-adjusted r ≈ 0.01–0.02 (see `dynamic_model_growth_validation.md`). This combination means: the model correctly identifies which sectors gained or lost labor, but within any sector it cannot distinguish which specific occupations outperformed their peers. The sector-level signal is real; the occupation-level signal is not yet detectable.
 
 This is the expected pattern for a model that redistributes labor via sector-level Unbounded capacity rather than occupation-specific adjacency. Strengthening the occupation-level prediction would require a more granular absorption mechanism that routes displaced workers toward skill-adjacent Unbounded occupations rather than all Unbounded occupations proportionally.
+
+## Confound: pre-existing sector composition
+
+Extending the BLS baseline to 2005 (see `model_signal_over_time.md`) reveals that the dynamic model's sector-level r was already r ≈ +0.43–0.48 in 2005→06 and 2006→07, well before meaningful AI adoption. Unbounded sectors — Computer and Mathematical, Healthcare, Life Sciences — have grown faster than Bounded sectors as part of a long-running secular shift in the economy. The model, which assigns positive `net_employment_change` to Unbounded-heavy sectors, therefore partly captures a pre-existing structural tendency.
+
+The AI-era values (r ≈ +0.53–0.54 in 2023→24 and 2024→25) are modestly above the pre-AI peak of +0.43–0.48, consistent with AI accelerating the redistribution. But three post-AI years (2022→25) is insufficient to cleanly separate amplification from the baseline trend. The claim that this signal reflects AI effects specifically is weakened by the pre-AI baseline; a stronger test requires more post-AI data.
+
+**The rebound-adjusted model is not subject to this confound.** Its r fluctuates near zero or weakly positive throughout 2005–2021 (the wrong sign for a gross displacement measure), then turns negative in 2023→24. That negative signal has no pre-AI analog and is more specifically attributable to AI-era structural pressure. Definitive AI attribution for the dynamic model's sector signal requires OEWS 2025→2026 annual data, which is not yet available.

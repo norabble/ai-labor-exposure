@@ -29,6 +29,8 @@ Outputs (saved to data/output/visualizations/):
   • exposure_share_by_group.png               — share of total AI exposure by SOC group
   • cps_2026_direction.png                    — CPS Apr 2025→Apr 2026 employment direction by major group
   • cps_model_vs_actual.png                   — scatter: employment-weighted exposure score vs. CPS growth, major group level
+  • model_signal_over_time.png                — sector-level Pearson r by YoY period (2015→2025) for all three models;
+                                                2022 boundary marked to distinguish pre-AI baseline from AI era
 """
 
 import math
@@ -282,6 +284,191 @@ def _make_sector_subplot_figure(
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
+
+
+def plot_model_signal_over_time(
+    merged_validation_df: pd.DataFrame,
+    dynamic_validation_df: pd.DataFrame,
+    output_dir: str,
+    anthropic_exp_df: pd.DataFrame | None = None,
+) -> None:
+    """
+    Sector-level Pearson r between each model score and YoY employment growth,
+    plotted as a time series spanning 2015→2025. The 2022 boundary is marked to
+    separate pre-AI and AI-era periods. COVID-affected periods are shaded.
+
+    Three model lines:
+      • Rebound-adjusted exposure (occupation_exposure) — gross, ≥ 0
+      • Dynamic net employment change (net_employment_change) — signed
+      • Anthropic observed task coverage (observed_exposure) — gross, ≥ 0 (if available)
+
+    Because the rebound-adjusted and observed measures validate with *negative* r
+    (higher exposure → less growth) while the dynamic measure validates with
+    *positive* r (higher net change → more growth), the y-axis is labeled with
+    the sign convention for each line noted in the legend.
+    """
+    latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
+
+    # Collect all YoY growth columns in chronological order
+    def _sort_period(col_name: str) -> tuple[int, int]:
+        key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+        if key == "composite" or key == "pre_ai":
+            return (99, 0)
+        parts = key.split("_")
+        return (int(parts[0]), int(parts[1]))
+
+    hist_yoy = sorted(
+        [c for c in merged_validation_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
+        key=_sort_period,
+    )
+    current_yoy = sorted(
+        [c for c in merged_validation_df.columns if c.startswith("emp_growth_") and "composite" not in c],
+        key=_sort_period,
+    )
+    all_period_cols = hist_yoy + current_yoy
+
+    if len(all_period_cols) < 2:
+        return
+
+    # Build common dataframe: join dynamic net_employment_change and (optionally) observed_exposure
+    base_df = merged_validation_df.copy()
+    base_df = base_df.merge(
+        dynamic_validation_df[["OCC_CODE", "net_employment_change"]],
+        on="OCC_CODE",
+        how="left",
+    )
+    has_observed = anthropic_exp_df is not None and "observed_exposure" in anthropic_exp_df.columns
+    if has_observed:
+        obs_col_map = {"occ_code": "OCC_CODE"} if "occ_code" in anthropic_exp_df.columns else {}
+        obs_df = anthropic_exp_df.rename(columns=obs_col_map)[["OCC_CODE", "observed_exposure"]]
+        base_df = base_df.merge(obs_df, on="OCC_CODE", how="left")
+
+    base_df["soc_major"] = base_df["OCC_CODE"].str[:2]
+
+    def _sector_r(emp_col: str, score_col: str) -> tuple[float, float, int] | None:
+        """Compute sector-level Pearson r for one period and score column."""
+        subset = base_df[[score_col, emp_col, "soc_major", latest_emp_col]].dropna()
+        if len(subset) < 10:
+            return None
+        rows = []
+        for soc_grp, grp in subset.groupby("soc_major"):
+            w = grp[latest_emp_col]
+            rows.append(
+                {
+                    "score": (grp[score_col] * w).sum() / w.sum(),
+                    "growth": (grp[emp_col] * w).sum() / w.sum(),
+                }
+            )
+        sec = pd.DataFrame(rows).dropna()
+        if len(sec) < 5:
+            return None
+        r, p = stats.pearsonr(sec["score"], sec["growth"])
+        return r, p, len(sec)
+
+    # Compute r for each period and each model
+    score_configs = [
+        ("occupation_exposure", "Rebound-adjusted (−r = correct)", "steelblue", "-o"),
+        ("net_employment_change", "Dynamic net change (+r = correct)", "darkorange", "-s"),
+    ]
+    if has_observed:
+        score_configs.append(("observed_exposure", "Observed AI coverage (−r = correct)", "seagreen", "-^"))
+
+    period_labels = []
+    for col in all_period_cols:
+        key = col.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+        parts = key.split("_")
+        period_labels.append(f"20{parts[0]}→\n20{parts[1]}")
+
+    r_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
+    p_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
+    for period_col in all_period_cols:
+        for score_col, _, _, _ in score_configs:
+            result = _sector_r(period_col, score_col)
+            if result is not None:
+                r_series[score_col].append(result[0])
+                p_series[score_col].append(result[1])
+            else:
+                r_series[score_col].append(None)
+                p_series[score_col].append(None)
+
+    sns.set_theme(style="whitegrid")
+    fig, ax = plt.subplots(figsize=(14, 5))
+
+    x = list(range(len(all_period_cols)))
+
+    # Shade COVID-affected periods (2019→20 and 2020→21)
+    covid_cols = ["hist_emp_growth_19_20", "hist_emp_growth_20_21"]
+    for i, col in enumerate(all_period_cols):
+        if col in covid_cols:
+            ax.axvspan(i - 0.4, i + 0.4, alpha=0.12, color="red", zorder=0)
+
+    # Shade AI era (from 2022→23 onward)
+    ai_start = next((i for i, c in enumerate(all_period_cols) if not c.startswith("hist_")), None)
+    if ai_start is not None:
+        ax.axvspan(ai_start - 0.5, len(all_period_cols) - 0.5, alpha=0.08, color="royalblue", zorder=0)
+        ax.axvline(ai_start - 0.5, color="royalblue", linestyle="--", linewidth=1.2, alpha=0.7, label="AI era begins (2022→23)")
+
+    ax.axhline(0, color="grey", linewidth=0.8)
+
+    for score_col, label, color, marker in score_configs:
+        xs = [xi for xi, v in zip(x, r_series[score_col]) if v is not None]
+        ys = [v for v in r_series[score_col] if v is not None]
+        ps = [v for v in p_series[score_col] if v is not None]
+        ax.plot(
+            xs,
+            ys,
+            marker[1:] or "o",
+            marker=marker[1:] if len(marker) > 1 else "o",
+            linestyle="-",
+            color=color,
+            label=label,
+            linewidth=1.6,
+            markersize=6,
+            zorder=3,
+        )
+        # Annotate significant periods
+        for xi, yi, pi in zip(xs, ys, ps):
+            if pi is not None and pi < 0.05:
+                ax.annotate(
+                    f"r={yi:+.2f}*",
+                    (xi, yi),
+                    textcoords="offset points",
+                    xytext=(0, 8 if yi >= 0 else -14),
+                    ha="center",
+                    fontsize=7,
+                    color=color,
+                )
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(period_labels, fontsize=8)
+    ax.set_ylabel("Sector-Level Pearson r (n=22 sectors)", fontsize=10)
+    ax.set_xlabel("YoY Period", fontsize=10)
+    ax.set_title(
+        "Model Predictive Signal Over Time: Sector-Level Correlation with Employment Growth\n"
+        "Red shading = COVID-disrupted periods; blue shading = AI era (2022→). "
+        "Significant periods (p<0.05) annotated.",
+        fontsize=11,
+    )
+    ax.legend(fontsize=9, loc="lower left")
+    ax.set_ylim(-0.75, 0.75)
+
+    # Text box for note on sign conventions
+    ax.text(
+        0.01,
+        0.02,
+        "Sign note: rebound-adjusted and observed validate negative (more exposure → less growth);\n"
+        "dynamic net change validates positive (predicted gainers grow). Both directions are 'correct'.",
+        transform=ax.transAxes,
+        fontsize=7,
+        va="bottom",
+        color="dimgrey",
+        bbox={"boxstyle": "round,pad=0.3", "facecolor": "white", "alpha": 0.7},
+    )
+
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}/model_signal_over_time.png", dpi=300, bbox_inches="tight")
+    plt.close()
+    print(f"Saved {output_dir}/model_signal_over_time.png")
 
 
 # CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
@@ -717,6 +904,14 @@ def main():
         ylabel="Sector Mean Wage Growth",
         suptitle="Sector-Level Validation: Dynamic Net Employment Change vs. Wage Growth",
     )
+
+    # ── Model signal over time (historical baseline) ─────────────────────────
+    _anthropic_exp_df = (
+        pd.read_csv("data/raw/anthropic_job_exposure.csv").rename(columns={"occ_code": "OCC_CODE"})
+        if os.path.exists("data/raw/anthropic_job_exposure.csv")
+        else None
+    )
+    plot_model_signal_over_time(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df)
 
     # ── AI exposure volume ────────────────────────────────────────────────────
     # exposure_volume = (occupation employment / total modeled employment) × mean_penetration

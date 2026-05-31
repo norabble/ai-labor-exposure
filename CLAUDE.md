@@ -45,7 +45,7 @@ This project produces a **structural exposure score** — a current snapshot of 
 
 ## Key Design Decisions
 
-**BLS downloads require Node.js.** BLS blocks plain HTTP requests; `download_bls.js` uses Puppeteer (headless Chrome) to bypass this. The Python `requests` approach will not work. The 2024 data is only available as `oesm24all.zip` (all areas); `analyze_bls.py` filters it to national cross-industry rows (`AREA_TYPE==1`, `OWN_CODE==1235`, `NAICS=='000000'`).
+**BLS downloads require Node.js.** BLS blocks plain HTTP requests; `download_bls.js` uses Puppeteer (headless Chrome) to bypass this. The Python `requests` approach will not work. The 2024/2025 data is only available as all-areas files (`oesm24all.zip`, `oesm25all.zip`); `analyze_bls.py` filters them to national cross-industry rows (`AREA_TYPE==1`, `OWN_CODE==1235`, `NAICS=='000000'`). Historical files 2015–2021 are national-only and require no such filtering. BLS switched from SOC 2010 to SOC 2018 occupation codes at 2019; joining 2015–2018 onto the 2022 anchor retains ~86–87% of occupations (codes stable across the revision).
 
 **Task matching is text-based.** The Anthropic task penetration dataset has no Task IDs, so `synthesize_impacts.py` joins O\*NET tasks to Anthropic penetration scores by lowercased exact text match. This is intentional, not a gap.
 
@@ -128,6 +128,7 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 | `anthropic_observed_sector_level_wage_validation.png` | `validate_bls.py` | 2×2 grid: sector mean Anthropic observed task coverage vs. sector wage growth per period. Borderline negative in 2022→23 (r=−0.416, p=0.054), matching Eloundou's sign and timing. See `docs/charts/anthropic_observed_sector_level_wage_validation.md`. |
 | `cps_2026_direction.png` | `validate_bls.py` | Horizontal bar: Apr 2025→Apr 2026 employment growth by SOC major group, from BLS CPS Table A-19. Directional indicator only — not BLS OEWS. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_2026_direction.md`. |
 | `cps_model_vs_actual.png` | `validate_bls.py` | Scatter: employment-weighted model impact per SOC major group vs. CPS Apr 2025→Apr 2026 growth. Major-group level validation against CPS data. Requires `data/raw/cps/table_a19.html`. See `docs/charts/cps_model_vs_actual.md`. |
+| `model_signal_over_time.png` | `validate_bls.py` | Sector-level Pearson r by YoY period (2015→2025) for rebound-adjusted, dynamic, and Anthropic observed models. 2022 boundary and COVID years marked. Tests whether the AI-era signal is pre-existing or emerges post-2022. See `docs/charts/model_signal_over_time.md`. |
 
 ## Coding Standards
 

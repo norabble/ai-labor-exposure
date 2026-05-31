@@ -7,16 +7,28 @@ years, plus a composite total change from the anchor year (2022) to the most
 recent year.
 
 Inputs (any subset that exists under data/raw/bls/):
-  • oesm22nat.zip — 2022 national-only file
+  • oesm15nat.zip – oesm21nat.zip — historical national files (2015–2021)
+  • oesm22nat.zip — 2022 national-only file (merge anchor; composite base)
   • oesm23nat.zip — 2023 national-only file
   • oesm24all.zip — 2024 all-areas file (filtered to AREA_TYPE==1)
   • oesm25all.zip — 2025 all-areas file (filtered to AREA_TYPE==1)
 
 Output:
   • data/output/bls_trends.csv
-    Columns include TOT_EMP_{yy}, A_MEDIAN_{yy} per year, then:
-      emp_growth_{yy}_{yy}  / wage_growth_{yy}_{yy}  for each consecutive pair
-      emp_growth_composite  / wage_growth_composite   from anchor to latest year
+    Core columns (2022-onward):
+      TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
+      emp_growth_{yy}_{yy}                — YoY growth for 2022→2023 onward
+      emp_growth_composite                 — 2022→latest
+    Historical columns (pre-2022, prefixed hist_ to exclude from auto-detection):
+      TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
+      hist_emp_growth_{yy}_{yy}            — YoY growth for periods before 2022
+      hist_emp_growth_pre_ai               — composite from earliest available year → 2022
+
+Note on SOC codes: BLS switched from SOC 2010 to SOC 2018 codes starting
+with 2019 data. Joining 2015–2018 to 2022 retains ~86–87% of occupations
+(codes that did not change). All joins are left-joins anchored at 2022, so
+the existing 2022–2025 result set is preserved; historical columns are NaN
+for occupations whose codes changed.
 """
 
 import os
@@ -25,20 +37,37 @@ import zipfile
 import pandas as pd
 
 YEAR_CONFIGS = [
+    ("15", "data/raw/bls/oesm15nat.zip"),
+    ("16", "data/raw/bls/oesm16nat.zip"),
+    ("17", "data/raw/bls/oesm17nat.zip"),
+    ("18", "data/raw/bls/oesm18nat.zip"),
+    ("19", "data/raw/bls/oesm19nat.zip"),
+    ("20", "data/raw/bls/oesm20nat.zip"),
+    ("21", "data/raw/bls/oesm21nat.zip"),
     ("22", "data/raw/bls/oesm22nat.zip"),
     ("23", "data/raw/bls/oesm23nat.zip"),
     ("24", "data/raw/bls/oesm24all.zip"),
     ("25", "data/raw/bls/oesm25all.zip"),
 ]
 
+# The composite growth column is always anchored at this year, regardless of
+# which historical years are available. Do not change without updating
+# validate_bls.py and all downstream docs.
+COMPOSITE_ANCHOR_YEAR = "22"
+
 
 def load_bls_data(zip_path: str) -> pd.DataFrame | None:
     """Load BLS OEWS data for one year, filtered to national cross-industry detailed occupations."""
     print(f"Reading {zip_path}...")
     with zipfile.ZipFile(zip_path) as zip_file:
-        xls_files = [f for f in zip_file.namelist() if f.endswith(".xlsx")]
+        # Skip layout/field-description files that appear in older zip archives
+        xls_files = [
+            f
+            for f in zip_file.namelist()
+            if (f.endswith(".xlsx") or f.endswith(".xls")) and "field" not in f.lower() and "layout" not in f.lower()
+        ]
         if not xls_files:
-            print(f"No .xlsx file found in {zip_path}")
+            print(f"No data .xlsx/.xls file found in {zip_path}")
             return None
         print(f"Found {xls_files[0]}")
         with zip_file.open(xls_files[0]) as excel_file:
@@ -46,28 +75,33 @@ def load_bls_data(zip_path: str) -> pd.DataFrame | None:
 
     bls_dataframe.columns = [str(c).upper().strip() for c in bls_dataframe.columns]
 
-    # Filter to national cross-industry data. The 2024 all-areas file requires
-    # explicit area and ownership filters; the national-only files already satisfy
+    # Filter to national cross-industry data. The all-areas files require
+    # explicit area and ownership filters; national-only files already satisfy
     # them, but filtering is harmless.
     if "AREA_TYPE" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["AREA_TYPE"] == 1]
     if "OWN_CODE" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["OWN_CODE"] == 1235]
-    # NAICS '000000' (2024 all-areas) and 0 (national files) both mean cross-industry
+    # NAICS '000000' (all-areas files) and 0 (national files) both mean cross-industry
     if "NAICS" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["NAICS"].astype(str).str.strip("0") == ""]
 
+    # 2015–2018 files use OCC_GROUP; 2019+ use O_GROUP
     if "O_GROUP" in bls_dataframe.columns:
         bls_dataframe = bls_dataframe[bls_dataframe["O_GROUP"] == "detailed"]
+    elif "OCC_GROUP" in bls_dataframe.columns:
+        bls_dataframe = bls_dataframe[bls_dataframe["OCC_GROUP"] == "detailed"]
 
     target_columns = ["OCC_CODE", "OCC_TITLE", "TOT_EMP", "A_MEDIAN"]
-    bls_dataframe = bls_dataframe[target_columns].copy()
+    available_targets = [c for c in target_columns if c in bls_dataframe.columns]
+    bls_dataframe = bls_dataframe[available_targets].copy()
 
     for col in ["TOT_EMP", "A_MEDIAN"]:
-        bls_dataframe[col] = pd.to_numeric(
-            bls_dataframe[col].astype(str).str.replace(",", "").str.replace("*", ""),
-            errors="coerce",
-        )
+        if col in bls_dataframe.columns:
+            bls_dataframe[col] = pd.to_numeric(
+                bls_dataframe[col].astype(str).str.replace(",", "").str.replace("*", ""),
+                errors="coerce",
+            )
 
     return bls_dataframe
 
@@ -89,17 +123,26 @@ def main():
     available_years = sorted(year_dataframes.keys())
     print(f"Building trends for years: {available_years}")
 
-    # Merge all years onto a common OCC_CODE index
-    anchor_year = available_years[0]
-    merged_bls_data = year_dataframes[anchor_year].rename(
+    if COMPOSITE_ANCHOR_YEAR not in year_dataframes:
+        print(f"Error: composite anchor year {COMPOSITE_ANCHOR_YEAR} not available.")
+        return
+
+    # Anchor all merges at the composite anchor year (2022) to preserve the
+    # existing occupation set. Earlier years are left-joined so that occupations
+    # whose codes changed across the SOC 2010→2018 revision (2015–2018 data) keep
+    # NaN for those historical columns rather than being dropped.
+    anchor_df = year_dataframes[COMPOSITE_ANCHOR_YEAR].rename(
         columns={
-            "OCC_TITLE": f"OCC_TITLE_{anchor_year}",
-            "TOT_EMP": f"TOT_EMP_{anchor_year}",
-            "A_MEDIAN": f"A_MEDIAN_{anchor_year}",
+            "OCC_TITLE": f"OCC_TITLE_{COMPOSITE_ANCHOR_YEAR}",
+            "TOT_EMP": f"TOT_EMP_{COMPOSITE_ANCHOR_YEAR}",
+            "A_MEDIAN": f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}",
         }
     )
+    merged_bls_data = anchor_df
 
-    for year_suffix in available_years[1:]:
+    for year_suffix in available_years:
+        if year_suffix == COMPOSITE_ANCHOR_YEAR:
+            continue
         year_df = year_dataframes[year_suffix].rename(
             columns={
                 "OCC_TITLE": f"OCC_TITLE_{year_suffix}",
@@ -108,29 +151,49 @@ def main():
             }
         )
         merged_bls_data = merged_bls_data.merge(
-            year_df[["OCC_CODE", f"TOT_EMP_{year_suffix}", f"A_MEDIAN_{year_suffix}"]],
+            year_df[["OCC_CODE"] + [c for c in year_df.columns if c != "OCC_CODE"]],
             on="OCC_CODE",
+            how="left",
         )
 
-    # Year-over-year growth for each consecutive pair
+    # Year-over-year growth for each consecutive pair.
+    # Pre-2022 pairs use the hist_ prefix so that validate_bls.py's auto-detection
+    # of emp_growth_* columns does not add them to the existing 2×2 grid charts.
     for i in range(len(available_years) - 1):
         prev_year = available_years[i]
         curr_year = available_years[i + 1]
-        merged_bls_data[f"emp_growth_{prev_year}_{curr_year}"] = (
+        prefix = "hist_" if curr_year <= COMPOSITE_ANCHOR_YEAR else ""
+        merged_bls_data[f"{prefix}emp_growth_{prev_year}_{curr_year}"] = (
             merged_bls_data[f"TOT_EMP_{curr_year}"] - merged_bls_data[f"TOT_EMP_{prev_year}"]
         ) / merged_bls_data[f"TOT_EMP_{prev_year}"]
-        merged_bls_data[f"wage_growth_{prev_year}_{curr_year}"] = (
-            merged_bls_data[f"A_MEDIAN_{curr_year}"] - merged_bls_data[f"A_MEDIAN_{prev_year}"]
-        ) / merged_bls_data[f"A_MEDIAN_{prev_year}"]
+        if f"A_MEDIAN_{prev_year}" in merged_bls_data.columns and f"A_MEDIAN_{curr_year}" in merged_bls_data.columns:
+            merged_bls_data[f"{prefix}wage_growth_{prev_year}_{curr_year}"] = (
+                merged_bls_data[f"A_MEDIAN_{curr_year}"] - merged_bls_data[f"A_MEDIAN_{prev_year}"]
+            ) / merged_bls_data[f"A_MEDIAN_{prev_year}"]
 
-    # Composite: total change from anchor year to the most recent year
-    latest_year = available_years[-1]
-    merged_bls_data["emp_growth_composite"] = (
-        merged_bls_data[f"TOT_EMP_{latest_year}"] - merged_bls_data[f"TOT_EMP_{anchor_year}"]
-    ) / merged_bls_data[f"TOT_EMP_{anchor_year}"]
-    merged_bls_data["wage_growth_composite"] = (
-        merged_bls_data[f"A_MEDIAN_{latest_year}"] - merged_bls_data[f"A_MEDIAN_{anchor_year}"]
-    ) / merged_bls_data[f"A_MEDIAN_{anchor_year}"]
+    # Composite: always 2022 → latest year
+    latest_year = [y for y in available_years if y > COMPOSITE_ANCHOR_YEAR]
+    if latest_year:
+        latest_year = latest_year[-1]
+        merged_bls_data["emp_growth_composite"] = (
+            merged_bls_data[f"TOT_EMP_{latest_year}"] - merged_bls_data[f"TOT_EMP_{COMPOSITE_ANCHOR_YEAR}"]
+        ) / merged_bls_data[f"TOT_EMP_{COMPOSITE_ANCHOR_YEAR}"]
+        if f"A_MEDIAN_{latest_year}" in merged_bls_data.columns:
+            merged_bls_data["wage_growth_composite"] = (
+                merged_bls_data[f"A_MEDIAN_{latest_year}"] - merged_bls_data[f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}"]
+            ) / merged_bls_data[f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}"]
+
+    # Pre-AI composite: earliest available year → 2022.
+    # Uses hist_ prefix to stay out of auto-detection.
+    earliest_year = available_years[0]
+    if earliest_year < COMPOSITE_ANCHOR_YEAR and f"TOT_EMP_{earliest_year}" in merged_bls_data.columns:
+        merged_bls_data["hist_emp_growth_pre_ai"] = (
+            merged_bls_data[f"TOT_EMP_{COMPOSITE_ANCHOR_YEAR}"] - merged_bls_data[f"TOT_EMP_{earliest_year}"]
+        ) / merged_bls_data[f"TOT_EMP_{earliest_year}"]
+        if f"A_MEDIAN_{earliest_year}" in merged_bls_data.columns:
+            merged_bls_data["hist_wage_growth_pre_ai"] = (
+                merged_bls_data[f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}"] - merged_bls_data[f"A_MEDIAN_{earliest_year}"]
+            ) / merged_bls_data[f"A_MEDIAN_{earliest_year}"]
 
     os.makedirs("data/output", exist_ok=True)
     merged_bls_data.to_csv("data/output/bls_trends.csv", index=False)

@@ -24,12 +24,20 @@ const https = require('https');
     downloadPath: downloadDir
   });
 
-  // 2024 and 2025 are only available as the full "all areas" file; 2022/2023 are national-only.
+  // 2024 and 2025 are only available as the full "all areas" file; 2022/2023 and earlier are national-only.
+  // Historical files (2015–2021) use SOC 2010 codes through 2018; SOC 2018 codes from 2019 onward.
   const urls = [
     'https://www.bls.gov/oes/special-requests/oesm25all.zip',
     'https://www.bls.gov/oes/special.requests/oesm24all.zip',
     'https://www.bls.gov/oes/special.requests/oesm23nat.zip',
-    'https://www.bls.gov/oes/special.requests/oesm22nat.zip'
+    'https://www.bls.gov/oes/special.requests/oesm22nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm21nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm20nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm19nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm18nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm17nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm16nat.zip',
+    'https://www.bls.gov/oes/special.requests/oesm15nat.zip',
   ];
 
   for (const url of urls) {

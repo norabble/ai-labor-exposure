@@ -1,3 +1,30 @@
+"""
+classify_tasks.py
+─────────────────
+Labels every O*NET task statement with the economic demand rule that governs it,
+using Gemini on Vertex AI. This is phase 1 of the pipeline and is run once, out
+of band, via `make classify` — the ~19k LLM calls are expensive and slow, so the
+result is committed to seeds/ rather than regenerated per run.
+
+Each task is classified as one of:
+  • Bounded     — demand is satiable; productivity gain does not feed back into demand
+  • Unbounded   — demand is non-zero-sum; productivity gain feeds back into demand
+  • Adversarial — subset of Unbounded where demand growth is zero-sum (arms race)
+
+Inputs:
+  • data/raw/onet_tasks.csv — written by download_data.py
+  • GCP_PROJECT_ID (and optionally GCP_LOCATION) from .env
+
+Outputs:
+  • data/output/classified_all_tasks_checkpoint.csv — written after each occupation
+    group, so an interrupted run resumes rather than restarting
+  • data/output/classified_all_tasks.csv — final result, promoted to
+    seeds/classified_all_tasks.csv by hand once a run completes
+  • data/output/classified_tasks_batch1.csv — sample mode only
+
+Usage: `uv run classify_tasks.py all` (full run) or `sample` (100-task spot check).
+"""
+
 import json
 import os
 import time

@@ -134,8 +134,24 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 
 ## Coding Standards
 
-From `CONTRIBUTING.md` — these are enforced by pre-commit:
+From `CONTRIBUTING.md`. Only some of these are machine-checkable — the rest are
+review conventions, so hold to them without expecting a tool to catch a lapse:
 
-- **No generic abbreviations**: never `df`, `res`, `tmp`, `val`. Use `occupation_exposure_df`, `task_penetration_response`, etc.
-- **Domain terminology**: variable names must reflect what they contain (`penetration_value`, `demand_type`, `onet_tasks_df`)
-- **Module docstrings**: every Python file must have a module-level docstring describing its name, purpose, inputs, and outputs
+- **No generic abbreviations**: never `df`, `res`, `tmp`, `val`. Use `occupation_exposure_df`, `task_penetration_response`, etc. *(convention — no linter enforces this)*
+- **Domain terminology**: variable names must reflect what they contain (`penetration_value`, `demand_type`, `onet_tasks_df`). *(convention — no linter enforces this)*
+- **Module docstrings**: every Python file must have a module-level docstring describing its name, purpose, inputs, and outputs. *(enforced — ruff `D100`)*
+
+Ruff's selected rules are `E`, `W`, `F`, `I`, `N`, and `D100`. Note that `N` is
+pep8-**naming**, which checks casing conventions only; it has nothing to say
+about the abbreviation rule above.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`:
+`ruff check`, `ruff format --check`, `pytest tests/`, and a `node --check` parse
+of the Puppeteer scripts. It installs with `uv sync --locked`, so a dependency
+bump that does not re-lock fails there rather than at release time.
+
+The ruff version is pinned in two places that must agree — the `dev` group in
+`pyproject.toml` and the `ruff-pre-commit` rev in `.pre-commit-config.yaml`. If
+they drift, `make lint` and the pre-commit hook will reformat each other's work.

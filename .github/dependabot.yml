@@ -1,0 +1,32 @@
+# Version updates. Security updates are enabled separately in the repository
+# settings; the groups below also apply to those, which keeps a batch of
+# advisories against one ecosystem from opening five separate pull requests.
+version: 2
+
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

@@ -71,9 +71,11 @@ git tag v1.0 && git push origin v1.0
 
 The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic, BLS, and CPS data, then runs `analyze → synthesize → plot → validate`. Classification is skipped — the pre-computed results live in `seeds/classified_all_tasks.csv` and are copied into place before the pipeline runs. To update the seed after a re-classification, copy `data/output/classified_all_tasks.csv` to `seeds/` and commit it.
 
-**`seeds/cps_a19_panel.csv` follows the same convention.** CPS Table A-19 is a rolling page carrying only two months at a time, so history exists only in this committed panel — `data/` is gitignored and CI starts empty. Each run merges the latest fetch into the panel and writes `data/output/cps_a19_panel.csv`; promote it with `cp data/output/cps_a19_panel.csv seeds/` and commit, or the newly fetched months are lost. If BLS blocks the fetch, `download_cps.js` warns and exits 0 under CI so the pipeline still renders correctly labelled charts from the seed alone.
+**`seeds/cps_a19_panel.csv` follows the same convention.** CPS Table A-19 is a rolling page carrying only two months at a time, so history exists only in this committed panel — `data/` is gitignored and CI starts empty. Each run merges the latest fetch into the panel and writes `data/output/cps_a19_panel.csv`; that file must reach `seeds/` or the newly fetched months are lost. A release run does this for you — its last step opens a `release-artifacts/<tag>` pull request carrying the refreshed panel and the regenerated `docs/charts/images/` PNGs, and **merging that pull request is what preserves the months**. After a local run, promote it by hand with `cp data/output/cps_a19_panel.csv seeds/` and commit. If BLS blocks the fetch, `download_cps.js` warns and exits 0 under CI so the pipeline still renders correctly labelled charts from the seed alone.
 
 BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch if the download script changes.
+
+The release job holds `contents: write` and `pull-requests: write`. It opens a pull request rather than pushing to `main` directly, because `main` is protected and `GITHUB_TOKEN` acts as `github-actions[bot]`, which is not an admin and cannot bypass that.
 
 ## Outputs Reference
 

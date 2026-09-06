@@ -20,6 +20,9 @@ shown:
 Red shading marks COVID-disrupted periods (2019→20, 2020→21); blue shading marks
 the AI era (2022→23 onward); significant periods (p < 0.05) are annotated.
 
+A **separate right-hand panel** covers 2025→2026 from BLS CPS Table A-19. It is
+not part of the line. See [The CPS panel](#the-cps-panel-2025-2026) below.
+
 ## Purpose
 
 This chart answers the primary confound question: **is the AI-era sector signal
@@ -75,7 +78,11 @@ on top of the existing structural tendency — but not a clean separation.
 The **rebound-adjusted model** is not subject to this confound in the same way.
 Its negative AI-era signal (r ≈ −0.40 in 2024→25) has no pre-AI analog,
 suggesting it is more specifically measuring an AI-driven displacement effect
-rather than a pre-existing composition trend.
+rather than a pre-existing composition trend. That reading now carries a caveat:
+the CPS panel puts the same model at the *opposite* sign for 2025→2026 (see
+[The CPS panel](#the-cps-panel-2025-2026)). The CPS values are not significant, so
+they do not overturn the OEWS result, but the AI-era negative signal has not yet
+reproduced on a second survey.
 
 The **observed AI coverage** model shows weakly positive pre-AI r and small
 negative AI-era r — behaving like the rebound-adjusted model without the
@@ -84,6 +91,75 @@ effect as the dynamic model (knowledge-work sectors that eventually attract heav
 AI usage were already growing). Its AI-era negative values are weaker than the
 rebound-adjusted model's, consistent with the demand-type classification adding
 genuine predictive value beyond raw coverage alone.
+
+## The CPS panel (2025→2026)
+
+OEWS stops at a May 2025 reference month, so the main line cannot reach the most
+recent year. The right-hand panel fills that span using CPS Table A-19, the same
+household survey behind [cps_model_vs_actual.md](cps_model_vs_actual.md).
+
+**It is drawn as a separate panel, not as more points on the line, and that is
+deliberate.** Three things make a spliced series misleading:
+
+1. **Different survey.** OEWS is an employer establishment survey (~1.1M records,
+   occupation coded by the employer). CPS is a household survey (~60k interviews,
+   occupation self-reported). The two disagree on both levels and changes for
+   reasons unrelated to AI.
+2. **Different growth statistic.** An OEWS sector point is the employment-weighted
+   mean of *occupation-level* growth rates among model-matched occupations in that
+   sector. A CPS sector point is the growth of the *major-group total*, covering
+   every occupation in the group including those the model never scored. The model
+   score on the x-axis is built identically in both cases — an employment-weighted
+   mean over occupations, weighted by `TOT_EMP_25` — so only the y-variable
+   differs, but that is enough.
+3. **No overlapping period exists to calibrate them.** The panel's earliest month
+   is Apr 2025 and OEWS's last reference month is May 2025. There is no span both
+   surveys measure, so the offset between them cannot be estimated and removed.
+   Any apparent jump from the last OEWS point to the CPS panel is of unknown
+   composition — part survey difference, part real change.
+
+**The panel's x-axis is the endpoint month, not time.** A-19 hands over the latest
+month and the same month a year earlier in one release, so each fetch contributes
+one year-over-year pair. The panel currently holds three (Apr, Jun, Aug), and all
+three measure *the same 12-month 2025→2026 span* from endpoints two months apart.
+The points are drawn hollow and deliberately **unconnected**: their vertical
+spread is endpoint sensitivity, not a trend. Reading the three as a rising or
+falling sequence is the specific misreading this layout exists to prevent.
+
+### What the panel currently shows
+
+| Model | Apr | Jun | Aug | Spread |
+|-------|----:|----:|----:|-------:|
+| Rebound-adjusted (−r = correct) | +0.28 | +0.09 | +0.12 | 0.19 |
+| Dynamic net change (+r = correct) | +0.24 | +0.37 | **+0.48** (p=0.023) | 0.24 |
+| Observed AI coverage (−r = correct) | +0.08 | +0.07 | +0.03 | 0.05 |
+
+**The dynamic model holds its sign and rough magnitude.** All three endpoints are
+positive and land in the same range as its AI-era OEWS values (+0.53 to +0.54).
+Two different surveys agreeing on sign and magnitude is the strongest thing this
+chart says about the dynamic model. Only the Aug endpoint reaches p < 0.05, and a
+spread of 0.24 across endpoints two months apart is wide — the significance is a
+property of one endpoint, not a stable finding.
+
+**The rebound-adjusted model disagrees with itself across surveys.** Its OEWS
+AI-era values are clearly negative (−0.41 in 2023→24, −0.35 in 2024→25), which is
+the correct sign. All three CPS endpoints are positive, which is the wrong one.
+None of the CPS values approach significance (the largest, +0.28, is far from it),
+so this is a failure to reproduce rather than a contradiction — but it is a
+caution against treating the OEWS-era negative signal as established. Which of the
+three explanations above accounts for the flip is not determinable from the data
+on hand.
+
+**Observed AI coverage is flat and slightly wrong-signed**, consistent with its
+weak showing throughout.
+
+### Why CPS is absent from the occupation-level chart
+
+[model_signal_over_time_occupation.md](model_signal_over_time_occupation.md) has
+no CPS panel. A-19 publishes 22 major groups and no occupation detail, so there is
+nothing to correlate at the occupation level. Adding CPS there would require the
+detailed-occupation CPS route sketched in
+[cps_data_expansion.md](../cps_data_expansion.md), which is unimplemented.
 
 ## Survivorship note
 

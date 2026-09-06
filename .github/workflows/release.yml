@@ -41,6 +41,12 @@ jobs:
         if: steps.bls-cache.outputs.cache-hit != 'true'
         run: node download_bls.js
 
+      # Deliberately outside the BLS zip cache gate: A-19 is a rolling monthly
+      # table and must be re-fetched every run. Warns rather than fails if BLS
+      # blocks the runner — seeds/cps_a19_panel.csv still carries real months.
+      - name: Download CPS Table A-19 via Puppeteer
+        run: node download_cps.js
+
       - name: Restore pre-computed classified tasks from seed
         run: |
           mkdir -p data/output
@@ -70,6 +76,7 @@ jobs:
           | `exposure_volume_by_occupation.csv` | Employment-weighted AI exposure by occupation |
           | `exposure_volume_by_group.csv` | Same, rolled up to SOC major group |
           | `employment_by_demand_type.csv` | Workers in each AI demand type bucket |
+          | `cps_a19_panel.csv` | CPS Table A-19 employment by SOC major group and month |
           | `visualizations.zip` | All charts as a single download |
 
           Individual chart PNGs are also attached — see [CLAUDE.md](CLAUDE.md#outputs-reference) for descriptions.
@@ -97,5 +104,6 @@ jobs:
             data/output/exposure_volume_by_occupation.csv \
             data/output/exposure_volume_by_group.csv \
             data/output/employment_by_demand_type.csv \
+            data/output/cps_a19_panel.csv \
             data/output/visualizations.zip \
             data/output/visualizations/*.png

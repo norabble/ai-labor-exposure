@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# A new push to the same branch supersedes the run already in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python via uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --locked fails if uv.lock has drifted from pyproject.toml, so a
+      # dependency bump that forgot to re-lock is caught here rather than
+      # surfacing as a mismatched environment during a release run.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Unit tests
+        run: uv run pytest tests/ -v
+
+      # The Puppeteer download scripts have no unit tests — they need a live
+      # BLS response — so at minimum verify they parse.
+      - name: Syntax-check Node download scripts
+        run: |
+          for script in *.js; do
+            echo "checking $script"
+            node --check "$script"
+          done

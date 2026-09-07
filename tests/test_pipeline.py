@@ -1,3 +1,19 @@
+"""
+tests/test_pipeline.py
+──────────────────────
+Unit tests for the core economic logic of phase 2 — the parts of the pipeline
+that turn a task classification into an exposure number.
+
+Covers:
+  • compute_task_exposure       — rebound adjustment per demand type
+  • rollup_to_occupation        — importance-weighted mean across an occupation's tasks
+  • derive_exposure_tier        — tier boundaries
+  • compute_dynamic_equilibrium — signed net employment change, and the
+    employment-weighted-sum-is-zero invariant it is built on
+
+These are pure-function tests over synthetic frames; they need no downloaded data.
+"""
+
 import pandas as pd
 import pytest
 

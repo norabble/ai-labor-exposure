@@ -61,6 +61,14 @@ rebound_adjusted_exposure = observed_penetration × (1 − rebound_fraction)
 
 `occupation_exposure` is the importance-weighted mean of rebound-adjusted task exposures — always ≥ 0, with higher values indicating greater structural AI exposure. The three rebound constants (`BOUNDED_REBOUND=0.1`, `UNBOUNDED_REBOUND=0.7`, `ADVERSARIAL_REBOUND=0.9`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters; they are structural priors pending calibration against historical elasticity data. See `docs/model_vs_observed_exposure.md` for a comparison against raw observed AI task coverage.
 
+**`dominant_demand` is derived, never carried.** It and `dominant_strength` are a summary of the
+`pct_bounded`/`pct_unbounded`/`pct_adversarial` composition, so they are only valid for the
+composition they were computed from. `attach_dominant_demand` in `synthesize_impacts.py` derives
+both, and it must be re-applied after any aggregation that changes those percentages — in
+particular where `validate_bls.py` collapses several O\*NET occupations into one BLS SOC code.
+Aggregating the percentages with `mean` while taking the label with `first` silently produced 8
+SOC codes, Chief Executives among them, whose label contradicted their own composition.
+
 ## Release Pipeline
 
 Push a `v*` tag to cut a GitHub release with all pipeline outputs attached as assets:

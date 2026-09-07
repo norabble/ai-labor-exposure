@@ -231,15 +231,58 @@ class TestBuildPenetrationLookup:
         lookup_df = build_penetration_lookup(penetration_df)
         assert lookup_df["task_lower"].iloc[0] == "write press releases."
 
-    def test_conflicting_values_for_one_text_are_reported(self, capsys):
+    def test_disagreeing_values_raise_rather_than_picking_one(self):
+        """Collapsing is only safe while the repeated rows agree — so that is checked, not assumed."""
         penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.4]})
-        build_penetration_lookup(penetration_df)
-        assert "conflicting penetration" in capsys.readouterr().out
+        with pytest.raises(ValueError, match="disagreeing penetration values"):
+            build_penetration_lookup(penetration_df)
 
-    def test_agreeing_duplicates_are_not_reported(self, capsys):
-        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263]})
+    def test_the_error_names_the_offending_text_and_its_range(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.4]})
+        with pytest.raises(ValueError) as raised:
+            build_penetration_lookup(penetration_df)
+        message = str(raised.value)
+        assert "write press releases." in message
+        assert "0.4" in message and "0.7263" in message
+        assert "2 rows" in message
+
+    def test_a_value_missing_from_only_some_rows_is_a_disagreement(self):
+        """A missing value is not evidence that two rows describe the same measurement."""
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, None]})
+        with pytest.raises(ValueError, match="disagreeing penetration values"):
+            build_penetration_lookup(penetration_df)
+
+    def test_rows_missing_throughout_agree_with_each_other(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [None, None]})
+        assert len(build_penetration_lookup(penetration_df)) == 1
+
+    def test_float_noise_is_not_treated_as_a_conflict(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263 + 1e-12]})
+        assert len(build_penetration_lookup(penetration_df)) == 1
+
+    def test_a_real_difference_just_above_tolerance_is_a_conflict(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263 + 1e-6]})
+        with pytest.raises(ValueError, match="disagreeing penetration values"):
+            build_penetration_lookup(penetration_df)
+
+    def test_tolerance_is_adjustable_for_a_genuinely_negligible_spread(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7264]})
+        assert len(build_penetration_lookup(penetration_df, tolerance=1e-3)) == 1
+
+    def test_only_repeated_texts_are_checked(self):
+        """Distinct tasks may hold any values; disagreement is only meaningful within one text."""
+        penetration_df = pd.DataFrame({"task": ["Write press releases.", "Draft a budget."], "penetration": [0.7263, 0.4]})
+        assert len(build_penetration_lookup(penetration_df)) == 2
+
+    def test_collapsing_is_reported_on_stdout(self, capsys):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 8, "penetration": [0.7263] * 8})
         build_penetration_lookup(penetration_df)
-        assert "conflicting penetration" not in capsys.readouterr().out
+        assert "Collapsed 7 repeated row(s)" in capsys.readouterr().out
+
+    def test_nothing_is_reported_when_there_is_nothing_to_collapse(self, capsys):
+        penetration_df = pd.DataFrame({"task": ["Write press releases.", "Draft a budget."], "penetration": [0.7263, 0.4]})
+        build_penetration_lookup(penetration_df)
+        assert "Collapsed" not in capsys.readouterr().out
 
     def test_merge_against_the_lookup_does_not_add_rows(self):
         """The regression this fix exists for: 19,281 classified tasks became 19,295 rows."""

@@ -83,6 +83,8 @@ The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic
 
 BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch if the download script changes.
 
+Both workflows set `defaults.run.shell: bash`. GitHub's default is `bash -e`, which stops on a failing command but not on one inside a pipeline — a pipeline's exit code is its last command's. The release job pipes the pipeline into `tee` to capture the run log, so without this a crashed `main.py` would exit 0 and the workflow would go on to package and publish a release from whatever partial output survived.
+
 The release job holds `contents: write` and `pull-requests: write`. It opens a pull request rather than pushing to `main` directly, because `main` is protected and `GITHUB_TOKEN` acts as `github-actions[bot]`, which is not an admin and cannot bypass that.
 
 ## Outputs Reference

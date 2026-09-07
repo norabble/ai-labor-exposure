@@ -22,6 +22,7 @@ from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
     BOUNDED_REBOUND,
     UNBOUNDED_REBOUND,
+    attach_dominant_demand,
     build_penetration_lookup,
     compute_task_exposure,
     derive_exposure_tier,
@@ -231,15 +232,58 @@ class TestBuildPenetrationLookup:
         lookup_df = build_penetration_lookup(penetration_df)
         assert lookup_df["task_lower"].iloc[0] == "write press releases."
 
-    def test_conflicting_values_for_one_text_are_reported(self, capsys):
+    def test_disagreeing_values_raise_rather_than_picking_one(self):
+        """Collapsing is only safe while the repeated rows agree — so that is checked, not assumed."""
         penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.4]})
-        build_penetration_lookup(penetration_df)
-        assert "conflicting penetration" in capsys.readouterr().out
+        with pytest.raises(ValueError, match="disagreeing penetration values"):
+            build_penetration_lookup(penetration_df)
 
-    def test_agreeing_duplicates_are_not_reported(self, capsys):
-        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263]})
+    def test_the_error_names_the_offending_text_and_its_range(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.4]})
+        with pytest.raises(ValueError) as raised:
+            build_penetration_lookup(penetration_df)
+        message = str(raised.value)
+        assert "write press releases." in message
+        assert "0.4" in message and "0.7263" in message
+        assert "2 rows" in message
+
+    def test_a_value_missing_from_only_some_rows_is_a_disagreement(self):
+        """A missing value is not evidence that two rows describe the same measurement."""
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, None]})
+        with pytest.raises(ValueError, match="disagreeing penetration values"):
+            build_penetration_lookup(penetration_df)
+
+    def test_rows_missing_throughout_agree_with_each_other(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [None, None]})
+        assert len(build_penetration_lookup(penetration_df)) == 1
+
+    def test_float_noise_is_not_treated_as_a_conflict(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263 + 1e-12]})
+        assert len(build_penetration_lookup(penetration_df)) == 1
+
+    def test_a_real_difference_just_above_tolerance_is_a_conflict(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263 + 1e-6]})
+        with pytest.raises(ValueError, match="disagreeing penetration values"):
+            build_penetration_lookup(penetration_df)
+
+    def test_tolerance_is_adjustable_for_a_genuinely_negligible_spread(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7264]})
+        assert len(build_penetration_lookup(penetration_df, tolerance=1e-3)) == 1
+
+    def test_only_repeated_texts_are_checked(self):
+        """Distinct tasks may hold any values; disagreement is only meaningful within one text."""
+        penetration_df = pd.DataFrame({"task": ["Write press releases.", "Draft a budget."], "penetration": [0.7263, 0.4]})
+        assert len(build_penetration_lookup(penetration_df)) == 2
+
+    def test_collapsing_is_reported_on_stdout(self, capsys):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 8, "penetration": [0.7263] * 8})
         build_penetration_lookup(penetration_df)
-        assert "conflicting penetration" not in capsys.readouterr().out
+        assert "Collapsed 7 repeated row(s)" in capsys.readouterr().out
+
+    def test_nothing_is_reported_when_there_is_nothing_to_collapse(self, capsys):
+        penetration_df = pd.DataFrame({"task": ["Write press releases.", "Draft a budget."], "penetration": [0.7263, 0.4]})
+        build_penetration_lookup(penetration_df)
+        assert "Collapsed" not in capsys.readouterr().out
 
     def test_merge_against_the_lookup_does_not_add_rows(self):
         """The regression this fix exists for: 19,281 classified tasks became 19,295 rows."""
@@ -256,3 +300,72 @@ class TestBuildPenetrationLookup:
         merged_df = classified_tasks_df.merge(build_penetration_lookup(penetration_df), on="task_lower", how="left", validate="many_to_one")
         assert len(merged_df) == len(classified_tasks_df)
         assert merged_df["penetration"].tolist() == pytest.approx([0.7263, 0.7263, 0.1])
+
+
+class TestAttachDominantDemand:
+    """
+    The label must always be re-derived from the composition it summarises. Copying
+    it through an aggregation is what left 8 SOC codes — Chief Executives among
+    them — labelled with a demand type their own pct_* columns contradicted.
+    """
+
+    @staticmethod
+    def _composition(bounded, unbounded, adversarial):
+        return pd.DataFrame({"pct_bounded": [bounded], "pct_unbounded": [unbounded], "pct_adversarial": [adversarial]})
+
+    def test_picks_the_largest_share(self):
+        labelled = attach_dominant_demand(self._composition(0.281, 0.419, 0.301))
+        assert labelled["dominant_demand"].iloc[0] == "Unbounded"
+
+    def test_strength_is_the_dominant_share(self):
+        labelled = attach_dominant_demand(self._composition(0.281, 0.419, 0.301))
+        assert labelled["dominant_strength"].iloc[0] == pytest.approx(0.419)
+
+    def test_ties_resolve_to_the_first_listed_type(self):
+        labelled = attach_dominant_demand(self._composition(0.5, 0.5, 0.0))
+        assert labelled["dominant_demand"].iloc[0] == "Bounded"
+
+    def test_an_occupation_with_no_task_importance_still_gets_a_label(self):
+        labelled = attach_dominant_demand(self._composition(float("nan"), float("nan"), float("nan")))
+        assert labelled["dominant_demand"].iloc[0] == "Bounded"
+        assert pd.isna(labelled["dominant_strength"].iloc[0])
+
+    def test_relabelling_after_aggregation_overrides_a_stale_label(self):
+        """The Chief Executives case: two O*NET rows averaging to a different winner."""
+        onet_rows_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["11-1011", "11-1011"],
+                "pct_bounded": [0.30, 0.262],
+                "pct_unbounded": [0.20, 0.638],
+                "pct_adversarial": [0.50, 0.100],
+                "dominant_demand": ["Adversarial", "Unbounded"],
+            }
+        )
+        # "first" would carry Adversarial through, but the averaged composition is
+        # 0.281 / 0.419 / 0.300 — Unbounded.
+        aggregated_df = (
+            onet_rows_df.groupby("OCC_CODE").agg({"pct_bounded": "mean", "pct_unbounded": "mean", "pct_adversarial": "mean"}).reset_index()
+        )
+        relabelled_df = attach_dominant_demand(aggregated_df)
+
+        assert onet_rows_df["dominant_demand"].iloc[0] == "Adversarial"
+        assert relabelled_df["dominant_demand"].iloc[0] == "Unbounded"
+
+    def test_label_always_agrees_with_the_composition_it_summarises(self):
+        occupation_df = pd.DataFrame(
+            {
+                "pct_bounded": [0.589, 0.450, 0.197, 0.508, 0.0],
+                "pct_unbounded": [0.000, 0.462, 0.407, 0.492, 1.0],
+                "pct_adversarial": [0.411, 0.087, 0.397, 0.000, 0.0],
+            }
+        )
+        labelled = attach_dominant_demand(occupation_df)
+        for _, row in labelled.iterrows():
+            expected = max(
+                ("Bounded", row["pct_bounded"]),
+                ("Unbounded", row["pct_unbounded"]),
+                ("Adversarial", row["pct_adversarial"]),
+                key=lambda pair: pair[1],
+            )[0]
+            assert row["dominant_demand"] == expected
+            assert row["dominant_strength"] == pytest.approx(row[f"pct_{expected.lower()}"])

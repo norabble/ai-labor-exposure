@@ -63,6 +63,14 @@ rebound_adjusted_exposure = observed_penetration × (1 − rebound_fraction)
 
 `occupation_exposure` is the importance-weighted mean of rebound-adjusted task exposures — always ≥ 0, with higher values indicating greater structural AI exposure. The three rebound constants (`BOUNDED_REBOUND=0.1`, `UNBOUNDED_REBOUND=0.7`, `ADVERSARIAL_REBOUND=0.9`) at the top of `synthesize_impacts.py` are intentionally exposed as tunable research parameters; they are structural priors pending calibration against historical elasticity data. See `docs/model_vs_observed_exposure.md` for a comparison against raw observed AI task coverage.
 
+**`dominant_demand` is derived, never carried.** It and `dominant_strength` are a summary of the
+`pct_bounded`/`pct_unbounded`/`pct_adversarial` composition, so they are only valid for the
+composition they were computed from. `attach_dominant_demand` in `synthesize_impacts.py` derives
+both, and it must be re-applied after any aggregation that changes those percentages — in
+particular where `validate_bls.py` collapses several O\*NET occupations into one BLS SOC code.
+Aggregating the percentages with `mean` while taking the label with `first` silently produced 8
+SOC codes, Chief Executives among them, whose label contradicted their own composition.
+
 ## Release Pipeline
 
 Push a `v*` tag to cut a GitHub release with all pipeline outputs attached as assets:
@@ -76,6 +84,8 @@ The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic
 **`seeds/cps_a19_panel.csv` follows the same convention.** CPS Table A-19 is a rolling page carrying only two months at a time, so history exists only in this committed panel — `data/` is gitignored and CI starts empty. Each run merges the latest fetch into the panel and writes `data/output/cps_a19_panel.csv`; that file must reach `seeds/` or the newly fetched months are lost. A release run does this for you — its last step opens a `release-artifacts/<tag>` pull request carrying the refreshed panel and the regenerated `docs/charts/images/` PNGs, and **merging that pull request is what preserves the months**. After a local run, promote it by hand with `cp data/output/cps_a19_panel.csv seeds/` and commit. If BLS blocks the fetch, `download_cps.js` warns and exits 0 under CI so the pipeline still renders correctly labelled charts from the seed alone.
 
 BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch if the download script changes.
+
+Both workflows set `defaults.run.shell: bash`. GitHub's default is `bash -e`, which stops on a failing command but not on one inside a pipeline — a pipeline's exit code is its last command's. The release job pipes the pipeline into `tee` to capture the run log, so without this a crashed `main.py` would exit 0 and the workflow would go on to package and publish a release from whatever partial output survived.
 
 The release job holds `contents: write` and `pull-requests: write`. It opens a pull request rather than pushing to `main` directly, because `main` is protected and `GITHUB_TOKEN` acts as `github-actions[bot]`, which is not an admin and cannot bypass that.
 
@@ -116,7 +126,7 @@ The release job holds `contents: write` and `pull-requests: write`. It opens a p
 | `observed_vs_rebound_adjusted_exposure.png` | `validate_bls.py` | Scatter of observed AI task coverage vs. rebound-adjusted exposure score. Strong r (0.712): Bounded occupations with high penetration dominate the upper-right; Adversarial/Unbounded cluster near zero regardless of coverage. See `docs/charts/observed_vs_rebound_adjusted_exposure.md`. |
 | `sector_adjusted_employment_growth.png` | `validate_bls.py` | 2×2 grid: model impact vs. employment growth residual (occupation minus employment-weighted sector mean) per period. See `docs/charts/sector_adjusted_growth.md`. |
 | `sector_adjusted_wage_growth.png` | `validate_bls.py` | Same layout as above for wage growth residuals. |
-| `sector_level_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector impact vs. composite growth. Wage r=−0.485, p=0.022, jackknife-robust. See `docs/charts/sector_level_validation.md`. |
+| `sector_level_validation.png` | `validate_bls.py` | 2-panel labeled bubble scatter: employment-weighted sector mean rebound-adjusted exposure vs. composite growth. No significant relationship — employment r=−0.248 (p=0.267), wage r=−0.086 (p=0.704, jackknife-robust). See `docs/charts/sector_level_validation.md`. |
 | `top_exposure_trajectories.png` | `validate_bls.py` | Line chart of 2022–2025 BLS employment trajectories for top 10 highest-exposure occupations, indexed to 100 at 2022. Each line annotated with model exposure score vs. actual employment change. |
 | `high_exposure_concentration.png` | `validate_bls.py` | Bubble chart: structural exposure pressure vs. employment share for occupations above 5% threshold. Bubble size ∝ AI exposure volume. See `docs/charts/high_exposure_concentration.md`. |
 | `dynamic_model_net_change_distribution.png` | `validate_bls.py` / `synthesize_dynamic.py` | Histogram of signed `net_employment_change` across all matched occupations, layered by dominant demand type. Annotates zero line and economy-wide mean. See `docs/charts/dynamic_model_net_change_distribution.md`. |
@@ -133,7 +143,7 @@ The release job holds `contents: write` and `pull-requests: write`. It opens a p
 | `dynamic_sector_level_wage_validation.png` | `validate_bls.py` | 2×2 grid: sector mean `net_employment_change` vs. sector wage growth per period. No significant signal in any period. See `docs/charts/dynamic_sector_level_wage_validation.md`. |
 | `eloundou_sector_level_employment_validation.png` | `validate_bls.py` | 2×2 grid: sector mean Eloundou theoretical exposure vs. sector employment growth per period. No significant signal in any period. See `docs/charts/eloundou_sector_level_employment_validation.md`. |
 | `eloundou_sector_level_wage_validation.png` | `validate_bls.py` | 2×2 grid: sector mean Eloundou theoretical exposure vs. sector wage growth per period. Apparent negative signal in 2022→23 (r=−0.504, p=0.017) is a post-COVID recovery confound — drops to r=−0.287 (p=0.282) when physical/care sectors excluded. See `docs/charts/eloundou_sector_level_wage_validation.md`. |
-| `anthropic_observed_sector_level_employment_validation.png` | `validate_bls.py` | 2×2 grid: sector mean Anthropic observed task coverage vs. sector employment growth per period. Trending positive in 2023→24 (r=+0.364, p=0.096). See `docs/charts/anthropic_observed_sector_level_employment_validation.md`. |
+| `anthropic_observed_sector_level_employment_validation.png` | `validate_bls.py` | 2×2 grid: sector mean Anthropic observed task coverage vs. sector employment growth per period. Trending negative in 2023→24 (r=−0.364, p=0.096) — the hypothesised direction for a gross coverage measure, though short of significance. See `docs/charts/anthropic_observed_sector_level_employment_validation.md`. |
 | `anthropic_observed_sector_level_wage_validation.png` | `validate_bls.py` | 2×2 grid: sector mean Anthropic observed task coverage vs. sector wage growth per period. Borderline negative in 2022→23 (r=−0.416, p=0.054), matching Eloundou's sign and timing. See `docs/charts/anthropic_observed_sector_level_wage_validation.md`. |
 | `cps_2026_direction.png` | `validate_bls.py` | Paired horizontal bars: employment growth by SOC major group over both CPS windows — since the OEWS reference month, and 12-month year-over-year. Dates read from the panel, not hardcoded. Directional indicator only — not BLS OEWS. See `docs/charts/cps_2026_direction.md`. |
 | `cps_rebound_model_vs_actual.png` | `validate_bls.py` | Scatter: employment-weighted rebound-adjusted exposure score per SOC major group vs. CPS growth since the OEWS reference month; year-over-year r reported in the subtitle. See `docs/charts/cps_model_vs_actual.md`. |

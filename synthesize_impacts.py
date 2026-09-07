@@ -43,13 +43,46 @@ ADVERSARIAL_REBOUND = 0.9
 UNBOUNDED_REBOUND = 0.7
 BOUNDED_REBOUND = 0.1
 
+# Repeated task texts must agree on penetration to within this before they are
+# collapsed. Values come from one CSV column, so anything above float noise is a
+# genuine source-data conflict rather than a representation artefact.
+PENETRATION_AGREEMENT_TOLERANCE = 1e-9
+
 OUTPUT_PATH = "data/output/occupation_exposure_report.csv"
 
 
 # ── 1. Load and match data ────────────────────────────────────────────────────
 
 
-def build_penetration_lookup(penetration_df: pd.DataFrame) -> pd.DataFrame:
+def find_disagreeing_task_texts(penetration_lookup_df: pd.DataFrame, tolerance: float = PENETRATION_AGREEMENT_TOLERANCE) -> pd.DataFrame:
+    """
+    Task texts that appear more than once carrying values that do not agree.
+
+    Two rows disagree if their penetration values differ by more than `tolerance`,
+    or if one is missing and the other is not — a missing value is not evidence
+    that two rows describe the same measurement. A group that is entirely missing
+    agrees with itself and is not flagged.
+
+    Returns one row per offending text, with the row count and the observed range.
+    """
+    repeated_rows_df = penetration_lookup_df[penetration_lookup_df["task_lower"].duplicated(keep=False)]
+    if repeated_rows_df.empty:
+        return pd.DataFrame(columns=["task_lower", "n_rows", "n_missing", "min_penetration", "max_penetration"])
+
+    summary_df = repeated_rows_df.groupby("task_lower")["penetration"].agg(
+        n_rows="size",
+        n_missing=lambda values: int(values.isna().sum()),
+        min_penetration="min",
+        max_penetration="max",
+    )
+
+    values_differ = (summary_df["max_penetration"] - summary_df["min_penetration"]).abs() > tolerance
+    missing_is_partial = (summary_df["n_missing"] > 0) & (summary_df["n_missing"] < summary_df["n_rows"])
+
+    return summary_df[values_differ | missing_is_partial].reset_index()
+
+
+def build_penetration_lookup(penetration_df: pd.DataFrame, tolerance: float = PENETRATION_AGREEMENT_TOLERANCE) -> pd.DataFrame:
     """
     Collapse the Anthropic penetration table to one row per normalised task text.
 
@@ -60,20 +93,36 @@ def build_penetration_lookup(penetration_df: pd.DataFrame) -> pd.DataFrame:
     occupation's total_importance and task_exposure sum, over-weighting that one
     task in the importance-weighted mean.
 
-    The repeated texts currently agree on penetration, so collapsing them is
-    lossless. A future release that disagrees is reported rather than silently
-    resolved by whichever row happens to sort first.
+    Collapsing is only safe while the repeated rows agree, which is checked
+    rather than assumed. They do agree today — the known case is one task text
+    published under two capitalisations, four identical rows each, all at 0.7263
+    — so this is a lossless de-duplication of a source-data quirk.
+
+    Raises ValueError if any repeated text carries disagreeing values. Penetration
+    is core model input: every occupation score downstream is derived from it, so
+    a run that cannot be trusted should stop rather than silently keep whichever
+    row happened to sort first.
     """
     penetration_lookup_df = penetration_df.copy()
     penetration_lookup_df["task_lower"] = penetration_lookup_df["task"].str.lower().str.strip()
 
-    values_per_task = penetration_lookup_df.groupby("task_lower")["penetration"].nunique()
-    conflicting_task_texts = values_per_task[values_per_task > 1]
-    if len(conflicting_task_texts) > 0:
-        print(
-            f"  Warning: {len(conflicting_task_texts)} repeated task text(s) carry conflicting penetration "
-            "values; keeping the first of each. Check the Anthropic release if this is unexpected."
+    disagreeing_df = find_disagreeing_task_texts(penetration_lookup_df, tolerance)
+    if not disagreeing_df.empty:
+        offending_lines = "\n".join(
+            f"    {row.n_rows} rows, penetration {row.min_penetration}–{row.max_penetration}"
+            f"{f' ({row.n_missing} missing)' if row.n_missing else ''}: {row.task_lower[:90]!r}"
+            for row in disagreeing_df.itertuples()
         )
+        raise ValueError(
+            f"{len(disagreeing_df)} repeated task text(s) in the Anthropic penetration file carry "
+            f"disagreeing penetration values:\n{offending_lines}\n"
+            "Collapsing them would silently pick one. Resolve the source data — or, if the spread is "
+            "genuinely negligible, raise the tolerance passed to build_penetration_lookup."
+        )
+
+    collapsed_row_count = len(penetration_lookup_df) - penetration_lookup_df["task_lower"].nunique()
+    if collapsed_row_count > 0:
+        print(f"  Collapsed {collapsed_row_count} repeated row(s) in the penetration file; all agreed on penetration.")
 
     return penetration_lookup_df.drop_duplicates("task_lower")[["task_lower", "penetration"]]
 
@@ -132,6 +181,43 @@ def compute_task_exposure(task_dataframe: pd.DataFrame) -> pd.DataFrame:
 
     task_dataframe["task_exposure"] = task_dataframe.apply(_exposure, axis=1) * task_dataframe["task_importance"]
     return task_dataframe
+
+
+# ── Dominant demand type ──────────────────────────────────────────────────────
+
+# Ordered Bounded → Unbounded → Adversarial; ties resolve to the first listed.
+DEMAND_TYPE_PCT_COLUMNS = {
+    "Bounded": "pct_bounded",
+    "Unbounded": "pct_unbounded",
+    "Adversarial": "pct_adversarial",
+}
+
+
+def attach_dominant_demand(occupation_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Derive dominant_demand and dominant_strength from the pct_* composition columns.
+
+    dominant_demand is whichever demand type holds the largest importance-weighted
+    share of an occupation's tasks; dominant_strength is that share.
+
+    This is applied twice, which is why it is a function rather than inline code.
+    Tasks roll up to O*NET occupations here, and validate_bls.py then collapses
+    several O*NET occupations into one BLS SOC code — at which point the label has
+    to be re-derived, because the composition it summarises has changed. Carrying
+    the old label through that aggregation instead is what left 8 SOC codes,
+    Chief Executives among them, labelled with a demand type their own averaged
+    pct_* columns contradicted.
+
+    Always call this after changing pct_*, never copy the label alongside them.
+    """
+    composition_df = occupation_df[list(DEMAND_TYPE_PCT_COLUMNS.values())].rename(
+        columns={pct_column: demand_type for demand_type, pct_column in DEMAND_TYPE_PCT_COLUMNS.items()}
+    )
+    # An occupation with no task importance at all has NaN composition; treat it as
+    # all-zero so it still receives a label, and let dominant_strength stay NaN.
+    occupation_df["dominant_demand"] = composition_df.fillna(0.0).idxmax(axis=1)
+    occupation_df["dominant_strength"] = composition_df.max(axis=1)
+    return occupation_df
 
 
 # ── 3. Roll up to occupation level ────────────────────────────────────────────
@@ -198,19 +284,7 @@ def rollup_to_occupation(task_dataframe: pd.DataFrame) -> pd.DataFrame:
         occupation_aggregation_df["weighted_adversarial"] / occupation_aggregation_df["total_importance"]
     )
 
-    occupation_aggregation_df["dominant_demand"] = (
-        occupation_aggregation_df[["weighted_bounded", "weighted_unbounded", "weighted_adversarial"]]
-        .rename(columns={"weighted_bounded": "Bounded", "weighted_unbounded": "Unbounded", "weighted_adversarial": "Adversarial"})
-        .idxmax(axis=1)
-    )
-
-    pct_col_map = {"Bounded": "pct_bounded", "Unbounded": "pct_unbounded", "Adversarial": "pct_adversarial"}
-    occupation_aggregation_df["dominant_strength"] = occupation_aggregation_df.apply(
-        lambda row: row[pct_col_map[row["dominant_demand"]]],
-        axis=1,
-    )
-
-    return occupation_aggregation_df
+    return attach_dominant_demand(occupation_aggregation_df)
 
 
 # ── 4. Merge Eloundou theoretical exposure ─────────────────────────────────────

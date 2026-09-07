@@ -14,15 +14,23 @@ concurrency:
 permissions:
   contents: read
 
+# GitHub's default shell for `run:` is `bash -e {0}` — which stops on a failing
+# command but NOT on a failing command inside a pipeline, because a pipeline's
+# exit code is its last command's. `shell: bash` is `bash --noprofile --norc
+# -eo pipefail {0}`, so setting it here makes every step fail on a broken pipe.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python via uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 

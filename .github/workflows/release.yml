@@ -5,6 +5,14 @@ on:
     tags:
       - 'v*'
 
+# GitHub's default shell for `run:` is `bash -e {0}` — which stops on a failing
+# command but NOT on a failing command inside a pipeline, because a pipeline's
+# exit code is its last command's. `shell: bash` is `bash --noprofile --norc
+# -eo pipefail {0}`, so setting it here makes every step fail on a broken pipe.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -53,6 +61,9 @@ jobs:
           mkdir -p data/output
           cp seeds/classified_all_tasks.csv data/output/classified_all_tasks.csv
 
+      # Piped into tee so the run log can be embedded in the release notes. Without
+      # the pipefail default above, a failed pipeline would exit 0 here and go on to
+      # package and publish a release from whatever partial output survived.
       - name: Run analysis pipeline
         run: uv run main.py 2>&1 | tee pipeline_run.txt
 

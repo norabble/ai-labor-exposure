@@ -13,13 +13,13 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python via uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
 
@@ -29,7 +29,7 @@ jobs:
           npm install
 
       - name: Cache BLS zip downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         id: bls-cache
         with:
           path: data/raw/bls

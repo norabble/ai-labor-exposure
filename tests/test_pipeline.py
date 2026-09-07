@@ -22,6 +22,7 @@ from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
     BOUNDED_REBOUND,
     UNBOUNDED_REBOUND,
+    attach_dominant_demand,
     build_penetration_lookup,
     compute_task_exposure,
     derive_exposure_tier,
@@ -256,3 +257,72 @@ class TestBuildPenetrationLookup:
         merged_df = classified_tasks_df.merge(build_penetration_lookup(penetration_df), on="task_lower", how="left", validate="many_to_one")
         assert len(merged_df) == len(classified_tasks_df)
         assert merged_df["penetration"].tolist() == pytest.approx([0.7263, 0.7263, 0.1])
+
+
+class TestAttachDominantDemand:
+    """
+    The label must always be re-derived from the composition it summarises. Copying
+    it through an aggregation is what left 8 SOC codes — Chief Executives among
+    them — labelled with a demand type their own pct_* columns contradicted.
+    """
+
+    @staticmethod
+    def _composition(bounded, unbounded, adversarial):
+        return pd.DataFrame({"pct_bounded": [bounded], "pct_unbounded": [unbounded], "pct_adversarial": [adversarial]})
+
+    def test_picks_the_largest_share(self):
+        labelled = attach_dominant_demand(self._composition(0.281, 0.419, 0.301))
+        assert labelled["dominant_demand"].iloc[0] == "Unbounded"
+
+    def test_strength_is_the_dominant_share(self):
+        labelled = attach_dominant_demand(self._composition(0.281, 0.419, 0.301))
+        assert labelled["dominant_strength"].iloc[0] == pytest.approx(0.419)
+
+    def test_ties_resolve_to_the_first_listed_type(self):
+        labelled = attach_dominant_demand(self._composition(0.5, 0.5, 0.0))
+        assert labelled["dominant_demand"].iloc[0] == "Bounded"
+
+    def test_an_occupation_with_no_task_importance_still_gets_a_label(self):
+        labelled = attach_dominant_demand(self._composition(float("nan"), float("nan"), float("nan")))
+        assert labelled["dominant_demand"].iloc[0] == "Bounded"
+        assert pd.isna(labelled["dominant_strength"].iloc[0])
+
+    def test_relabelling_after_aggregation_overrides_a_stale_label(self):
+        """The Chief Executives case: two O*NET rows averaging to a different winner."""
+        onet_rows_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["11-1011", "11-1011"],
+                "pct_bounded": [0.30, 0.262],
+                "pct_unbounded": [0.20, 0.638],
+                "pct_adversarial": [0.50, 0.100],
+                "dominant_demand": ["Adversarial", "Unbounded"],
+            }
+        )
+        # "first" would carry Adversarial through, but the averaged composition is
+        # 0.281 / 0.419 / 0.300 — Unbounded.
+        aggregated_df = (
+            onet_rows_df.groupby("OCC_CODE").agg({"pct_bounded": "mean", "pct_unbounded": "mean", "pct_adversarial": "mean"}).reset_index()
+        )
+        relabelled_df = attach_dominant_demand(aggregated_df)
+
+        assert onet_rows_df["dominant_demand"].iloc[0] == "Adversarial"
+        assert relabelled_df["dominant_demand"].iloc[0] == "Unbounded"
+
+    def test_label_always_agrees_with_the_composition_it_summarises(self):
+        occupation_df = pd.DataFrame(
+            {
+                "pct_bounded": [0.589, 0.450, 0.197, 0.508, 0.0],
+                "pct_unbounded": [0.000, 0.462, 0.407, 0.492, 1.0],
+                "pct_adversarial": [0.411, 0.087, 0.397, 0.000, 0.0],
+            }
+        )
+        labelled = attach_dominant_demand(occupation_df)
+        for _, row in labelled.iterrows():
+            expected = max(
+                ("Bounded", row["pct_bounded"]),
+                ("Unbounded", row["pct_unbounded"]),
+                ("Adversarial", row["pct_adversarial"]),
+                key=lambda pair: pair[1],
+            )[0]
+            assert row["dominant_demand"] == expected
+            assert row["dominant_strength"] == pytest.approx(row[f"pct_{expected.lower()}"])

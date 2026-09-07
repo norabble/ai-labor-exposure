@@ -134,6 +134,43 @@ def compute_task_exposure(task_dataframe: pd.DataFrame) -> pd.DataFrame:
     return task_dataframe
 
 
+# ── Dominant demand type ──────────────────────────────────────────────────────
+
+# Ordered Bounded → Unbounded → Adversarial; ties resolve to the first listed.
+DEMAND_TYPE_PCT_COLUMNS = {
+    "Bounded": "pct_bounded",
+    "Unbounded": "pct_unbounded",
+    "Adversarial": "pct_adversarial",
+}
+
+
+def attach_dominant_demand(occupation_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Derive dominant_demand and dominant_strength from the pct_* composition columns.
+
+    dominant_demand is whichever demand type holds the largest importance-weighted
+    share of an occupation's tasks; dominant_strength is that share.
+
+    This is applied twice, which is why it is a function rather than inline code.
+    Tasks roll up to O*NET occupations here, and validate_bls.py then collapses
+    several O*NET occupations into one BLS SOC code — at which point the label has
+    to be re-derived, because the composition it summarises has changed. Carrying
+    the old label through that aggregation instead is what left 8 SOC codes,
+    Chief Executives among them, labelled with a demand type their own averaged
+    pct_* columns contradicted.
+
+    Always call this after changing pct_*, never copy the label alongside them.
+    """
+    composition_df = occupation_df[list(DEMAND_TYPE_PCT_COLUMNS.values())].rename(
+        columns={pct_column: demand_type for demand_type, pct_column in DEMAND_TYPE_PCT_COLUMNS.items()}
+    )
+    # An occupation with no task importance at all has NaN composition; treat it as
+    # all-zero so it still receives a label, and let dominant_strength stay NaN.
+    occupation_df["dominant_demand"] = composition_df.fillna(0.0).idxmax(axis=1)
+    occupation_df["dominant_strength"] = composition_df.max(axis=1)
+    return occupation_df
+
+
 # ── 3. Roll up to occupation level ────────────────────────────────────────────
 
 
@@ -198,19 +235,7 @@ def rollup_to_occupation(task_dataframe: pd.DataFrame) -> pd.DataFrame:
         occupation_aggregation_df["weighted_adversarial"] / occupation_aggregation_df["total_importance"]
     )
 
-    occupation_aggregation_df["dominant_demand"] = (
-        occupation_aggregation_df[["weighted_bounded", "weighted_unbounded", "weighted_adversarial"]]
-        .rename(columns={"weighted_bounded": "Bounded", "weighted_unbounded": "Unbounded", "weighted_adversarial": "Adversarial"})
-        .idxmax(axis=1)
-    )
-
-    pct_col_map = {"Bounded": "pct_bounded", "Unbounded": "pct_unbounded", "Adversarial": "pct_adversarial"}
-    occupation_aggregation_df["dominant_strength"] = occupation_aggregation_df.apply(
-        lambda row: row[pct_col_map[row["dominant_demand"]]],
-        axis=1,
-    )
-
-    return occupation_aggregation_df
+    return attach_dominant_demand(occupation_aggregation_df)
 
 
 # ── 4. Merge Eloundou theoretical exposure ─────────────────────────────────────

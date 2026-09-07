@@ -65,6 +65,7 @@ from synthesize_dynamic import (
     plot_net_change_distribution,
     plot_winners_losers,
 )
+from synthesize_impacts import attach_dominant_demand
 
 
 def _label(period: str) -> str:
@@ -1023,12 +1024,14 @@ def main():
 
     occupation_exposure_df["OCC_CODE"] = occupation_exposure_df["O*NET-SOC Code"].astype(str).str.split(".").str[0]
 
+    # dominant_demand and dominant_strength are deliberately absent here: several
+    # O*NET occupations collapse into one BLS SOC code, so the composition these
+    # labels summarise changes and they must be re-derived from the aggregated
+    # pct_* columns rather than carried over from an arbitrary first row.
     _agg_dict: dict = {
         "occupation_exposure": "mean",
         "Title": "first",
         "mean_penetration": "mean",
-        "dominant_demand": "first",
-        "dominant_strength": "first",
         # Demand-type exposure contributions for the dynamic equilibrium model
         "bounded_exposure_contribution": "mean",
         "unbounded_exposure_contribution": "mean",
@@ -1040,6 +1043,7 @@ def main():
     if "eloundou_exposure_mid" in occupation_exposure_df.columns:
         _agg_dict["eloundou_exposure_mid"] = "mean"
     aggregated_exposure_df = occupation_exposure_df.groupby("OCC_CODE").agg(_agg_dict).reset_index()
+    aggregated_exposure_df = attach_dominant_demand(aggregated_exposure_df)
 
     merged_validation_df = pd.merge(aggregated_exposure_df, bls_trends_df, on="OCC_CODE", how="inner")
 

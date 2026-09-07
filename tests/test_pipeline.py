@@ -22,6 +22,7 @@ from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
     BOUNDED_REBOUND,
     UNBOUNDED_REBOUND,
+    build_penetration_lookup,
     compute_task_exposure,
     derive_exposure_tier,
     rollup_to_occupation,
@@ -205,3 +206,53 @@ class TestDynamicEquilibrium:
         no_unbounded_df["pct_unbounded"] = 0.0
         with pytest.raises(ValueError, match="No Unbounded capacity"):
             compute_dynamic_equilibrium(no_unbounded_df, "employment")
+
+
+class TestBuildPenetrationLookup:
+    """
+    The Anthropic penetration file has no Task IDs, so the join is on task text —
+    and that file repeats some texts. Left un-collapsed, those repeats fan the
+    merge out and over-weight the repeated task in the occupation rollup.
+    """
+
+    def test_repeated_task_text_collapses_to_one_row(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 8 + ["Draft a budget."], "penetration": [0.7263] * 8 + [0.1]})
+        lookup_df = build_penetration_lookup(penetration_df)
+        assert len(lookup_df) == 2
+        assert lookup_df["task_lower"].is_unique
+
+    def test_collapsing_preserves_the_penetration_value(self):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 3, "penetration": [0.7263] * 3})
+        lookup_df = build_penetration_lookup(penetration_df)
+        assert lookup_df["penetration"].iloc[0] == pytest.approx(0.7263)
+
+    def test_text_is_normalised_for_matching(self):
+        penetration_df = pd.DataFrame({"task": ["  Write Press Releases.  "], "penetration": [0.5]})
+        lookup_df = build_penetration_lookup(penetration_df)
+        assert lookup_df["task_lower"].iloc[0] == "write press releases."
+
+    def test_conflicting_values_for_one_text_are_reported(self, capsys):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.4]})
+        build_penetration_lookup(penetration_df)
+        assert "conflicting penetration" in capsys.readouterr().out
+
+    def test_agreeing_duplicates_are_not_reported(self, capsys):
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 2, "penetration": [0.7263, 0.7263]})
+        build_penetration_lookup(penetration_df)
+        assert "conflicting penetration" not in capsys.readouterr().out
+
+    def test_merge_against_the_lookup_does_not_add_rows(self):
+        """The regression this fix exists for: 19,281 classified tasks became 19,295 rows."""
+        classified_tasks_df = pd.DataFrame(
+            {
+                "Task ID": [1, 2, 3],
+                "Task": ["Write press releases.", "Write press releases.", "Draft a budget."],
+                "Demand Type": ["Bounded", "Unbounded", "Bounded"],
+            }
+        )
+        classified_tasks_df["task_lower"] = classified_tasks_df["Task"].str.lower().str.strip()
+        penetration_df = pd.DataFrame({"task": ["Write press releases."] * 8 + ["Draft a budget."], "penetration": [0.7263] * 8 + [0.1]})
+
+        merged_df = classified_tasks_df.merge(build_penetration_lookup(penetration_df), on="task_lower", how="left", validate="many_to_one")
+        assert len(merged_df) == len(classified_tasks_df)
+        assert merged_df["penetration"].tolist() == pytest.approx([0.7263, 0.7263, 0.1])

@@ -49,6 +49,35 @@ OUTPUT_PATH = "data/output/occupation_exposure_report.csv"
 # ── 1. Load and match data ────────────────────────────────────────────────────
 
 
+def build_penetration_lookup(penetration_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Collapse the Anthropic penetration table to one row per normalised task text.
+
+    Tasks are joined by text because the Anthropic dataset carries no Task IDs,
+    and that file repeats a handful of task strings. Merging against it directly
+    fans those rows out — a text appearing 8 times becomes 8 rows for every
+    O*NET occupation holding it, and each copy is then counted again in the
+    occupation's total_importance and task_exposure sum, over-weighting that one
+    task in the importance-weighted mean.
+
+    The repeated texts currently agree on penetration, so collapsing them is
+    lossless. A future release that disagrees is reported rather than silently
+    resolved by whichever row happens to sort first.
+    """
+    penetration_lookup_df = penetration_df.copy()
+    penetration_lookup_df["task_lower"] = penetration_lookup_df["task"].str.lower().str.strip()
+
+    values_per_task = penetration_lookup_df.groupby("task_lower")["penetration"].nunique()
+    conflicting_task_texts = values_per_task[values_per_task > 1]
+    if len(conflicting_task_texts) > 0:
+        print(
+            f"  Warning: {len(conflicting_task_texts)} repeated task text(s) carry conflicting penetration "
+            "values; keeping the first of each. Check the Anthropic release if this is unexpected."
+        )
+
+    return penetration_lookup_df.drop_duplicates("task_lower")[["task_lower", "penetration"]]
+
+
 def load_and_match() -> pd.DataFrame:
     print("Loading classified tasks...")
     classified_tasks_df = pd.read_csv("data/output/classified_all_tasks.csv")
@@ -58,16 +87,19 @@ def load_and_match() -> pd.DataFrame:
 
     # Normalise for matching
     classified_tasks_df["task_lower"] = classified_tasks_df["Task"].str.lower().str.strip()
-    penetration_df["task_lower"] = penetration_df["task"].str.lower().str.strip()
+    penetration_lookup_df = build_penetration_lookup(penetration_df)
 
-    merged_task_data = classified_tasks_df.merge(penetration_df[["task_lower", "penetration"]], on="task_lower", how="left")
+    # validate="many_to_one": many O*NET occupations may share a task text, but the
+    # lookup must hold at most one row per text. Raises rather than fanning out if
+    # a future release breaks that.
+    merged_task_data = classified_tasks_df.merge(penetration_lookup_df, on="task_lower", how="left", validate="many_to_one")
     merged_task_data["penetration"] = merged_task_data["penetration"].fillna(0.0)
 
     print("Loading O*NET task ratings (Importance)...")
     ratings_path = "data/raw/onet_task_ratings.csv"
     if os.path.exists(ratings_path):
         ratings_df = pd.read_csv(ratings_path)
-        merged_task_data = merged_task_data.merge(ratings_df, on="Task ID", how="left")
+        merged_task_data = merged_task_data.merge(ratings_df, on="Task ID", how="left", validate="many_to_one")
         merged_task_data["task_importance"] = merged_task_data["task_importance"].fillna(1.0)
     else:
         print("Warning: onet_task_ratings.csv not found — assuming weight=1.0 for all tasks.")

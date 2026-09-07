@@ -2,8 +2,9 @@
 download_data.py
 ────────────────
 Fetches the third-party source datasets the pipeline joins against, and writes
-each one to data/raw/ as a flat CSV. BLS OEWS zips are *not* handled here — BLS
-blocks plain HTTP clients, so those come from download_bls.js via Puppeteer.
+each one to data/raw/ as a flat CSV. BLS data is *not* handled here — BLS blocks
+plain HTTP clients, so the OEWS zips come from download_bls.js and CPS Table A-19
+from download_cps.js, both via Puppeteer.
 
 Outputs (all under data/raw/):
   • onet_tasks.csv                      — O*NET task statements, keyed by Task ID
@@ -12,7 +13,6 @@ Outputs (all under data/raw/):
   • anthropic_job_exposure.csv          — Anthropic Economic Index job exposure
   • anthropic_task_conversation_pct.csv — Claude conversation share per task
   • eloundou_exposure.csv               — Eloundou et al. theoretical exposure, by occupation
-  • cps/table_a19.html                  — raw BLS CPS Table A-19 page
 
 Run via `make download-data`, which sequences this with the Puppeteer scripts.
 """
@@ -33,7 +33,6 @@ ANTHROPIC_TASK_CONVERSATION_PCT_URL = (
     "https://huggingface.co/datasets/Anthropic/EconomicIndex/resolve/main/release_2025_03_27/task_pct_v2.csv"
 )
 ELOUNDOU_EXPOSURE_URL = "https://raw.githubusercontent.com/openai/GPTs-are-GPTs/main/data/occ_level.csv"
-CPS_TABLE_A19_URL = "https://www.bls.gov/web/empsit/cpseea19.htm"
 
 
 def download_onet_tasks():
@@ -110,31 +109,9 @@ def download_eloundou_data():
     return eloundou_exposure_df
 
 
-def download_cps_a19():
-    """Download BLS CPS Table A-19 (monthly employment by major occupation group).
-
-    Saves the raw HTML to data/raw/cps/table_a19.html for parsing by validate_bls.py.
-    This table covers ~22 SOC major groups with Apr 2025 and Apr 2026 employment
-    (in thousands). It is a directional indicator only — not BLS OEWS.
-    """
-    print("Downloading BLS CPS Table A-19 (monthly major-group employment)...")
-    try:
-        response = requests.get(CPS_TABLE_A19_URL, headers={"User-Agent": "Mozilla/5.0"})
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as exc:
-        print(f"Warning: CPS Table A-19 download failed ({exc}) — skipping.")
-        print("  CPS charts will be omitted from this run.")
-        return
-    os.makedirs("data/raw/cps", exist_ok=True)
-    with open("data/raw/cps/table_a19.html", "w", encoding="utf-8") as f:
-        f.write(response.text)
-    print("Saved data/raw/cps/table_a19.html")
-
-
 if __name__ == "__main__":
     os.makedirs("data/raw/", exist_ok=True)
     download_onet_tasks()
     download_onet_task_ratings()
     download_anthropic_data()
     download_eloundou_data()
-    download_cps_a19()

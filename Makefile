@@ -12,9 +12,12 @@ lint:
 	uv run ruff check .
 	uv run ruff format .
 
+# download_cps.js runs last: it exits non-zero on a failed fetch outside CI, which
+# would otherwise abort the target before the O*NET/Anthropic/Eloundou downloads.
 download-data:
 	node download_bls.js
 	uv run download_data.py
+	node download_cps.js
 
 run-pipeline:
 	uv run main.py

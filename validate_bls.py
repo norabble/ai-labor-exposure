@@ -11,7 +11,8 @@ compares against the naive Eloundou exposure baseline.
 Inputs:
   • data/output/bls_trends.csv          (from analyze_bls.py)
   • data/output/occupation_exposure_report.csv
-  • data/raw/cps/table_a19.html         (optional — from download_data.py)
+  • seeds/cps_a19_panel.csv             (committed CPS month panel)
+  • data/raw/cps/table_a19.html         (optional — from download_cps.js)
 
 Outputs (saved to data/output/visualizations/):
   • model_vs_actual_employment_growth.png      — exposure score vs. YoY employment growth per period
@@ -27,7 +28,7 @@ Outputs (saved to data/output/visualizations/):
   • high_exposure_concentration.png               — bubble chart of high displacement-pressure occupations
   • exposure_volume_by_group.png              — employment-weighted AI exposure by SOC group
   • exposure_share_by_group.png               — share of total AI exposure by SOC group
-  • cps_2026_direction.png                    — CPS Apr 2025→Apr 2026 employment direction by major group
+  • cps_2026_direction.png                    — CPS employment direction by major group, since-OEWS and year-over-year windows
   • cps_rebound_model_vs_actual.png           — scatter: employment-weighted rebound-adjusted exposure vs. CPS growth, major group level
   • cps_dynamic_model_vs_actual.png           — scatter: employment-weighted dynamic net employment change vs. CPS growth, major group level
   • model_signal_over_time.png                — sector-level Pearson r by YoY period (2005→2025) for all three models;
@@ -46,6 +47,16 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
+from cps_panel import (
+    CpsComparisonWindows,
+    build_growth_frame,
+    build_year_over_year_growth,
+    format_month,
+    load_cps_panel,
+    oews_reference_month,
+    resolve_comparison_windows,
+    year_over_year_month_pairs,
+)
 from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
 from synthesize_dynamic import (
     compute_dynamic_equilibrium,
@@ -292,6 +303,7 @@ def plot_model_signal_over_time(
     dynamic_validation_df: pd.DataFrame,
     output_dir: str,
     anthropic_exp_df: pd.DataFrame | None = None,
+    cps_panel_df: pd.DataFrame | None = None,
 ) -> None:
     """
     Sector-level Pearson r between each model score and YoY employment growth,
@@ -307,6 +319,16 @@ def plot_model_signal_over_time(
     (higher exposure → less growth) while the dynamic measure validates with
     *positive* r (higher net change → more growth), the y-axis is labeled with
     the sign convention for each line noted in the legend.
+
+    When a CPS panel is supplied, a separate right-hand panel is drawn for the
+    2025→2026 span that OEWS does not yet reach. It is deliberately not an
+    extension of the main line. CPS is a different survey (household, ~60k
+    interviews, self-reported occupation) measured against a different statistic
+    (major-group totals, not an employment-weighted mean of occupation growth
+    rates), and no period exists where both surveys overlap, so the two cannot be
+    calibrated against each other. Its x-axis is the endpoint month rather than
+    time: all three points measure the same 12-month span from endpoints two
+    months apart, so their spread is endpoint sensitivity, not a trend.
     """
     latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
 
@@ -366,6 +388,17 @@ def plot_model_signal_over_time(
         r, p = stats.pearsonr(sec["score"], sec["growth"])
         return r, p, len(sec)
 
+    def _sector_scores(score_col: str) -> pd.DataFrame:
+        """Employment-weighted mean model score per SOC major group."""
+        subset = base_df[[score_col, "soc_major", latest_emp_col]].dropna()
+        if subset.empty:
+            return pd.DataFrame(columns=["soc_major", "sector_score"])
+        weighted_score_series = subset.groupby("soc_major").apply(
+            lambda grp: (grp[score_col] * grp[latest_emp_col]).sum() / grp[latest_emp_col].sum(),
+            include_groups=False,
+        )
+        return weighted_score_series.rename("sector_score").reset_index()
+
     # Compute r for each period and each model
     score_configs = [
         ("occupation_exposure", "Rebound-adjusted (−r = correct)", "steelblue", "-o"),
@@ -392,8 +425,49 @@ def plot_model_signal_over_time(
                 r_series[score_col].append(None)
                 p_series[score_col].append(None)
 
+    # CPS year-over-year correlations for the span OEWS does not yet reach.
+    # Every pair covers the same 12 months from a different endpoint month, so
+    # these are repeated measurements of one period, not successive periods.
+    cps_month_pairs = year_over_year_month_pairs(cps_panel_df) if cps_panel_df is not None else []
+    cps_results: dict[str, list[tuple[str, float, float]]] = {cfg[0]: [] for cfg in score_configs}
+    if cps_month_pairs:
+        for score_col, _, _, _ in score_configs:
+            sector_score_df = _sector_scores(score_col)
+            if sector_score_df.empty:
+                continue
+            for year_ago_month, latest_month in cps_month_pairs:
+                cps_growth_df = build_year_over_year_growth(cps_panel_df, year_ago_month, latest_month)
+                cps_comparison_df = sector_score_df.merge(cps_growth_df, on="soc_major").dropna()
+                if len(cps_comparison_df) < 5:
+                    continue
+                cps_r, cps_p = stats.pearsonr(cps_comparison_df["sector_score"], cps_comparison_df["emp_growth_year_over_year"])
+                cps_results[score_col].append((latest_month, cps_r, cps_p))
+    has_cps_panel = any(cps_results[score_col] for score_col in cps_results)
+
+    if has_cps_panel:
+        span_label = f"{cps_month_pairs[0][0][:4]}→{cps_month_pairs[-1][1][:4]}"
+        print(f"\n── CPS year-over-year signal, {span_label} (n=22 sectors; each endpoint is the same 12-month span) ──")
+        for score_col, label, _, _ in score_configs:
+            if not cps_results[score_col]:
+                continue
+            endpoint_text = "  ".join(
+                f"{format_month(month)}: r={r:+.3f} (p={p_value:.3f})" for month, r, p_value in cps_results[score_col]
+            )
+            r_values = [r for _, r, _ in cps_results[score_col]]
+            print(f"  {label:<38} {endpoint_text}  | spread {max(r_values) - min(r_values):.3f}")
+
     sns.set_theme(style="whitegrid")
-    fig, ax = plt.subplots(figsize=(14, 5))
+    if has_cps_panel:
+        fig, (ax, cps_ax) = plt.subplots(
+            1,
+            2,
+            figsize=(17, 5),
+            sharey=True,
+            gridspec_kw={"width_ratios": [len(all_period_cols), 3.4], "wspace": 0.04},
+        )
+    else:
+        fig, ax = plt.subplots(figsize=(14, 5))
+        cps_ax = None
 
     x = list(range(len(all_period_cols)))
 
@@ -443,19 +517,88 @@ def plot_model_signal_over_time(
     ax.set_xticks(x)
     ax.set_xticklabels(period_labels, fontsize=8)
     ax.set_ylabel("Sector-Level Pearson r (n=22 sectors)", fontsize=10)
-    ax.set_xlabel("YoY Period", fontsize=10)
-    ax.set_title(
-        "Model Predictive Signal Over Time: Sector-Level Correlation with Employment Growth\n"
-        "Red shading = COVID-disrupted periods; blue shading = AI era (2022→). "
-        "Significant periods annotated with r and p-value.",
-        fontsize=11,
-    )
+    ax.set_xlabel("YoY Period — BLS OEWS (employer survey, May reference month)", fontsize=10)
     ax.legend(fontsize=9, loc="lower left")
     ax.set_ylim(-0.75, 0.75)
 
+    # ── CPS panel: the 2025→2026 span OEWS does not yet reach ────────────────
+    # Drawn as a separate axes rather than as more points on the line above. The
+    # y-scale is shared so the r values stay directly comparable, but the x-axis
+    # is the CPS endpoint month, not time — every point covers the same 12-month
+    # span, so their spread measures endpoint sensitivity rather than a trend.
+    if cps_ax is not None:
+        cps_months = sorted({month for entries in cps_results.values() for month, _, _ in entries})
+        cps_x_by_month = {month: index for index, month in enumerate(cps_months)}
+        cps_ax.set_facecolor("#f4f1ea")
+        cps_ax.axhline(0, color="grey", linewidth=0.8)
+
+        for score_col, _, color, marker in score_configs:
+            entries = cps_results[score_col]
+            if not entries:
+                continue
+            marker_shape = marker[1:] if len(marker) > 1 else "o"
+            entry_x = [cps_x_by_month[month] for month, _, _ in entries]
+            entry_r = [r for _, r, _ in entries]
+            # Markers only, deliberately unconnected. A line across the month axis
+            # would read as a trend, but these are one 12-month span measured from
+            # three endpoints — the vertical spread is endpoint sensitivity.
+            cps_ax.plot(
+                entry_x,
+                entry_r,
+                linestyle="none",
+                marker=marker_shape,
+                markersize=7,
+                markerfacecolor="white",
+                markeredgecolor=color,
+                markeredgewidth=1.6,
+                zorder=3,
+            )
+            for x_position, (_, r_value, p_value) in zip(entry_x, entries):
+                if p_value < 0.05:
+                    cps_ax.annotate(
+                        f"r={r_value:+.2f}\np={p_value:.3f}",
+                        (x_position, r_value),
+                        textcoords="offset points",
+                        xytext=(0, 9 if r_value >= 0 else -22),
+                        ha="center",
+                        fontsize=7,
+                        color=color,
+                    )
+
+        cps_ax.set_xticks(list(cps_x_by_month.values()))
+        cps_ax.set_xticklabels([pd.Period(month, freq="M").strftime("%b") for month in cps_months], fontsize=8)
+        cps_ax.set_xlim(-0.7, len(cps_months) - 0.3)
+        cps_ax.set_xlabel("CPS A-19 endpoint month", fontsize=9)
+        cps_ax.set_title(
+            "CPS 2025→2026\nsame span, 3 endpoints",
+            fontsize=9,
+            color="dimgrey",
+        )
+        cps_ax.text(
+            0.5,
+            0.015,
+            "Different survey — not\ncalibrated to OEWS;\nhollow = not a time series",
+            transform=cps_ax.transAxes,
+            fontsize=7,
+            ha="center",
+            va="bottom",
+            color="dimgrey",
+        )
+
+    figure_title = (
+        "Model Predictive Signal Over Time: Sector-Level Correlation with Employment Growth\n"
+        "Red shading = COVID-disrupted periods; blue shading = AI era (2022→). "
+        "Significant periods annotated with r and p-value."
+    )
+    if cps_ax is not None:
+        figure_title += (
+            "\nRight panel is a separate survey covering the span OEWS has not reached — read it beside the line, not as part of it."
+        )
+    fig.suptitle(figure_title, fontsize=11)
+
     # Text box for note on sign conventions
     ax.text(
-        0.01,
+        0.30,
         0.02,
         "Sign note: rebound-adjusted and observed validate negative (more exposure → less growth);\n"
         "dynamic net change validates positive (predicted gainers grow). Both directions are 'correct'.",
@@ -638,89 +781,121 @@ def plot_model_signal_over_time_occupation(
     print(f"Saved {output_dir}/model_signal_over_time_occupation.png")
 
 
-# CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
-_CPS_TO_SOC_MAJOR: dict[str, str] = {
-    "management occupations": "11",
-    "business and financial operations occupations": "13",
-    "computer and mathematical occupations": "15",
-    "architecture and engineering occupations": "17",
-    "life, physical, and social science occupations": "19",
-    "community and social service occupations": "21",
-    "legal occupations": "23",
-    "education, training, and library occupations": "25",
-    "arts, design, entertainment, sports, and media occupations": "27",
-    "healthcare practitioners and technical occupations": "29",
-    "healthcare support occupations": "31",
-    "protective service occupations": "33",
-    "food preparation and serving related occupations": "35",
-    "building and grounds cleaning and maintenance occupations": "37",
-    "personal care and service occupations": "39",
-    "sales and related occupations": "41",
-    "office and administrative support occupations": "43",
-    "farming, fishing, and forestry occupations": "45",
-    "construction and extraction occupations": "47",
-    "installation, maintenance, and repair occupations": "49",
-    "production occupations": "51",
-    "transportation and material moving occupations": "53",
-}
+def _load_cps_growth() -> tuple[pd.DataFrame, CpsComparisonWindows] | None:
+    """
+    Load the CPS month panel and derive both comparison windows.
 
-
-def _parse_cps_a19() -> pd.DataFrame | None:
-    """Parse CPS Table A-19 HTML; return DataFrame with soc_major + emp_growth_apr25_apr26, or None."""
-    cps_path = "data/raw/cps/table_a19.html"
-    if not os.path.exists(cps_path):
+    Returns (growth_df, windows), or None when no usable panel is available. A
+    panel too thin to define a window is reported and skipped rather than raised:
+    the CPS charts are a supplementary indicator and must not take down the rest
+    of the validation stage.
+    """
+    cps_panel_df = load_cps_panel()
+    if cps_panel_df is None:
         return None
 
-    raw_cps_df = pd.read_html(cps_path, flavor="bs4")[0]
-
-    # Multi-level columns: col 0 = occupation name, col 1 = Total 16+ Apr 2025, col 2 = Total 16+ Apr 2026
-    cps_parsed_df = raw_cps_df.iloc[:, [0, 1, 2]].copy()
-    cps_parsed_df.columns = ["occupation", "apr_2025", "apr_2026"]
-    cps_parsed_df = cps_parsed_df.dropna(subset=["occupation"])
-    cps_parsed_df["soc_major"] = cps_parsed_df["occupation"].str.lower().str.strip().map(_CPS_TO_SOC_MAJOR)
-    cps_mapped_df = cps_parsed_df.dropna(subset=["soc_major"]).copy()
-    cps_mapped_df["apr_2025"] = pd.to_numeric(cps_mapped_df["apr_2025"], errors="coerce")
-    cps_mapped_df["apr_2026"] = pd.to_numeric(cps_mapped_df["apr_2026"], errors="coerce")
-    cps_mapped_df = cps_mapped_df.dropna(subset=["apr_2025", "apr_2026"])
-    cps_mapped_df["emp_growth_apr25_apr26"] = (cps_mapped_df["apr_2026"] - cps_mapped_df["apr_2025"]) / cps_mapped_df["apr_2025"]
-    return cps_mapped_df.reset_index(drop=True)
+    bls_trends_columns = list(pd.read_csv("data/output/bls_trends.csv", nrows=1).columns)
+    try:
+        cps_windows = resolve_comparison_windows(cps_panel_df, oews_reference_month(bls_trends_columns))
+    except ValueError as window_error:
+        print(f"  Skipping CPS charts — {window_error}")
+        return None
+    return build_growth_frame(cps_panel_df, cps_windows), cps_windows
 
 
-def _plot_cps_2026_direction(output_dir: str, cps_mapped_df: pd.DataFrame, exposure_group_df: pd.DataFrame) -> None:
-    """Horizontal bar chart of CPS major group employment direction (Apr 2025 → Apr 2026)."""
+def _plot_cps_2026_direction(
+    output_dir: str, cps_growth_df: pd.DataFrame, cps_windows: CpsComparisonWindows, exposure_group_df: pd.DataFrame
+) -> None:
+    """Paired horizontal bars: CPS major group employment direction over both comparison windows."""
     group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
     group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
-    cps_chart_df = cps_mapped_df.merge(group_demand_df, on="soc_major", how="left")
-    cps_chart_df = cps_chart_df.sort_values("emp_growth_apr25_apr26", ascending=True)
+    cps_chart_df = cps_growth_df.merge(group_demand_df, on="soc_major", how="left")
+    cps_chart_df = cps_chart_df.sort_values("emp_growth_since_anchor", ascending=True).reset_index(drop=True)
 
-    print("\n── CPS Table A-19: Major Group Employment Direction (Apr 2025 → Apr 2026) ──")
-    print("   (CPS monthly survey — directional indicator only; not BLS OEWS)\n")
-    display_df = cps_chart_df[["occupation", "apr_2025", "apr_2026", "emp_growth_apr25_apr26", "group_dominant_demand"]].copy()
-    display_df["apr_2025"] = display_df["apr_2025"].map("{:,.0f}".format)
-    display_df["apr_2026"] = display_df["apr_2026"].map("{:,.0f}".format)
-    display_df["emp_growth_apr25_apr26"] = display_df["emp_growth_apr25_apr26"].map("{:+.1%}".format)
+    has_year_over_year = "emp_growth_year_over_year" in cps_chart_df.columns
+
+    print(f"\n── CPS Table A-19: Major Group Employment Direction ({cps_windows.since_anchor_label}) ──")
+    print("   (CPS monthly survey — directional indicator only; not BLS OEWS)")
+    print(f"   {cps_windows.window_caveat}\n")
+    display_columns = ["occupation", "anchor_employment", "latest_employment", "emp_growth_since_anchor"]
+    if has_year_over_year:
+        display_columns.append("emp_growth_year_over_year")
+    display_columns.append("group_dominant_demand")
+    display_df = cps_chart_df[display_columns].copy()
+    display_df["anchor_employment"] = display_df["anchor_employment"].map("{:,.0f}".format)
+    display_df["latest_employment"] = display_df["latest_employment"].map("{:,.0f}".format)
+    display_df["emp_growth_since_anchor"] = display_df["emp_growth_since_anchor"].map("{:+.1%}".format)
+    if has_year_over_year:
+        display_df["emp_growth_year_over_year"] = display_df["emp_growth_year_over_year"].map("{:+.1%}".format)
     print(display_df.to_string(index=False))
 
-    bar_colors = [DEMAND_PALETTE.get(d, "grey") for d in cps_chart_df["group_dominant_demand"]]
+    bar_colors = [DEMAND_PALETTE.get(demand_type, "grey") for demand_type in cps_chart_df["group_dominant_demand"]]
     short_labels = [SOC_MAJOR_GROUPS.get(row["soc_major"], row["occupation"])[:40] for _, row in cps_chart_df.iterrows()]
+    bar_positions = np.arange(len(cps_chart_df))
+    bar_height = 0.4 if has_year_over_year else 0.7
 
-    fig, ax_cps = plt.subplots(figsize=(12, 9))
-    bars = ax_cps.barh(short_labels, cps_chart_df["emp_growth_apr25_apr26"], color=bar_colors, edgecolor="white", linewidth=0.5)
+    fig, ax_cps = plt.subplots(figsize=(12, 10))
+    since_anchor_offset = bar_height / 2 if has_year_over_year else 0
+    since_anchor_bars = ax_cps.barh(
+        bar_positions + since_anchor_offset,
+        cps_chart_df["emp_growth_since_anchor"],
+        height=bar_height,
+        color=bar_colors,
+        edgecolor="white",
+        linewidth=0.5,
+    )
+    bar_groups = [(since_anchor_bars, cps_chart_df["emp_growth_since_anchor"])]
 
-    for bar_rect, growth_val in zip(bars, cps_chart_df["emp_growth_apr25_apr26"]):
-        x_pos = growth_val + (0.001 if growth_val >= 0 else -0.001)
-        ha = "left" if growth_val >= 0 else "right"
-        ax_cps.text(x_pos, bar_rect.get_y() + bar_rect.get_height() / 2, f"{growth_val:+.1%}", va="center", ha=ha, fontsize=8)
+    if has_year_over_year:
+        year_over_year_bars = ax_cps.barh(
+            bar_positions - bar_height / 2,
+            cps_chart_df["emp_growth_year_over_year"],
+            height=bar_height,
+            color=bar_colors,
+            edgecolor="white",
+            linewidth=0.5,
+            alpha=0.45,
+            hatch="///",
+        )
+        bar_groups.append((year_over_year_bars, cps_chart_df["emp_growth_year_over_year"]))
 
+    for bars, growth_values in bar_groups:
+        for bar_rect, growth_value in zip(bars, growth_values):
+            x_position = growth_value + (0.001 if growth_value >= 0 else -0.001)
+            horizontal_alignment = "left" if growth_value >= 0 else "right"
+            ax_cps.text(
+                x_position,
+                bar_rect.get_y() + bar_rect.get_height() / 2,
+                f"{growth_value:+.1%}",
+                va="center",
+                ha=horizontal_alignment,
+                fontsize=6.5,
+            )
+
+    ax_cps.set_yticks(bar_positions)
+    ax_cps.set_yticklabels(short_labels)
     ax_cps.axvline(0, color="black", linewidth=0.8)
     ax_cps.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
-    ax_cps.set_xlabel("Employment Growth Apr 2025 → Apr 2026", fontsize=10)
+    ax_cps.set_xlabel("Employment Growth", fontsize=10)
     ax_cps.set_title(
-        "Major Group Employment Direction: Apr 2025 → Apr 2026\nCPS Table A-19 (monthly survey) — directional indicator only; not BLS OEWS",
+        f"Major Group Employment Direction — CPS Table A-19\n"
+        f"Since OEWS: {cps_windows.since_anchor_label}"
+        + (f"   |   Year-over-year: {cps_windows.year_over_year_label}" if has_year_over_year else "")
+        + "\nDirectional indicator only; not BLS OEWS",
         fontsize=11,
     )
-    legend_handles_cps = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
-    ax_cps.legend(handles=legend_handles_cps, title="Dominant Demand Type", fontsize=9, loc="lower right")
+
+    demand_legend_handles = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
+    demand_legend = ax_cps.legend(handles=demand_legend_handles, title="Dominant Demand Type", fontsize=8, loc="lower right")
+    if has_year_over_year:
+        ax_cps.add_artist(demand_legend)
+        window_legend_handles = [
+            Patch(facecolor="grey", label=f"Since OEWS ({cps_windows.since_anchor_label})"),
+            Patch(facecolor="grey", alpha=0.45, hatch="///", label=f"Year-over-year ({cps_windows.year_over_year_label})"),
+        ]
+        ax_cps.legend(handles=window_legend_handles, title="Comparison Window", fontsize=8, loc="upper left")
+
+    fig.text(0.5, -0.01, cps_windows.window_caveat, ha="center", fontsize=7.5, color="dimgrey", wrap=True)
     plt.tight_layout()
     plt.savefig(f"{output_dir}/cps_2026_direction.png", dpi=300, bbox_inches="tight")
     plt.close()
@@ -729,18 +904,25 @@ def _plot_cps_2026_direction(output_dir: str, cps_mapped_df: pd.DataFrame, expos
 
 def _plot_cps_model_vs_actual(
     output_dir: str,
-    cps_mapped_df: pd.DataFrame,
+    cps_growth_df: pd.DataFrame,
+    cps_windows: CpsComparisonWindows,
     model_df: pd.DataFrame,
     exposure_group_df: pd.DataFrame,
     score_col: str = "occupation_exposure",
     xlabel: str = "Employment-Weighted Mean Rebound-Adjusted Exposure Score",
     output_filename: str = "cps_rebound_model_vs_actual.png",
 ) -> None:
-    """Scatter of employment-weighted model score vs. CPS Apr 2025→Apr 2026 growth, major group level."""
-    emp_col = next((c for c in ["TOT_EMP_25", "TOT_EMP_24", "TOT_EMP_23"] if c in model_df.columns), None)
-    if emp_col is None:
+    """
+    Scatter of employment-weighted model score vs. CPS growth since the OEWS snapshot, major group level.
+
+    Plots the since-OEWS window — the stretch OEWS does not yet cover — and reports
+    the year-over-year correlation alongside it for comparison.
+    """
+    employment_columns = sorted(column for column in model_df.columns if column.startswith("TOT_EMP_"))
+    if not employment_columns:
         print(f"  Skipping CPS {output_filename} — no employment column found.")
         return
+    emp_col = employment_columns[-1]
 
     valid_df = model_df.dropna(subset=[score_col, emp_col]).copy()
     valid_df["soc_major"] = valid_df["OCC_CODE"].str[:2]
@@ -762,21 +944,30 @@ def _plot_cps_model_vs_actual(
     group_demand_df = exposure_group_df[["soc_major", "group_dominant_demand"]].copy()
     group_demand_df["soc_major"] = group_demand_df["soc_major"].astype(str)
 
-    comparison_df = group_score_df.merge(cps_mapped_df[["soc_major", "emp_growth_apr25_apr26"]], on="soc_major").merge(
-        group_demand_df, on="soc_major", how="left"
-    )
+    growth_columns = ["soc_major", "emp_growth_since_anchor"]
+    if "emp_growth_year_over_year" in cps_growth_df.columns:
+        growth_columns.append("emp_growth_year_over_year")
+    comparison_df = group_score_df.merge(cps_growth_df[growth_columns], on="soc_major").merge(group_demand_df, on="soc_major", how="left")
     comparison_df["group_label"] = comparison_df["soc_major"].map(SOC_MAJOR_GROUPS)
 
-    cps_r, cps_p = stats.pearsonr(comparison_df["group_score"], comparison_df["emp_growth_apr25_apr26"])
+    cps_r, cps_p = stats.pearsonr(comparison_df["group_score"], comparison_df["emp_growth_since_anchor"])
+    year_over_year_correlation = None
+    if "emp_growth_year_over_year" in comparison_df.columns:
+        year_over_year_correlation = stats.pearsonr(comparison_df["group_score"], comparison_df["emp_growth_year_over_year"])
 
     print(f"\n── CPS {output_filename} (Major Group Level, n={len(comparison_df)}) ──")
-    print(f"Pearson r = {cps_r:.3f}, p = {cps_p:.4f}")
+    print(f"Since OEWS ({cps_windows.since_anchor_label}): Pearson r = {cps_r:.3f}, p = {cps_p:.4f}")
+    if year_over_year_correlation is not None:
+        print(
+            f"Year-over-year ({cps_windows.year_over_year_label}): "
+            f"Pearson r = {year_over_year_correlation[0]:.3f}, p = {year_over_year_correlation[1]:.4f}"
+        )
 
     dot_colors = [DEMAND_PALETTE.get(d, "grey") for d in comparison_df["group_dominant_demand"]]
     fig, ax_cps_scatter = plt.subplots(figsize=(11, 8))
     ax_cps_scatter.scatter(
         comparison_df["group_score"],
-        comparison_df["emp_growth_apr25_apr26"],
+        comparison_df["emp_growth_since_anchor"],
         c=dot_colors,
         s=90,
         alpha=0.85,
@@ -787,7 +978,7 @@ def _plot_cps_model_vs_actual(
         label_text = scatter_row["group_label"][:28] if pd.notna(scatter_row["group_label"]) else scatter_row["soc_major"]
         ax_cps_scatter.annotate(
             label_text,
-            (scatter_row["group_score"], scatter_row["emp_growth_apr25_apr26"]),
+            (scatter_row["group_score"], scatter_row["emp_growth_since_anchor"]),
             xytext=(5, 3),
             textcoords="offset points",
             fontsize=7.5,
@@ -796,19 +987,26 @@ def _plot_cps_model_vs_actual(
     sns.regplot(
         data=comparison_df,
         x="group_score",
-        y="emp_growth_apr25_apr26",
+        y="emp_growth_since_anchor",
         scatter=False,
         ax=ax_cps_scatter,
         line_kws={"color": "steelblue", "linewidth": 1.5},
     )
     ax_cps_scatter.axhline(0, color="grey", linestyle="--", linewidth=0.8)
     ax_cps_scatter.set_xlabel(xlabel, fontsize=10)
-    ax_cps_scatter.set_ylabel("Employment Growth Apr 2025 → Apr 2026 (CPS)", fontsize=10)
+    ax_cps_scatter.set_ylabel(f"Employment Growth {cps_windows.since_anchor_label} (CPS)", fontsize=10)
+    year_over_year_note = (
+        f"  |  YoY ({cps_windows.year_over_year_label}): r = {year_over_year_correlation[0]:.3f}, p = {year_over_year_correlation[1]:.3f}"
+        if year_over_year_correlation is not None
+        else ""
+    )
     ax_cps_scatter.set_title(
-        f"Model vs. CPS Employment Growth — Major Group Level\n"
-        f"r = {cps_r:.3f}, p = {cps_p:.3f}, n = {len(comparison_df)} groups  |  CPS monthly, not BLS OEWS",
+        f"Model vs. CPS Employment Growth Since OEWS — Major Group Level\n"
+        f"r = {cps_r:.3f}, p = {cps_p:.3f}, n = {len(comparison_df)} groups{year_over_year_note}\n"
+        f"CPS monthly, not BLS OEWS",
         fontsize=11,
     )
+    fig.text(0.5, -0.01, cps_windows.window_caveat, ha="center", fontsize=7.5, color="dimgrey", wrap=True)
     ax_cps_scatter.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
     ax_cps_scatter.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
     legend_handles_scatter = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
@@ -1081,7 +1279,10 @@ def main():
         if os.path.exists("data/raw/anthropic_job_exposure.csv")
         else None
     )
-    plot_model_signal_over_time(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df)
+    # Loaded without an output path here: the CPS block near the end of main() owns
+    # writing the merged panel, and this call only needs to read it.
+    signal_cps_panel_df = load_cps_panel(output_path=None)
+    plot_model_signal_over_time(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df, signal_cps_panel_df)
     plot_model_signal_over_time_occupation(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df)
 
     # ── AI exposure volume ────────────────────────────────────────────────────
@@ -1644,12 +1845,14 @@ def main():
     plt.close()
 
     # ── CPS 2026 directional indicator + model comparison ────────────────────
-    cps_mapped_df = _parse_cps_a19()
-    if cps_mapped_df is not None:
-        _plot_cps_2026_direction(output_dir, cps_mapped_df, group_rollup_df)
+    cps_growth = _load_cps_growth()
+    if cps_growth is not None:
+        cps_growth_df, cps_windows = cps_growth
+        _plot_cps_2026_direction(output_dir, cps_growth_df, cps_windows, group_rollup_df)
         _plot_cps_model_vs_actual(
             output_dir,
-            cps_mapped_df,
+            cps_growth_df,
+            cps_windows,
             merged_validation_df,
             group_rollup_df,
             score_col="occupation_exposure",
@@ -1658,7 +1861,8 @@ def main():
         )
         _plot_cps_model_vs_actual(
             output_dir,
-            cps_mapped_df,
+            cps_growth_df,
+            cps_windows,
             dynamic_validation_df,
             group_rollup_df,
             score_col="net_employment_change",
@@ -1666,8 +1870,8 @@ def main():
             output_filename="cps_dynamic_model_vs_actual.png",
         )
     else:
-        print("  Skipping CPS charts — data/raw/cps/table_a19.html not found.")
-        print("  Run: uv run download_data.py  (or make download-data) to fetch it.")
+        print("  Skipping CPS charts — no CPS panel available.")
+        print("  Expected seeds/cps_a19_panel.csv, or run: node download_cps.js (or make download-data).")
 
 
 if __name__ == "__main__":

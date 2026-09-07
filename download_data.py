@@ -2,8 +2,9 @@
 download_data.py
 ────────────────
 Fetches the third-party source datasets the pipeline joins against, and writes
-each one to data/raw/ as a flat CSV. BLS OEWS zips are *not* handled here — BLS
-blocks plain HTTP clients, so those come from download_bls.js via Puppeteer.
+each one to data/raw/ as a flat CSV. BLS data is *not* handled here — BLS blocks
+plain HTTP clients, so the OEWS zips come from download_bls.js and CPS Table A-19
+from download_cps.js, both via Puppeteer.
 
 Outputs (all under data/raw/):
   • onet_tasks.csv                      — O*NET task statements, keyed by Task ID
@@ -12,7 +13,6 @@ Outputs (all under data/raw/):
   • anthropic_job_exposure.csv          — Anthropic Economic Index job exposure
   • anthropic_task_conversation_pct.csv — Claude conversation share per task
   • eloundou_exposure.csv               — Eloundou et al. theoretical exposure, by occupation
-  • cps/table_a19.html                  — raw BLS CPS Table A-19 page
 
 Run via `make download-data`, which sequences this with the Puppeteer scripts.
 """

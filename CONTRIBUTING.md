@@ -32,3 +32,17 @@ Every Python file should contain a module-level docstring at the very top explai
 3. Any core logic, inputs, and outputs if applicable.
 
 This is especially important for files with abbreviated or somewhat cryptic names (e.g., `analyze_bls.py`).
+
+## Enforcement
+
+CI (`.github/workflows/ci.yml`) runs on every pull request and rejects a branch
+that fails `ruff check`, `ruff format --check`, or `pytest tests/`.
+
+Of the standards above, only the module-docstring rule is machine-checked, via
+ruff's `D100`. The naming rules are review conventions — no linter enforces
+them, so they depend on the author and the reviewer.
+
+Install the local hooks with `make setup` to catch these before pushing. The
+ruff version is pinned in both `pyproject.toml` (dev group) and
+`.pre-commit-config.yaml`; keep them on the same version or the two formatters
+will fight.

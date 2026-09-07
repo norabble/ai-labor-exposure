@@ -1,3 +1,14 @@
+"""
+tests/test_models.py
+────────────────────
+Connectivity checks for the Gemini models used by classify_tasks.py. These make
+real Vertex AI calls, so the whole module is skipped unless GCP_PROJECT_ID is set
+— which means they are skipped in CI and in a normal `make test` run.
+
+Run them deliberately, after changing the model or the classification prompt, to
+confirm the configured model IDs still resolve and respond.
+"""
+
 import os
 
 import pytest

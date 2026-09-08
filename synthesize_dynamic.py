@@ -2,8 +2,16 @@
 synthesize_dynamic.py
 ─────────────────────
 Dynamic labor equilibrium model: redistributes Bounded + Adversarial AI
-displacement to Unbounded-heavy occupations under a total-labor-constant
-assumption, producing a signed net employment change per occupation.
+displacement to Unbounded-heavy occupations, producing a signed net employment
+change per occupation.
+
+Total employment is held constant as a normalization that makes the "where does
+displaced labor go" question askable — it is not a claim that headcount or
+occupational employment fractions are actually fixed. The counterpart being
+argued against is the naive model in which displaced labor simply vanishes.
+`compute_equilibration_sensitivity` shows the sector-level result holds across
+equilibration rates from a quarter to a hundred times the conserved value; see
+docs/framework.md § Robustness to the equilibration rate.
 
 Core logic
 ──────────
@@ -37,6 +45,7 @@ Inputs:
 
 Outputs:
   • data/output/occupation_dynamic_model_report.csv  (written by caller)
+  • data/output/equilibration_sensitivity.csv        (written by caller)
   • data/output/visualizations/dynamic_model_net_change_distribution.png
   • data/output/visualizations/dynamic_model_winners_losers.png
   • data/output/visualizations/dynamic_vs_rebound_model_comparison.png
@@ -50,6 +59,30 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
 from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
+
+
+def compute_absorption_scalar(occupation_df: pd.DataFrame, employment_col: str) -> float:
+    """
+    The economy-wide constant relating absorption to Unbounded capacity.
+
+    Redistribution gives each occupation a share of displaced labor proportional
+    to its Unbounded capacity, so the per-occupation absorption rate reduces to a
+    single scalar — total displaced labor over total Unbounded capacity, both
+    employment-weighted — multiplied by that occupation's `pct_unbounded`:
+
+      absorption = absorption_scalar × pct_unbounded
+
+    Requires a `gross_displacement` column. Exposed separately from
+    `compute_dynamic_equilibrium` so `compute_equilibration_sensitivity` can vary
+    this scalar without duplicating its definition.
+    """
+    unbounded_capacity = (occupation_df[employment_col] * occupation_df["pct_unbounded"]).sum()
+    if unbounded_capacity == 0:
+        raise ValueError(
+            "No Unbounded capacity in the dataset — labor redistribution is undefined. At least one occupation must have pct_unbounded > 0."
+        )
+    displaced_labor = (occupation_df[employment_col] * occupation_df["gross_displacement"]).sum()
+    return displaced_labor / unbounded_capacity
 
 
 def compute_dynamic_equilibrium(
@@ -72,21 +105,10 @@ def compute_dynamic_equilibrium(
         valid_occupation_df["bounded_exposure_contribution"] + valid_occupation_df["adversarial_exposure_contribution"]
     )
 
-    # Economy-wide employment-weighted displacement rate
-    total_displaced = (valid_occupation_df[employment_col] * valid_occupation_df["gross_displacement"]).sum() / total_employment
-
-    # Total Unbounded labor capacity (employment × pct_unbounded, summed)
-    total_unbounded_weighted = (valid_occupation_df[employment_col] * valid_occupation_df["pct_unbounded"]).sum()
-    if total_unbounded_weighted == 0:
-        raise ValueError(
-            "No Unbounded capacity in the dataset — labor redistribution is undefined. At least one occupation must have pct_unbounded > 0."
-        )
-
-    # Each occupation absorbs displaced labor in proportion to its Unbounded capacity share.
-    # Simplifies to: (pct_unbounded_o / employment_weighted_avg_pct_unbounded) × total_displaced
-    valid_occupation_df["absorption"] = (
-        valid_occupation_df["pct_unbounded"] * total_employment / total_unbounded_weighted
-    ) * total_displaced
+    # Each occupation absorbs displaced labor in proportion to its Unbounded capacity
+    # share, which collapses to one economy-wide scalar times pct_unbounded.
+    absorption_scalar = compute_absorption_scalar(valid_occupation_df, employment_col)
+    valid_occupation_df["absorption"] = absorption_scalar * valid_occupation_df["pct_unbounded"]
 
     valid_occupation_df["net_employment_change"] = valid_occupation_df["absorption"] - valid_occupation_df["gross_displacement"]
     valid_occupation_df["net_employment_change_workers"] = (
@@ -116,6 +138,68 @@ def compute_dynamic_equilibrium(
         "net_employment_change_workers",
     ]
     return valid_occupation_df[[c for c in output_columns if c in valid_occupation_df.columns]].reset_index(drop=True)
+
+
+# ── Equilibration sensitivity ─────────────────────────────────────────────────
+
+# Fractions of the conservation-pinned absorption scalar to sweep. 0.0 is the
+# no-equilibrium case the dynamic model exists to argue against — displaced
+# labor simply vanishes. 1.0 is the conservation-pinned value. The large
+# multipliers approach the opposite limit, where the score is pure Unbounded
+# composition and displacement is negligible.
+EQUILIBRATION_MULTIPLIERS = (0.0, 0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.25, 1.50, 2.0, 3.0, 5.0, 10.0, 100.0)
+
+
+def compute_equilibration_sensitivity(
+    dynamic_validation_df: pd.DataFrame,
+    employment_col: str,
+    growth_col: str,
+    soc_major_col: str = "soc_major",
+    multipliers: tuple[float, ...] = EQUILIBRATION_MULTIPLIERS,
+) -> pd.DataFrame:
+    """
+    Sector-level correlation with observed growth across equilibration strengths.
+
+    `net_employment_change` is exactly `absorption_scalar × pct_unbounded −
+    gross_displacement`, so scaling the absorption scalar sweeps the model from
+    "displaced labor is never reabsorbed" (multiplier 0) through the
+    conservation-pinned value (multiplier 1) to "reabsorption dominates"
+    (large multipliers). Re-running the sector-level validation at each point
+    shows how much of the headline result depends on the conservation constraint
+    holding exactly.
+
+    Requires `gross_displacement`, `pct_unbounded`, the employment column, the
+    growth column, and a SOC major group column. Returns one row per multiplier
+    with the resulting sector-level Pearson r, p-value, and sector count.
+    """
+    scored_df = dynamic_validation_df.dropna(subset=[employment_col, growth_col, "pct_unbounded", "gross_displacement"])
+    conservation_scalar = compute_absorption_scalar(scored_df, employment_col)
+
+    sensitivity_rows = []
+    for multiplier in multipliers:
+        swept_scalar = multiplier * conservation_scalar
+        scored_df = scored_df.assign(swept_net_change=swept_scalar * scored_df["pct_unbounded"] - scored_df["gross_displacement"])
+        sector_means_df = scored_df.groupby(soc_major_col).apply(
+            lambda group_df: pd.Series(
+                {
+                    "sector_net_change": (group_df["swept_net_change"] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
+                    "sector_growth": (group_df[growth_col] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
+                }
+            ),
+            include_groups=False,
+        )
+        sector_r, sector_p = stats.pearsonr(sector_means_df["sector_net_change"], sector_means_df["sector_growth"])
+        sensitivity_rows.append(
+            {
+                "equilibration_multiplier": multiplier,
+                "absorption_scalar": swept_scalar,
+                "sector_r": sector_r,
+                "sector_p": sector_p,
+                "n_sectors": len(sector_means_df),
+            }
+        )
+
+    return pd.DataFrame(sensitivity_rows)
 
 
 # ── Plotting ──────────────────────────────────────────────────────────────────

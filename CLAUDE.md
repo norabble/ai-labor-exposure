@@ -101,6 +101,7 @@ The release job holds `contents: write` and `pull-requests: write`. It opens a p
 | `exposure_volume_by_group.csv` | `validate_bls.py` | Same metric rolled up to SOC major group. Includes `group_dominant_demand` and `pct_of_total_exposure`. |
 | `employment_by_demand_type.csv` | `validate_bls.py` | Total workers, % of modeled workforce, mean occupation impact, and occupation count for each dominant demand type. |
 | `cps_a19_panel.csv` | `cps_panel.py` (via `validate_bls.py`) | CPS Table A-19 employment (thousands) by SOC major group and month, accumulated from every A-19 release parsed so far. Merge of `seeds/cps_a19_panel.csv` with the latest fetch. |
+| `equilibration_sensitivity.csv` | `synthesize_dynamic.py` (via `validate_bls.py`) | Sector-level Pearson r against composite employment growth at each equilibration rate, sweeping the absorption scalar from 0 (no reabsorption) to 100× the conservation-pinned value. Shows how much of the dynamic model's headline result depends on the conservation constraint holding exactly. Also printed during `validate`. See `docs/framework.md` § Robustness to the equilibration rate. |
 | `occupation_dynamic_model_report.csv` | `validate_bls.py` | Dynamic labor equilibrium model output. Signed `net_employment_change` per occupation (negative = net loser, positive = net gainer); employment-weighted sum = 0 by construction. Includes `gross_displacement`, `absorption`, contribution columns, and `pct_unbounded` for transparency. |
 
 ### Visualizations — `data/output/visualizations/`

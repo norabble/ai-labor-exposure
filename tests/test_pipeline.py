@@ -16,8 +16,9 @@ These are pure-function tests over synthetic frames; they need no downloaded dat
 
 import pandas as pd
 import pytest
+from scipy import stats
 
-from synthesize_dynamic import compute_dynamic_equilibrium
+from synthesize_dynamic import compute_dynamic_equilibrium, compute_equilibration_sensitivity
 from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
     BOUNDED_REBOUND,
@@ -207,6 +208,51 @@ class TestDynamicEquilibrium:
         no_unbounded_df["pct_unbounded"] = 0.0
         with pytest.raises(ValueError, match="No Unbounded capacity"):
             compute_dynamic_equilibrium(no_unbounded_df, "employment")
+
+    def test_absorption_is_one_scalar_times_pct_unbounded(self):
+        """
+        Absorption carries no per-occupation information beyond pct_unbounded —
+        the redistribution step is a single economy-wide constant. The
+        equilibration sweep depends on this holding exactly.
+        """
+        result = compute_dynamic_equilibrium(self._fixture_df(), "employment")
+        with_capacity_df = result[result["pct_unbounded"] > 0]
+        implied_scalars = with_capacity_df["absorption"] / with_capacity_df["pct_unbounded"]
+        assert implied_scalars.max() - implied_scalars.min() == pytest.approx(0.0, abs=1e-12)
+
+
+class TestEquilibrationSensitivity:
+    """
+    The sweep varies the absorption scalar to show how much of the sector-level
+    result depends on the conservation constraint holding exactly. Multiplier 0
+    is the no-equilibrium model the dynamic model argues against.
+    """
+
+    def _validation_df(self):
+        sweep_df = TestDynamicEquilibrium()._fixture_df()
+        sweep_df["gross_displacement"] = sweep_df["bounded_exposure_contribution"] + sweep_df["adversarial_exposure_contribution"]
+        sweep_df["soc_major"] = sweep_df["OCC_CODE"].str[:2]
+        sweep_df["emp_growth_composite"] = [-0.05, 0.01, 0.08]
+        return sweep_df
+
+    def test_returns_one_row_per_multiplier(self):
+        result = compute_equilibration_sensitivity(self._validation_df(), "employment", "emp_growth_composite", multipliers=(0.0, 1.0, 5.0))
+        assert list(result["equilibration_multiplier"]) == [0.0, 1.0, 5.0]
+
+    def test_zero_multiplier_is_pure_displacement(self):
+        """At multiplier 0 nothing is reabsorbed, so the score is −gross_displacement."""
+        validation_df = self._validation_df()
+        result = compute_equilibration_sensitivity(validation_df, "employment", "emp_growth_composite", multipliers=(0.0,))
+        expected_r = stats.pearsonr(-validation_df["gross_displacement"], validation_df["emp_growth_composite"])[0]
+        assert result.iloc[0]["sector_r"] == pytest.approx(expected_r)
+
+    def test_unit_multiplier_matches_the_fitted_model(self):
+        """Multiplier 1 must reproduce the net_employment_change the model actually publishes."""
+        validation_df = self._validation_df()
+        fitted_df = compute_dynamic_equilibrium(validation_df, "employment")
+        result = compute_equilibration_sensitivity(validation_df, "employment", "emp_growth_composite", multipliers=(1.0,))
+        expected_r = stats.pearsonr(fitted_df["net_employment_change"], validation_df["emp_growth_composite"])[0]
+        assert result.iloc[0]["sector_r"] == pytest.approx(expected_r)
 
 
 class TestBuildPenetrationLookup:

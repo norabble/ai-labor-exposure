@@ -83,6 +83,22 @@ The sector-level r = +0.528 coexists with occupation-level sector-adjusted r ≈
 
 This is the expected pattern for a model that redistributes labor via sector-level Unbounded capacity rather than occupation-specific adjacency. Strengthening the occupation-level prediction would require a more granular absorption mechanism that routes displaced workers toward skill-adjacent Unbounded occupations rather than all Unbounded occupations proportionally.
 
+## The result does not rest on the conservation constraint
+
+A natural objection to r = +0.528 is that it is an artifact of assuming total
+employment is conserved. It is not. The conservation constraint reduces to a
+single scalar multiplying `pct_unbounded`, and re-running this correlation across
+a range of equilibration rates shows the result holds anywhere from a quarter to
+a hundred times the conserved value (all p < 0.05). The one point that fails is
+multiplier 0 — the no-equilibrium model in which displaced labor vanishes, which
+drops to r = +0.335 (p = 0.127).
+
+That is the comparison the dynamic model exists to make, so it is worth stating
+directly: **the naive no-equilibrium assumption is the worst-fitting point on the
+curve, and the only one that loses significance.** See `framework.md`
+§ Robustness to the equilibration rate for the full sweep, and
+`data/output/equilibration_sensitivity.csv` for the generated table.
+
 ## Confound: pre-existing sector composition
 
 Extending the BLS baseline to 2005 (see `model_signal_over_time.md`) reveals that the dynamic model's sector-level r was already r ≈ +0.43–0.48 in 2005→06 and 2006→07, well before meaningful AI adoption. Unbounded sectors — Computer and Mathematical, Healthcare, Life Sciences — have grown faster than Bounded sectors as part of a long-running secular shift in the economy. The model, which assigns positive `net_employment_change` to Unbounded-heavy sectors, therefore partly captures a pre-existing structural tendency.

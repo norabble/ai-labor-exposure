@@ -60,6 +60,7 @@ from cps_panel import (
 from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
 from synthesize_dynamic import (
     compute_dynamic_equilibrium,
+    compute_equilibration_sensitivity,
     plot_dynamic_sector_level_validation,
     plot_dynamic_vs_rebound_comparison,
     plot_net_change_distribution,
@@ -1252,6 +1253,30 @@ def main():
     plot_dynamic_sector_level_validation(dynamic_validation_df, latest_emp_col, output_dir)
 
     dynamic_validation_df["soc_major"] = dynamic_validation_df["OCC_CODE"].str[:2]
+
+    if "emp_growth_composite" in dynamic_validation_df.columns:
+        equilibration_sensitivity_df = compute_equilibration_sensitivity(
+            dynamic_validation_df,
+            employment_col=latest_emp_col,
+            growth_col="emp_growth_composite",
+            soc_major_col="soc_major",
+        )
+        equilibration_sensitivity_df.to_csv("data/output/equilibration_sensitivity.csv", index=False)
+        print("\n── Equilibration sensitivity (sector-level, composite employment growth) ──")
+        print("  How much of the headline result depends on the conservation constraint?")
+        print(f"  {'× conservation K':>19s} {'absorption K':>13s} {'sector r':>9s} {'p':>8s}")
+        for _, sensitivity_row in equilibration_sensitivity_df.iterrows():
+            multiplier_label = f"{sensitivity_row['equilibration_multiplier']:.2f}×"
+            if sensitivity_row["equilibration_multiplier"] == 0.0:
+                multiplier_label += " (no equilib.)"
+            elif sensitivity_row["equilibration_multiplier"] == 1.0:
+                multiplier_label += " (pinned)"
+            print(
+                f"  {multiplier_label:>19s} {sensitivity_row['absorption_scalar']:13.4f} "
+                f"{sensitivity_row['sector_r']:+9.3f} {sensitivity_row['sector_p']:8.4f}"
+            )
+        print("  Saved data/output/equilibration_sensitivity.csv")
+
     _make_sector_subplot_figure(
         dynamic_validation_df,
         score_col="net_employment_change",

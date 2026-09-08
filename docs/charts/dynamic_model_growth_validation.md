@@ -22,23 +22,23 @@ See `sector_adjusted_growth.md` for an explanation of how sector adjustment is c
 
 ## Raw employment growth: positive and significant
 
-| Period | r | p |
-|--------|---|---|
-| 2022→2023 | +0.067 | 0.062 |
-| 2023→2024 | +0.135 | 0.000 |
-| 2024→2025 | +0.117 | 0.001 |
-| Composite | +0.145 | 0.000 |
+| Period | r | p | n |
+|--------|---|---|---|
+| 2022→2023 | +0.068 | 0.059 | 770 |
+| 2023→2024 | +0.122 | 0.0007 | 770 |
+| 2024→2025 | +0.095 | 0.008 | 770 |
+| Composite | +0.146 | < 0.0001 | 770 |
 
-The dynamic model has a statistically significant positive correlation with actual employment growth in three of four periods and in the composite. This is a sign flip relative to the rebound-adjusted model, which showed negative correlations (composite r = −0.089). Higher dynamic net employment change (more absorption relative to displacement) predicts higher actual employment growth in the BLS data.
+The dynamic model has a statistically significant positive correlation with actual employment growth in two of the three year-over-year periods and in the composite; 2022→2023 falls just short (p = 0.059). This is a sign flip relative to the rebound-adjusted model, which showed negative correlations (composite r = −0.090, p = 0.012). Higher dynamic net employment change (more absorption relative to displacement) predicts higher actual employment growth in the BLS data.
 
 ## Sector-adjusted employment growth: signal collapses to zero
 
-| Period | r | p |
-|--------|---|---|
-| 2022→2023 | +0.010 | 0.792 |
-| 2023→2024 | +0.043 | 0.238 |
-| 2024→2025 | +0.021 | 0.568 |
-| Composite | +0.016 | 0.656 |
+| Period | r | p | n |
+|--------|---|---|---|
+| 2022→2023 | −0.009 | 0.803 | 770 |
+| 2023→2024 | +0.043 | 0.234 | 770 |
+| 2024→2025 | +0.021 | 0.567 | 770 |
+| Composite | +0.017 | 0.645 | 770 |
 
 Once sector-level employment trends are removed, the dynamic model's correlation drops to near zero across all periods. None are significant. This diagnostic is definitive: **the dynamic model's positive raw correlation with employment growth is entirely explained by sector composition, not occupation-specific dynamics**.
 
@@ -46,14 +46,14 @@ Unbounded-dominant sectors (Computer and Mathematical, Healthcare Practitioners,
 
 ## Wage growth: no signal at any level
 
-| Period | Raw r | Sector-adj r |
-|--------|-------|-------------|
-| 2022→2023 | +0.048 | +0.022 |
-| 2023→2024 | −0.065 | −0.000 |
-| 2024→2025 | +0.047 | −0.005 |
-| Composite | +0.007 | +0.003 |
+| Period | Raw r | Sector-adj r | n |
+|--------|-------|-------------|---|
+| 2022→2023 | −0.042 | −0.012 | 756 |
+| 2023→2024 | −0.061 | +0.003 | 755 |
+| 2024→2025 | +0.056 | +0.001 | 755 |
+| Composite | +0.010 | +0.018 | 760 |
 
-Neither raw nor sector-adjusted wage growth shows any relationship with the dynamic model's predictions. The rebound-adjusted model had a weak but consistent negative wage signal (composite r = −0.097, p = 0.008) that the dynamic model does not replicate.
+Neither raw nor sector-adjusted wage growth shows any relationship with the dynamic model's predictions — no cell reaches significance (the smallest p is 0.095, for raw 2023→2024). The rebound-adjusted model had a weak but consistent negative wage signal (composite r = −0.094, p = 0.009) that the dynamic model does not replicate.
 
 ## Interpreting the occupation-level null
 

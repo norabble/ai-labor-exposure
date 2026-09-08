@@ -209,15 +209,40 @@ when that becomes available.
 ## Dynamic Labor Equilibrium Model
 
 The dynamic model is a second output layer that builds on the rebound-adjusted
-exposure inputs to model economy-wide labor redistribution under a
-total-employment-constant assumption.
+exposure inputs to model economy-wide labor redistribution.
 
-### Core assumption
+### What conservation is for — and what it is not
 
-If total employment is held fixed, labor displaced from Bounded and Adversarial
-tasks must flow somewhere. The dynamic model routes that displaced labor into
-Unbounded-capacity occupations, in proportion to each occupation's share of
-total economy-wide Unbounded-weighted employment.
+The naive exposure models this project is arguing against share an implicit
+assumption: that AI capability over a task removes the labor doing it, full
+stop. Displaced work simply disappears from the accounting, and no equilibrating
+response is modeled. That is not a neutral baseline — it is the strong claim
+that the reabsorption rate is exactly zero.
+
+The dynamic model's conservation constraint is the device for stating the
+opposite: displaced labor goes *somewhere*, and where it goes is a function of
+which occupations have demand that can expand to receive it. Holding total
+employment fixed is the simplest way to write that down. It is a normalization
+that makes the redistribution question askable, not an empirical claim.
+
+**In particular, the model does not assert that total employment is constant,
+that headcount is conserved economy-wide, or that occupational employment
+fractions are fixed.** Any of those would be a strong and probably false claim
+about the labor market. What the model asserts is weaker and more defensible:
+*some* equilibrating response exists, and its direction is toward Unbounded
+capacity.
+
+The distinction matters because the results turn out to be insensitive to the
+constraint holding exactly — see [Robustness to the equilibration
+rate](#robustness-to-the-equilibration-rate) below. The conservation constraint
+picks one defensible point on a wide plateau, and the finding survives anywhere
+on it. Reading conservation as a load-bearing assumption overstates what the
+model needs.
+
+### Redistribution rule
+
+Displaced labor is routed into Unbounded-capacity occupations, in proportion to
+each occupation's share of total economy-wide Unbounded-weighted employment.
 
 ### Computation
 
@@ -240,6 +265,75 @@ The employment-weighted sum of `net_employment_change` is zero by construction
 (verified by assertion at runtime). Occupations with above-average Unbounded
 capacity gain workers; Bounded-heavy occupations lose them.
 
+Because `total_displaced`, `total_employment`, and the Unbounded-capacity total
+are all economy-wide scalars, the absorption step collapses to a single global
+constant — the **absorption scalar** — times each occupation's `pct_unbounded`:
+
+```
+absorption_o = absorption_scalar × pct_unbounded_o
+
+  where absorption_scalar = Σ_o(employment_o × gross_displacement_o)
+                          / Σ_o(employment_o × pct_unbounded_o)
+
+net_employment_change_o = absorption_scalar × pct_unbounded_o
+                        − gross_displacement_o
+```
+
+This is an identity, not an approximation (asserted in `tests/test_pipeline.py`).
+It is what makes the robustness check below possible: the absorption scalar is
+the model's entire equilibration assumption reduced to one number, so varying it
+sweeps the model across equilibration rates. At the current parameters the
+conservation-pinned value is **0.2503**.
+
+### Robustness to the equilibration rate
+
+`compute_equilibration_sensitivity` in `synthesize_dynamic.py` re-runs the
+sector-level employment validation with the absorption scalar scaled to
+fractions and multiples of its conservation-pinned value. Multiplier 0 is the
+no-equilibrium model — displaced labor vanishes and the score is pure
+displacement pressure. Large multipliers approach the opposite limit, where
+reabsorption dominates and the score is pure Unbounded composition.
+
+Sector-level Pearson r against composite BLS employment growth, n = 22:
+
+| × conservation value | absorption scalar | sector r | p |
+|---------------------:|------------------:|---------:|------:|
+| 0 (no equilibrium) | 0.0000 | +0.335 | 0.127 |
+| 0.10 | 0.0250 | +0.395 | 0.069 |
+| 0.25 | 0.0626 | +0.460 | 0.031 |
+| 0.50 | 0.1252 | +0.512 | 0.015 |
+| 0.75 | 0.1877 | +0.527 | 0.012 |
+| **1.00 (conservation-pinned)** | **0.2503** | **+0.528** | **0.012** |
+| 1.50 | 0.3755 | +0.519 | 0.013 |
+| 2.00 | 0.5006 | +0.509 | 0.016 |
+| 5.00 | 1.2516 | +0.478 | 0.024 |
+| 100.00 | 25.0311 | +0.450 | 0.036 |
+
+Three things follow.
+
+**The no-equilibrium assumption is the worst-performing point on the curve.**
+At multiplier 0 the correlation falls to +0.335 and loses significance
+(p = 0.127) — the only row in the table that does. This is the model's central
+claim stated as a measurement: assuming displaced labor simply disappears fits
+the BLS sector data worse than assuming it goes somewhere.
+
+**The result does not depend on conservation holding exactly.** Every
+equilibration rate from 25% to 10,000% of the conservation-pinned value clears
+p < 0.05. The finding sits on a broad plateau rather than a knife-edge, so a
+reader who rejects strict labor conservation — reasonably — does not thereby
+lose the result. It survives at a quarter of the reabsorption rate and at a
+hundred times it.
+
+**Conservation lands near the optimum, but not meaningfully so.** The curve
+peaks at r = +0.528 essentially at the pinned value. That is a favorable
+coincidence rather than evidence: at n = 22 the difference between +0.528 and
+the +0.450 asymptote is not statistically distinguishable (Steiger's test on the
+dependent correlations gives p = 0.43). The plateau is the finding; its peak is
+not.
+
+Written to `data/output/equilibration_sensitivity.csv` and printed during
+`validate`.
+
 ### Relationship to the rebound-adjusted model
 
 The two models are complementary:
@@ -249,7 +343,7 @@ The two models are complementary:
 | Output range | ≥ 0 (structural pressure) | signed (redistribution) |
 | Unbounded treatment | Small positive exposure (0.3×penetration) | Absorption sink |
 | Adversarial treatment | Near-zero exposure (0.1×penetration) | Displacement source |
-| Conservation | None | Sums to zero by construction |
+| Conservation | None | Sums to zero — a normalization, not an assumption |
 | Validated at sector level | No significant signal | r ≈ +0.53, p < 0.02 (2023→25) |
 
 The rebound-adjusted model identifies *which occupations are under structural
@@ -259,7 +353,10 @@ conservation constraint.
 ### Scope and limitations
 
 **Scope:** The model operates on the ~770 BLS-matched occupations. Conservation
-holds within this subset, not the full labor force.
+holds within this subset, not the full labor force — which is a statement about
+the normalization, not a limitation of the result, since the sector-level
+finding holds across two orders of magnitude of equilibration rate (see
+[Robustness to the equilibration rate](#robustness-to-the-equilibration-rate)).
 
 **Absorption proportional to headcount, not skill adjacency.** The current
 absorption formula routes displaced workers to all Unbounded occupations

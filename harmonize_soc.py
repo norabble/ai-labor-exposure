@@ -107,3 +107,101 @@ def load_oews_hybrid_structure(crosswalk_dir: str = CROSSWALK_DIR) -> pd.DataFra
             hybrid_df[column_name] = hybrid_df[column_name].where(hybrid_df[column_name].notna(), None)
             hybrid_df[column_name] = hybrid_df[column_name].map(lambda code: None if code is None else str(code).strip())
     return hybrid_df.drop_duplicates().reset_index(drop=True)
+
+
+# ── Code generations and OEWS-only aggregate codes ────────────────────────────
+
+GENERATION_BY_YEAR: dict[str, str] = {
+    **{year_suffix: "soc2000" for year_suffix in ("05", "06", "07", "08", "09")},
+    **{year_suffix: "soc2010" for year_suffix in ("10", "11", "12", "13", "14", "15", "16", "17", "18")},
+    **{year_suffix: "hybrid" for year_suffix in ("19", "20")},
+    **{year_suffix: "soc2018" for year_suffix in ("21", "22", "23", "24", "25")},
+}
+
+AGGREGATE_CODES_PATH = "seeds/oews_aggregate_codes.csv"
+AGGREGATE_CODES_COLUMNS = ["generation", "oews_code", "oews_title", "member_soc_code", "source"]
+
+
+def load_aggregate_codes(path: str = AGGREGATE_CODES_PATH) -> pd.DataFrame:
+    """
+    OEWS-only aggregate codes that neither the SOC crosswalks nor the hybrid
+    structure cover, mapped to their member SOC codes. One row per member.
+    """
+    aggregate_codes_df = pd.read_csv(path, dtype=str)
+    missing_columns = [column for column in AGGREGATE_CODES_COLUMNS if column not in aggregate_codes_df.columns]
+    if missing_columns:
+        raise ValueError(f"{path} lacks columns {missing_columns}")
+    return aggregate_codes_df[AGGREGATE_CODES_COLUMNS]
+
+
+def soc_vocabularies(crosswalk_dir: str = CROSSWALK_DIR, aggregate_codes_path: str = AGGREGATE_CODES_PATH) -> dict[str, set[str]]:
+    """Every SOC code of each generation known to the crosswalks, plus seed members."""
+    soc_2000_to_2010_df = load_soc_2000_to_2010(crosswalk_dir)
+    soc_2010_to_2018_df = load_soc_2010_to_2018(crosswalk_dir)
+    vocabularies = {
+        "soc2000": set(soc_2000_to_2010_df["from_code"]),
+        "soc2010": set(soc_2000_to_2010_df["to_code"]) | set(soc_2010_to_2018_df["from_code"]),
+        "soc2018": set(soc_2010_to_2018_df["to_code"]),
+    }
+    aggregate_codes_df = load_aggregate_codes(aggregate_codes_path)
+    for generation, generation_rows_df in aggregate_codes_df.groupby("generation"):
+        vocabularies.setdefault(generation, set()).update(generation_rows_df["member_soc_code"])
+    return vocabularies
+
+
+def resolve_oews_codes(
+    oews_codes_df: pd.DataFrame,
+    generation: str,
+    vocabularies: dict[str, set[str]],
+    aggregate_codes_df: pd.DataFrame,
+    hybrid_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Map each OEWS detailed-row code of one year to the SOC code(s) of that
+    year's generation. Resolution order: identity, aggregate seed, broad-group
+    rule. Hybrid years resolve every code through the hybrid structure to SOC
+    2018. Raises ValueError naming every code that resolves nowhere.
+    """
+    resolved_rows: list[dict[str, str]] = []
+    unresolved_codes: list[str] = []
+
+    if generation == "hybrid":
+        hybrid_members = hybrid_df.dropna(subset=["hybrid_code", "soc_2018_code"]).groupby("hybrid_code")["soc_2018_code"]
+        hybrid_lookup = {hybrid_code: sorted(set(member_codes)) for hybrid_code, member_codes in hybrid_members}
+        for oews_code in oews_codes_df["OCC_CODE"].astype(str):
+            if oews_code not in hybrid_lookup:
+                unresolved_codes.append(oews_code)
+                continue
+            resolved_rows.extend(
+                {"oews_code": oews_code, "soc_code": soc_code, "resolution": "hybrid"} for soc_code in hybrid_lookup[oews_code]
+            )
+    else:
+        vocabulary = vocabularies[generation]
+        seed_rows_df = aggregate_codes_df[aggregate_codes_df["generation"] == generation]
+        seed_lookup = {
+            oews_code: sorted(set(member_rows["member_soc_code"])) for oews_code, member_rows in seed_rows_df.groupby("oews_code")
+        }
+        for oews_code in oews_codes_df["OCC_CODE"].astype(str):
+            if oews_code in vocabulary:
+                resolved_rows.append({"oews_code": oews_code, "soc_code": oews_code, "resolution": "identity"})
+            elif oews_code in seed_lookup:
+                resolved_rows.extend(
+                    {"oews_code": oews_code, "soc_code": soc_code, "resolution": "aggregate_seed"} for soc_code in seed_lookup[oews_code]
+                )
+            elif oews_code.endswith("0"):
+                broad_members = sorted(code for code in vocabulary if code[:6] == oews_code[:6])
+                if not broad_members:
+                    unresolved_codes.append(oews_code)
+                    continue
+                resolved_rows.extend(
+                    {"oews_code": oews_code, "soc_code": soc_code, "resolution": "broad_group"} for soc_code in broad_members
+                )
+            else:
+                unresolved_codes.append(oews_code)
+
+    if unresolved_codes:
+        raise ValueError(
+            f"{len(unresolved_codes)} OEWS code(s) in generation {generation!r} resolve to no SOC code: {unresolved_codes}. "
+            f"Add them to {AGGREGATE_CODES_PATH}."
+        )
+    return pd.DataFrame(resolved_rows, columns=["oews_code", "soc_code", "resolution"])

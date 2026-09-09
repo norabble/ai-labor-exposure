@@ -14,23 +14,23 @@ This is the per-period expansion of the composite panel in `dynamic_sector_level
 
 | Period | r | p |
 |--------|---|---|
-| 2022→2023 | +0.329 | 0.135 |
-| 2023→2024 | +0.544 | 0.009 |
-| 2024→2025 | +0.532 | 0.011 |
-| Composite | +0.528 | 0.012 |
+| 2022→2023 | +0.333 | 0.129 |
+| 2023→2024 | +0.570 | 0.006 |
+| 2024→2025 | +0.571 | 0.006 |
+| Composite | +0.542 | 0.009 |
 
 ## Key observations
 
 **Consistent positive signal across all periods, statistically significant in three of four.** The dynamic model predicts that sectors with higher employment-weighted net employment change (more Unbounded absorption than Bounded/Adversarial displacement) grow more. The BLS data supports this at the sector level.
 
-**The signal strengthens over time.** The 2022→23 period has the weakest correlation (r = +0.329, p = 0.135), not significant at α = 0.05. By 2023→24 the r jumps to +0.544 (p = 0.009) and holds through 2024→25 (r = +0.532, p = 0.011). This temporal pattern is consistent with AI adoption having an increasing effect on sector-level employment outcomes over the observation window — the model's predictions become more accurate as AI-driven labor reallocation becomes more visible in BLS data.
+**The signal strengthens over time.** The 2022→23 period has the weakest correlation (r = +0.333, p = 0.129), not significant at α = 0.05. By 2023→24 the r jumps to +0.570 (p = 0.006) and holds through 2024→25 (r = +0.571, p = 0.006). This temporal pattern is consistent with AI adoption having an increasing effect on sector-level employment outcomes over the observation window — the model's predictions become more accurate as AI-driven labor reallocation becomes more visible in BLS data.
 
 **Unbounded-dominant sectors drive the upper-right.** Across all four panels, the sectors in the upper-right (positive net change, positive actual growth) are consistently the Unbounded-dominant ones: Computer and Mathematical, Healthcare Practitioners, Community and Social Service, Life/Physical/Social Science. These are the sectors the model assigns the largest absorption benefit and which BLS shows growing the fastest.
 
 **Bounded-dominant sectors cluster in the lower-left.** Farming/Forestry, Construction, Business and Financial Operations, and Office and Administrative Support appear in the left or lower portions of the scatter in most panels.
 
-**Office and Administrative Support: the key exception.** This sector has a large negative dynamic net employment change (large Bounded displacement, low Unbounded absorption) but showed modest actual employment growth in 2023→24 and 2024→25. It sits below the regression line in later panels, pulling r down. The model may be overestimating Bounded displacement in this sector, or near-term employment there is being sustained by factors outside the model's scope — for instance, AI implementation itself may be driving hiring of workers to manage AI tools.
+**Office and Administrative Support: the anchor.** This sector has by far the most negative dynamic net employment change (large Bounded displacement, almost no absorption capacity) and is the only large sector with negative composite employment growth. It sits alone in the lower-left of every panel and supplies most of the slope: dropping it from the composite leaves r = +0.375, p = 0.094 (see `dynamic_sector_level_validation.md` § Which sector carries it).
 
 ## Comparison to the rebound model
 
-The rebound model's sector employment correlations are non-significant and weaker across all periods (r ranging from +0.043 to −0.412). The dynamic model's consistent positive signal in 2023→24, 2024→25, and composite (all r ≈ +0.53, p < 0.02) represents a substantially better fit to observed sector-level employment outcomes. The key difference: the dynamic model explicitly models where displaced workers go (into Unbounded sectors), while the rebound model only measures displacement pressure. At the sector level, where labor actually flows is observable in BLS data, giving the dynamic model a real advantage.
+The rebound model's sector employment correlations are non-significant and weaker across all periods (r ranging from +0.043 to −0.412). The dynamic model's consistent positive signal in 2023→24, 2024→25, and composite (r ≈ +0.54 to +0.57, p < 0.01) represents a substantially better fit to observed sector-level employment outcomes. The key difference: the dynamic model explicitly models where displaced workers go (into sectors with Unbounded or Adversarial capacity), while the rebound model only measures displacement pressure. At the sector level, where labor actually flows is observable in BLS data, giving the dynamic model a real advantage.

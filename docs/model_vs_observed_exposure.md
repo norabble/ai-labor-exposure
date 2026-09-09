@@ -85,10 +85,10 @@ gainers should grow). Computed on the 770-occupation merge between
 
 | Period | Dynamic r (all, n = 770) | Dynamic r (displaced subset, n = 306) |
 |--------|-------------------------:|--------------------------------------:|
-| 2022→2023 | +0.067 | +0.106 |
-| 2023→2024 | +0.122** | +0.199*** |
-| 2024→2025 | +0.095** | +0.135* |
-| Composite | **+0.145*** | **+0.210*** |
+| 2022→2023 | +0.076* | +0.079 |
+| 2023→2024 | +0.135*** | +0.203*** |
+| 2024→2025 | +0.105** | +0.167** |
+| Composite | **+0.166*** | **+0.222*** |
 
 (The displaced subset restricts to occupations with `gross_displacement > 0`,
 i.e. those with Bounded/Adversarial exposure that the model actually redistributes.)
@@ -127,14 +127,14 @@ signal in the entire project**.
 
 | Predictor | Type | Composite r | 2023→24 r |
 |-----------|------|------------:|----------:|
-| **Dynamic net change** | signed | **+0.528*** | **+0.544*** |
+| **Dynamic net change** | signed | **+0.542*** | **+0.570*** |
 | Observed coverage | gross | +0.191 | +0.364† |
 | Eloundou theoretical | gross | +0.122 | +0.071 |
 | Rebound-adjusted | gross | −0.247 | −0.412 |
 
-`†` p < 0.10, `*` p < 0.05 (dynamic: composite p = 0.012, 2023→24 p = 0.009)
+`†` p < 0.10, `*` p < 0.05 (dynamic: composite p = 0.009, 2023→24 p = 0.006; leave-one-sector-out range +0.38 to +0.62)
 
-Reading the signs: the dynamic model's **+0.528** is correct for a signed measure
+Reading the signs: the dynamic model's **+0.542** is correct for a signed measure
 (predicted-gainer sectors grew). The rebound-adjusted **−0.247** is correct for a
 gross measure (high-pressure sectors grew less), and it is the only gross measure
 that keeps its expected sign across aggregation levels. Observed coverage and
@@ -149,11 +149,13 @@ Cross-references: `dynamic_sector_level_employment_validation.md`,
 `anthropic_observed_sector_level_employment_validation.md`,
 `eloundou_sector_level_employment_validation.md`.
 
-The dynamic model's sector signal is roughly **2.7× the magnitude** of the next
+The dynamic model's sector signal is roughly **2.8× the magnitude** of the next
 strongest predictor (observed coverage) and is the only one significant at
 p < 0.05 in every period from 2023 onward. The explicit conservation constraint —
-routing displaced labor into Unbounded-heavy sectors — is what sharpens the
-diffuse "Unbounded sectors grow" tendency that observed coverage only hints at.
+routing displaced labor into sectors with Unbounded or Adversarial capacity — is
+what sharpens the diffuse "Unbounded sectors grow" tendency that observed
+coverage only hints at. One sector carries much of it: dropping Office and
+Administrative Support leaves r = +0.375 (p = 0.094).
 
 ### Confound: pre-existing sector composition
 
@@ -165,8 +167,8 @@ than Bounded sectors for decades as part of a long-running secular transition in
 the labour market. The dynamic model formalises this tendency and is therefore
 partly tracking a structural property of the economy, not purely an AI-era effect.
 
-The AI-era values (r ≈ +0.53–0.54 in 2023→24 and 2024→25) are modestly above the
-pre-AI peak of +0.43–0.48, consistent with AI accelerating the redistribution
+The AI-era values (r ≈ +0.57 in 2023→24 and 2024→25) are modestly above the
+pre-AI peak of +0.45–0.48, consistent with AI accelerating the redistribution
 rather than creating it from scratch. However, three years of post-AI data (2022→25)
 is insufficient to cleanly separate amplification from the secular baseline.
 
@@ -205,7 +207,7 @@ the occupation level (composite r = −0.007, n.s.; no period exceeds |r| = 0.07
 ### Sector level
 
 The dynamic model shows no wage signal at the sector level either (composite
-r = −0.099, p = 0.66; no period significant — see
+r = −0.163, p = 0.47; no period significant — see
 `dynamic_sector_level_wage_validation.md`). The apparent negative wage
 correlations in 2022→23 for the *gross* measures (Eloundou r = −0.504,
 observed r = −0.416) are a **post-COVID recovery confound**, not an AI signal —
@@ -226,7 +228,7 @@ both *what* you are predicting and at *what level of aggregation*.
 
 | | Occupation level | Sector level |
 |--------------|------------------------------------------|----------------------------------|
-| **Employment** | All three weak; dynamic best-signed (+0.15 composite), rebound-adjusted beats observed on the penetrated subset | **Dynamic net change (+0.53)** — strongest signal in the project |
+| **Employment** | All three weak; dynamic best-signed (+0.17 composite), rebound-adjusted beats observed on the penetrated subset | **Dynamic net change (+0.54)** — strongest signal in the project; one-sector dependent |
 | **Wages** | Observed AI task coverage | None significant (2022→23 gross-measure dips are a post-COVID confound) |
 
 Takeaways:
@@ -242,4 +244,4 @@ Takeaways:
   they disagree (negative vs. positive r) only because one is gross pressure and
   the other is signed redistribution. Once read correctly, they tell a consistent
   story: AI-exposed Bounded work is under employment pressure, and the sectors
-  with Unbounded absorption capacity are the ones gaining.
+  with Unbounded or Adversarial absorption capacity are the ones gaining.

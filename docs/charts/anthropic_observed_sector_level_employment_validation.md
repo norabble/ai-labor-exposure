@@ -40,7 +40,7 @@ weaker employment growth.
 | Anthropic observed | −0.191 | −0.364 † | negative |
 | Eloundou theoretical | +0.122 | −0.071 | negative |
 | Rebound-adjusted | −0.247 | −0.412 † | negative |
-| Dynamic equilibrium | +0.528 ** | +0.544 ** | positive |
+| Dynamic equilibrium | +0.542 ** | +0.570 ** | positive |
 
 († p<0.10, ** p<0.01)
 

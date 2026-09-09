@@ -24,9 +24,11 @@ wage data (2022–2025). What the demand-type lens buys you:
 
 **Sectors with the most Unbounded "absorption capacity" are measurably gaining
 employment.** The dynamic equilibrium model's signed `net_employment_change`
-score correlates with actual BLS sector employment growth at **r = +0.528
-(p = 0.012)** economy-wide, strengthening to **r ≈ +0.54 (p < 0.01)** in both
-2023→24 and 2024→25. Raw "AI can do this task" coverage shows no comparable
+score correlates with actual BLS sector employment growth at **r = +0.542
+(p = 0.009)** economy-wide, strengthening to **r ≈ +0.57 (p < 0.01)** in both
+2023→24 and 2024→25. The result leans on one sector: dropping Office and
+Administrative Support leaves r = +0.38 (p = 0.09), so quote the leave-one-out
+range (+0.38 to +0.62) beside the headline. Raw "AI can do this task" coverage shows no comparable
 sector signal (r = +0.19, n.s.), confirming that the demand-type stratification
 is doing work. **Caveat:** extending the historical baseline back to 2005 reveals
 that the dynamic model's sector signal was already present pre-2022 (r ≈ +0.43–0.48
@@ -139,15 +141,16 @@ Scores are non-negative; higher values indicate greater structural exposure pres
 
 ### Dynamic labor equilibrium (macro)
 
-A second model holds total employment constant and redistributes Bounded + Adversarial displacement economy-wide into Unbounded-capacity occupations:
+A second model holds total employment constant and redistributes Bounded + Adversarial displacement economy-wide into occupations whose demand can expand to receive it — Unbounded and Adversarial capacity (Adversarial is a carve-out from Unbounded, so it absorbs on the same footing):
 
 ```
-gross_displacement  = bounded_exposure_contribution + adversarial_exposure_contribution
-absorption          = (pct_unbounded / economy_avg_pct_unbounded) × total_displaced
+gross_displacement    = bounded_exposure_contribution + adversarial_exposure_contribution
+absorption_capacity   = pct_unbounded + pct_adversarial
+absorption            = (absorption_capacity / economy_avg_absorption_capacity) × total_displaced
 net_employment_change = absorption − gross_displacement
 ```
 
-The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.528 (p = 0.012) for composite employment growth, strengthening to r ≈ +0.54 (p < 0.01) in 2023→24 and 2024→25.
+The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.542 (p = 0.009) for composite employment growth, strengthening to r ≈ +0.57 (p < 0.01) in 2023→24 and 2024→25; leave-one-sector-out range +0.38 to +0.62.
 
 ## Outputs
 

@@ -54,14 +54,14 @@ The dynamic equilibrium model produces substantially stronger sector-level emplo
 
 | Period | Rebound emp r | Dynamic emp r |
 |--------|--------------|---------------|
-| 2022→2023 | +0.043 | +0.329 |
-| 2023→2024 | −0.412 | +0.544 ** |
-| 2024→2025 | −0.347 | +0.532 ** |
-| Composite | −0.247 | +0.528 * |
+| 2022→2023 | +0.043 | +0.333 |
+| 2023→2024 | −0.412 | +0.570 ** |
+| 2024→2025 | −0.347 | +0.571 ** |
+| Composite | −0.247 | +0.542 ** |
 
 (* p < 0.05, ** p < 0.01)
 
-The sign reversal between models reflects what each model emphasizes: the rebound model scores Bounded sectors highest (displacement pressure), while the dynamic model scores Unbounded sectors highest (absorption gain). Unbounded sectors outgrew Bounded sectors in BLS data, so the dynamic model's positive predictions align better with observed outcomes.
+The sign reversal between models reflects what each model emphasizes: the rebound model scores Bounded sectors highest (displacement pressure), while the dynamic model scores Unbounded and Adversarial sectors highest (absorption gain). Those sectors outgrew Bounded sectors in BLS data, so the dynamic model's positive predictions align better with observed outcomes.
 
 ## Interpreting the absence of signal in the rebound model
 

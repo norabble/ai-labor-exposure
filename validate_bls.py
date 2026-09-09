@@ -61,6 +61,7 @@ from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
 from synthesize_dynamic import (
     compute_dynamic_equilibrium,
     compute_equilibration_sensitivity,
+    compute_sector_jackknife,
     plot_dynamic_sector_level_validation,
     plot_dynamic_vs_rebound_comparison,
     plot_net_change_distribution,
@@ -1276,6 +1277,35 @@ def main():
                 f"{sensitivity_row['sector_r']:+9.3f} {sensitivity_row['sector_p']:8.4f}"
             )
         print("  Saved data/output/equilibration_sensitivity.csv")
+
+        sector_jackknife_df = compute_sector_jackknife(
+            dynamic_validation_df,
+            employment_col=latest_emp_col,
+            growth_col="emp_growth_composite",
+            score_col="net_employment_change",
+            soc_major_col="soc_major",
+        )
+        sector_jackknife_df.to_csv("data/output/sector_jackknife.csv", index=False)
+        weakest_row = sector_jackknife_df.iloc[0]
+        strongest_row = sector_jackknife_df.iloc[-1]
+        print("\n── Sector jackknife (dynamic model, composite employment growth) ──")
+        print("  Leave-one-sector-out range of the headline sector-level r:")
+        full_sample_n = weakest_row["n_sectors"] + 1
+        print(f"  full sample:  r = {weakest_row['full_sample_r']:+.3f}, p = {weakest_row['full_sample_p']:.3f}, n = {full_sample_n}")
+        print(
+            f"  weakest:      r = {weakest_row['sector_r']:+.3f}, p = {weakest_row['sector_p']:.3f}  "
+            f"dropping {weakest_row['dropped_sector_name']}"
+        )
+        print(
+            f"  strongest:    r = {strongest_row['sector_r']:+.3f}, p = {strongest_row['sector_p']:.3f}  "
+            f"dropping {strongest_row['dropped_sector_name']}"
+        )
+        decisive_df = sector_jackknife_df[sector_jackknife_df["sector_p"] >= 0.05]
+        if decisive_df.empty:
+            print("  No single sector's removal takes the result above p = 0.05.")
+        else:
+            print(f"  Removal takes the result above p = 0.05 for: {', '.join(decisive_df['dropped_sector_name'])}")
+        print("  Saved data/output/sector_jackknife.csv")
 
     _make_sector_subplot_figure(
         dynamic_validation_df,

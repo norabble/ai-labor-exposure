@@ -34,6 +34,6 @@ This is the sector-level employment analog of the `theoretical_vs_rebound_adjust
 | Eloundou theoretical | +0.122 | +0.071 |
 | Anthropic observed | +0.191 | +0.364 |
 | Rebound-adjusted | −0.247 | −0.412 |
-| Dynamic equilibrium | +0.528 ** | +0.544 ** |
+| Dynamic equilibrium | +0.542 ** | +0.570 ** |
 
 The Eloundou model has the weakest employment signal of the four. See `eloundou_sector_level_wage_validation.md` for the one period where it shows a strong signal.

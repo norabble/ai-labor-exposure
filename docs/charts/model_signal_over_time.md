@@ -41,8 +41,8 @@ in the pre-AI economy. This is the long-running secular transition from Bounded
 industrialization and technology have driven for decades.
 
 **The AI era amplifies the pre-existing dynamic signal.** In 2023→24 and
-2024→25, the dynamic model's r rises to +0.54 (p < 0.01) — above the pre-AI
-peaks of +0.43–0.48. The signal was already there; AI strengthens it. This is
+2024→25, the dynamic model's r rises to +0.57 (p < 0.01) — above the pre-AI
+peaks of +0.45–0.48. The signal was already there; AI strengthens it. This is
 consistent with AI accelerating the redistribution of labor toward Unbounded
 sectors rather than creating an entirely new structural break.
 
@@ -71,7 +71,7 @@ The **dynamic model** is partly tracking a structural property of the economy
 (Unbounded sectors have long grown faster) and partly tracking an AI-amplified
 version of that trend in 2023–25. The pre-AI signal at r ≈ +0.43–0.48 is a
 partial confound: if Unbounded sectors were already growing, the model would
-appear predictive even without AI. The AI-era signal at r ≈ +0.54 is modestly
+appear predictive even without AI. The AI-era signal at r ≈ +0.57 is modestly
 above that baseline, suggesting a real incremental contribution from AI adoption
 on top of the existing structural tendency — but not a clean separation.
 
@@ -131,15 +131,17 @@ falling sequence is the specific misreading this layout exists to prevent.
 | Model | Apr | Jun | Aug | Spread |
 |-------|----:|----:|----:|-------:|
 | Rebound-adjusted (−r = correct) | +0.28 | +0.09 | +0.12 | 0.19 |
-| Dynamic net change (+r = correct) | +0.24 | +0.37 | **+0.48** (p=0.023) | 0.24 |
+| Dynamic net change (+r = correct) | −0.03 | +0.13 | +0.18 | 0.22 |
 | Observed AI coverage (−r = correct) | +0.08 | +0.07 | +0.03 | 0.05 |
 
-**The dynamic model holds its sign and rough magnitude.** All three endpoints are
-positive and land in the same range as its AI-era OEWS values (+0.53 to +0.54).
-Two different surveys agreeing on sign and magnitude is the strongest thing this
-chart says about the dynamic model. Only the Aug endpoint reaches p < 0.05, and a
-spread of 0.24 across endpoints two months apart is wide — the significance is a
-property of one endpoint, not a stable finding.
+**The dynamic model does not reproduce on CPS.** Two of three endpoints are
+weakly positive and none approaches significance, well below its AI-era OEWS
+values (≈ +0.57). This changed when Adversarial share was added to absorption
+capacity: the previous model version read +0.24, +0.37 and +0.48 (p = 0.023)
+here, and the Adversarial-heavy sectors whose scores rose — Legal, Sales,
+Protective Service, Management — fit their 2022→2025 OEWS growth better but
+their 2025→2026 CPS growth worse. See `cps_model_vs_actual.md` for the
+discussion. The cross-survey replication is an open question.
 
 **The rebound-adjusted model disagrees with itself across surveys.** Its OEWS
 AI-era values are clearly negative (−0.41 in 2023→24, −0.35 in 2024→25), which is

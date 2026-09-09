@@ -18,6 +18,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
+from analyze_bls import attach_growth_columns, select_detailed_rows, select_major_group_rows
 from synthesize_dynamic import compute_dynamic_equilibrium, compute_equilibration_sensitivity, compute_sector_jackknife
 from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
@@ -287,6 +288,14 @@ class TestEquilibrationSensitivity:
         expected_r = stats.pearsonr(-validation_df["gross_displacement"], validation_df["emp_growth_composite"])[0]
         assert result.iloc[0]["sector_r"] == pytest.approx(expected_r)
 
+    def test_sweep_uses_sector_growth_table_when_given(self):
+        validation_df = self._validation_df()
+        sector_growth_df = pd.DataFrame({"emp_growth_composite": [0.08, 0.01, -0.05]}, index=pd.Index(["11", "13", "15"], name="soc_major"))
+        result = compute_equilibration_sensitivity(
+            validation_df, "employment", "emp_growth_composite", multipliers=(1.0,), sector_growth_df=sector_growth_df
+        )
+        assert result.iloc[0]["sector_r"] < 0
+
     def test_unit_multiplier_matches_the_fitted_model(self):
         """Multiplier 1 must reproduce the net_employment_change the model actually publishes."""
         validation_df = self._validation_df()
@@ -294,6 +303,90 @@ class TestEquilibrationSensitivity:
         result = compute_equilibration_sensitivity(validation_df, "employment", "emp_growth_composite", multipliers=(1.0,))
         expected_r = stats.pearsonr(fitted_df["net_employment_change"], validation_df["emp_growth_composite"])[0]
         assert result.iloc[0]["sector_r"] == pytest.approx(expected_r)
+
+
+class TestBlsRowSelection:
+    """
+    Each OEWS file carries detailed-occupation rows and major-group summary rows.
+    Detailed rows feed the occupation-level trends; major-group rows feed the
+    sector-level trends, because major-group codes are stable across SOC
+    revisions while detailed codes are not.
+    """
+
+    def _modern_frame(self):
+        return pd.DataFrame(
+            {
+                "OCC_CODE": ["00-0000", "15-0000", "15-1100", "15-1252", "15-2011"],
+                "OCC_TITLE": ["All", "Computer and Mathematical", "Computer", "Software Developers", "Actuaries"],
+                "O_GROUP": ["total", "major", "minor", "detailed", "detailed"],
+                "I_GROUP": ["cross-industry"] * 5,
+                "TOT_EMP": [150000000, 5000000, 4800000, 1500000, 25000],
+                "A_MEDIAN": [48000, 100000, 101000, 130000, 120000],
+            }
+        )
+
+    def _legacy_frame(self):
+        return pd.DataFrame(
+            {
+                "OCC_CODE": ["00-0000", "15-0000", "15-1131", "15-1132"],
+                "OCC_TITLE": ["All", "Computer and Mathematical", "Programmers", "Software Developers, Applications"],
+                "GROUP": ["total", "major", None, None],
+                "TOT_EMP": ["130,000,000", "3,283,950", "333,620", "499,280"],
+                "A_MEDIAN": ["33,000", "76,000", "71,000", "87,000"],
+            }
+        )
+
+    def test_major_rows_keyed_by_two_digit_soc_major(self):
+        result = select_major_group_rows(self._modern_frame())
+        assert list(result["soc_major"]) == ["15"]
+        assert result.iloc[0]["TOT_EMP"] == 5000000
+
+    def test_major_rows_from_legacy_group_column_parse_numbers(self):
+        result = select_major_group_rows(self._legacy_frame())
+        assert list(result["soc_major"]) == ["15"]
+        assert result.iloc[0]["TOT_EMP"] == 3283950
+        assert result.iloc[0]["A_MEDIAN"] == 76000
+
+    def test_i_group_column_does_not_shadow_o_group(self):
+        """2019+ files carry I_GROUP before O_GROUP; the occupation grouping must win."""
+        shadowed_df = self._modern_frame()[["OCC_CODE", "OCC_TITLE", "I_GROUP", "O_GROUP", "TOT_EMP", "A_MEDIAN"]]
+        assert len(select_major_group_rows(shadowed_df)) == 1
+        assert list(select_detailed_rows(shadowed_df)["OCC_CODE"]) == ["15-1252", "15-2011"]
+
+    def test_detailed_rows_exclude_summary_rows_in_legacy_files(self):
+        result = select_detailed_rows(self._legacy_frame())
+        assert list(result["OCC_CODE"]) == ["15-1131", "15-1132"]
+
+
+class TestAttachGrowthColumns:
+    def _trend_frame(self):
+        return pd.DataFrame(
+            {
+                "key": ["a"],
+                "TOT_EMP_21": [100.0],
+                "TOT_EMP_22": [110.0],
+                "TOT_EMP_23": [121.0],
+                "A_MEDIAN_22": [50.0],
+                "A_MEDIAN_23": [55.0],
+            }
+        )
+
+    def test_pre_anchor_periods_get_hist_prefix(self):
+        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        assert result.iloc[0]["hist_emp_growth_21_22"] == pytest.approx(0.10)
+        assert result.iloc[0]["emp_growth_22_23"] == pytest.approx(0.10)
+        assert "hist_emp_growth_22_23" not in result.columns
+
+    def test_composite_and_pre_ai_anchored_at_2022(self):
+        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        assert result.iloc[0]["emp_growth_composite"] == pytest.approx(0.10)
+        assert result.iloc[0]["wage_growth_composite"] == pytest.approx(0.10)
+        assert result.iloc[0]["hist_emp_growth_pre_ai"] == pytest.approx(0.10)
+
+    def test_wage_growth_skipped_when_a_year_lacks_wages(self):
+        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        assert "hist_wage_growth_21_22" not in result.columns
+        assert "emp_growth_22_23" in result.columns
 
 
 class TestSectorJackknife:
@@ -344,6 +437,21 @@ class TestSectorJackknife:
         expected_r = stats.pearsonr(remaining_df["net_employment_change"], remaining_df["emp_growth_composite"])[0]
         dropped_11 = result[result["dropped_sector"] == "11"].iloc[0]
         assert dropped_11["sector_r"] == pytest.approx(expected_r)
+
+    def test_uses_sector_growth_table_when_given(self):
+        """
+        Sector growth comes from the major-group totals in bls_sector_trends.csv
+        when available, not from the survivor-occupation mean. Here the table
+        reverses the ordering, so the correlation must flip sign.
+        """
+        validation_df = self._validation_df()
+        sector_growth_df = pd.DataFrame(
+            {"emp_growth_composite": [0.08, 0.06, 0.01, -0.05]}, index=pd.Index(["11", "13", "15", "29"], name="soc_major")
+        )
+        result = compute_sector_jackknife(
+            validation_df, "employment", "emp_growth_composite", "net_employment_change", sector_growth_df=sector_growth_df
+        )
+        assert result["full_sample_r"].iloc[0] < 0
 
     def test_carries_the_full_sample_correlation_for_reference(self):
         validation_df = self._validation_df()

@@ -38,6 +38,14 @@ The employment-weighted sum of net_employment_change is zero by construction
 (verified by assertion). Occupations with above-average absorption capacity
 gain workers; Bounded-heavy occupations lose them.
 
+Sector-level growth in every function below comes from the major-group totals
+in data/output/bls_sector_trends.csv when a `sector_growth_df` is supplied
+(indexed by two-digit soc_major, same growth column names as bls_trends.csv).
+Major-group codes survive SOC revisions, so that series is complete for all 22
+sectors in every year; the fallback — the employment-weighted mean growth of
+the scored occupations that survived the code join — loses whole sectors before
+2019. See analyze_bls.py.
+
 `compute_sector_jackknife` recomputes the sector-level correlation leaving one
 sector out at a time. With 22 sectors one of them can carry the headline
 result, and the jackknife range is reported beside it for that reason.
@@ -177,12 +185,26 @@ def compute_dynamic_equilibrium(
 EQUILIBRATION_MULTIPLIERS = (0.0, 0.05, 0.10, 0.25, 0.50, 0.75, 1.0, 1.25, 1.50, 2.0, 3.0, 5.0, 10.0, 100.0)
 
 
+def sector_growth_series(sector_growth_df: pd.DataFrame | None, growth_col: str, sector_index: pd.Index) -> pd.Series | None:
+    """
+    Sector growth from the major-group table for the given sectors, or None
+    when the table is absent or lacks the column, in which case callers fall
+    back to the survivor-occupation mean. Sectors missing from the table
+    (a growth column that is NaN for that year) come back NaN and are dropped
+    by the caller.
+    """
+    if sector_growth_df is None or growth_col not in sector_growth_df.columns:
+        return None
+    return sector_growth_df[growth_col].reindex(sector_index.astype(str))
+
+
 def compute_equilibration_sensitivity(
     dynamic_validation_df: pd.DataFrame,
     employment_col: str,
     growth_col: str,
     soc_major_col: str = "soc_major",
     multipliers: tuple[float, ...] = EQUILIBRATION_MULTIPLIERS,
+    sector_growth_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
     Sector-level correlation with observed growth across equilibration strengths.
@@ -196,9 +218,10 @@ def compute_equilibration_sensitivity(
     holding exactly.
 
     Requires `gross_displacement`, `pct_unbounded`, `pct_adversarial`, the
-    employment column, the growth column, and a SOC major group column. Returns
-    one row per multiplier with the resulting sector-level Pearson r, p-value,
-    and sector count.
+    employment column, the growth column, and a SOC major group column. Sector
+    growth is read from `sector_growth_df` when given. Returns one row per
+    multiplier with the resulting sector-level Pearson r, p-value, and sector
+    count.
     """
     required_columns = [employment_col, growth_col, "pct_unbounded", "pct_adversarial", "gross_displacement"]
     scored_df = dynamic_validation_df.dropna(subset=required_columns).copy()
@@ -209,16 +232,8 @@ def compute_equilibration_sensitivity(
     for multiplier in multipliers:
         swept_scalar = multiplier * conservation_scalar
         scored_df = scored_df.assign(swept_net_change=swept_scalar * scored_df["absorption_capacity"] - scored_df["gross_displacement"])
-        sector_means_df = scored_df.groupby(soc_major_col).apply(
-            lambda group_df: pd.Series(
-                {
-                    "sector_net_change": (group_df["swept_net_change"] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
-                    "sector_growth": (group_df[growth_col] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
-                }
-            ),
-            include_groups=False,
-        )
-        sector_r, sector_p = stats.pearsonr(sector_means_df["sector_net_change"], sector_means_df["sector_growth"])
+        sector_means_df = _sector_weighted_means(scored_df, "swept_net_change", growth_col, employment_col, soc_major_col, sector_growth_df)
+        sector_r, sector_p = stats.pearsonr(sector_means_df["sector_score"], sector_means_df["sector_growth"])
         sensitivity_rows.append(
             {
                 "equilibration_multiplier": multiplier,
@@ -236,10 +251,19 @@ def compute_equilibration_sensitivity(
 
 
 def _sector_weighted_means(
-    scored_df: pd.DataFrame, score_col: str, growth_col: str, employment_col: str, soc_major_col: str
+    scored_df: pd.DataFrame,
+    score_col: str,
+    growth_col: str,
+    employment_col: str,
+    soc_major_col: str,
+    sector_growth_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Employment-weighted mean score and growth per SOC major group."""
-    return scored_df.groupby(soc_major_col).apply(
+    """
+    Employment-weighted mean score per SOC major group, paired with that group's
+    growth — from the major-group totals when `sector_growth_df` is given,
+    otherwise the employment-weighted mean growth of the scored occupations.
+    """
+    sector_means_df = scored_df.groupby(soc_major_col).apply(
         lambda group_df: pd.Series(
             {
                 "sector_score": (group_df[score_col] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
@@ -248,6 +272,10 @@ def _sector_weighted_means(
         ),
         include_groups=False,
     )
+    total_growth = sector_growth_series(sector_growth_df, growth_col, sector_means_df.index)
+    if total_growth is not None:
+        sector_means_df["sector_growth"] = total_growth.values
+    return sector_means_df.dropna(subset=["sector_score", "sector_growth"])
 
 
 def compute_sector_jackknife(
@@ -256,6 +284,7 @@ def compute_sector_jackknife(
     growth_col: str,
     score_col: str = "net_employment_change",
     soc_major_col: str = "soc_major",
+    sector_growth_df: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
     Leave-one-sector-out recomputation of the sector-level correlation.
@@ -267,7 +296,7 @@ def compute_sector_jackknife(
     r, p-value, and remaining sector count, plus the full-sample r for reference.
     """
     scored_df = dynamic_validation_df.dropna(subset=[employment_col, growth_col, score_col, soc_major_col])
-    sector_means_df = _sector_weighted_means(scored_df, score_col, growth_col, employment_col, soc_major_col)
+    sector_means_df = _sector_weighted_means(scored_df, score_col, growth_col, employment_col, soc_major_col, sector_growth_df)
     full_sample_r, full_sample_p = stats.pearsonr(sector_means_df["sector_score"], sector_means_df["sector_growth"])
 
     jackknife_rows = []
@@ -445,6 +474,7 @@ def plot_dynamic_sector_level_validation(
     dynamic_validation_df: pd.DataFrame,
     employment_col: str,
     output_dir: str,
+    sector_growth_df: pd.DataFrame | None = None,
 ) -> None:
     """
     2-panel bubble scatter: employment-weighted mean net_employment_change per SOC
@@ -469,7 +499,14 @@ def plot_dynamic_sector_level_validation(
             "emp_growth": _sector_weighted_mean("emp_growth_composite"),
             "wage_growth": _sector_weighted_mean("wage_growth_composite"),
         }
-    ).reset_index()
+    )
+    group_to_major = sector_source_df.drop_duplicates("soc_group").set_index("soc_group")["soc_major"]
+    major_index = group_to_major.reindex(sector_agg_df.index)
+    for growth_key, growth_col in [("emp_growth", "emp_growth_composite"), ("wage_growth", "wage_growth_composite")]:
+        total_growth = sector_growth_series(sector_growth_df, growth_col, pd.Index(major_index.values))
+        if total_growth is not None:
+            sector_agg_df[growth_key] = total_growth.values
+    sector_agg_df = sector_agg_df.reset_index()
     sector_agg_df = sector_agg_df.merge(
         sector_source_df.groupby("soc_group")[employment_col].sum().rename("total_emp").reset_index(),
         on="soc_group",

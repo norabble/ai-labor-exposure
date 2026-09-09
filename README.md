@@ -24,20 +24,22 @@ wage data (2022–2025). What the demand-type lens buys you:
 
 **Sectors with the most Unbounded "absorption capacity" are measurably gaining
 employment.** The dynamic equilibrium model's signed `net_employment_change`
-score correlates with actual BLS sector employment growth at **r = +0.542
-(p = 0.009)** economy-wide, strengthening to **r ≈ +0.57 (p < 0.01)** in both
-2023→24 and 2024→25. The result leans on one sector: dropping Office and
-Administrative Support leaves r = +0.38 (p = 0.09), so quote the leave-one-out
-range (+0.38 to +0.62) beside the headline. Raw "AI can do this task" coverage shows no comparable
-sector signal (r = +0.19, n.s.), confirming that the demand-type stratification
-is doing work. **Caveat:** extending the historical baseline back to 2005 reveals
-that the dynamic model's sector signal was already present pre-2022 (r ≈ +0.43–0.48
-in 2005→07) — Unbounded sectors have long grown faster. AI may be amplifying a
-pre-existing structural trend rather than producing a clean post-2022 break.
-The rebound-adjusted displacement score does not carry this pre-AI signal, making
-it the more specifically AI-attributable measure. Cleanly separating amplification
-from the secular baseline requires longer post-AI OEWS time series (2025→2026
-annual data is not yet available).
+score correlates with actual BLS sector employment growth at **r = +0.509
+(p = 0.015)** economy-wide, and **r = +0.53 (p = 0.011)** and **+0.48 (p = 0.023)**
+in 2023→24 and 2024→25. The result leans on one sector: dropping Office and
+Administrative Support leaves r = +0.34 (p = 0.13), so quote the leave-one-out
+range (+0.34 to +0.59) beside the headline. Raw "AI can do this task" coverage
+shows no comparable sector signal (Eloundou r = +0.02, n.s.), confirming that the
+demand-type stratification is doing work. **Caveat:** extending the historical
+baseline back to 2005 reveals that the dynamic model's sector signal was already
+present pre-2022 (r = +0.40 to +0.50 in 2006→09, +0.37 in 2017→18) — sectors
+with Unbounded and Adversarial demand have long grown faster, under earlier
+waves of automation as well. The AI-era values sit inside that pre-AI range, not
+above it. The demand-type classification is a general theory of labor-saving
+disruption, so a pre-AI analog is expected; what AI adds is the expectation of
+acceleration, which three post-2022 years cannot yet show. Sector growth is
+measured from BLS major-group totals, so these correlations do not depend on
+which detailed SOC codes survived the 2010 and 2018 code revisions.
 
 ![Dynamic model sector-level employment validation](docs/charts/images/dynamic_sector_level_employment_validation.png)
 
@@ -150,7 +152,7 @@ absorption            = (absorption_capacity / economy_avg_absorption_capacity) 
 net_employment_change = absorption − gross_displacement
 ```
 
-The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.542 (p = 0.009) for composite employment growth, strengthening to r ≈ +0.57 (p < 0.01) in 2023→24 and 2024→25; leave-one-sector-out range +0.38 to +0.62.
+The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.509 (p = 0.015) for composite employment growth, r = +0.53 (p = 0.011) in 2023→24 and +0.48 (p = 0.023) in 2024→25; leave-one-sector-out range +0.34 to +0.59.
 
 ## Outputs
 

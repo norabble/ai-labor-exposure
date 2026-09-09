@@ -127,60 +127,65 @@ signal in the entire project**.
 
 | Predictor | Type | Composite r | 2023→24 r |
 |-----------|------|------------:|----------:|
-| **Dynamic net change** | signed | **+0.542*** | **+0.570*** |
-| Observed coverage | gross | +0.191 | +0.364† |
-| Eloundou theoretical | gross | +0.122 | +0.071 |
-| Rebound-adjusted | gross | −0.247 | −0.412 |
+| **Dynamic net change** | signed | **+0.509*** | **+0.530*** |
+| Rebound-adjusted | gross | −0.290 | −0.428* |
+| Observed coverage | gross | −0.223 | −0.373† |
+| Eloundou theoretical | gross | +0.018 | −0.140 |
 
-`†` p < 0.10, `*` p < 0.05 (dynamic: composite p = 0.009, 2023→24 p = 0.006; leave-one-sector-out range +0.38 to +0.62)
+`†` p < 0.10, `*` p < 0.05 (dynamic: composite p = 0.015, 2023→24 p = 0.011; leave-one-sector-out range +0.34 to +0.59). Sector growth is the BLS major-group total, not the mean of scored occupations.
 
-Reading the signs: the dynamic model's **+0.542** is correct for a signed measure
-(predicted-gainer sectors grew). The rebound-adjusted **−0.247** is correct for a
-gross measure (high-pressure sectors grew less), and it is the only gross measure
-that keeps its expected sign across aggregation levels. Observed coverage and
-Eloundou *flip* to weakly positive at the sector level — the opposite of their
-occupation-level sign — because at the sector level they are dominated by
-*composition*: high-coverage sectors are disproportionately Unbounded knowledge
-sectors that grew. That flip is exactly the diffuse compositional tendency the
-dynamic model formalizes and sharpens through its explicit redistribution.
+Reading the signs: the dynamic model's **+0.509** is correct for a signed measure
+(predicted-gainer sectors grew). The rebound-adjusted **−0.290** and observed
+coverage's **−0.223** are correct for gross measures (high-pressure sectors grew
+less); Eloundou is flat. Measured on major-group totals, the two gross measures
+keep their expected sign at the sector level — an earlier version of this table,
+built on the growth of surviving detailed occupations, had them flipping to
+weakly positive, which turned out to be a survivorship artefact of the SOC code
+revisions rather than a composition effect.
 
 Cross-references: `dynamic_sector_level_employment_validation.md`,
 `sector_level_employment_validation.md`,
 `anthropic_observed_sector_level_employment_validation.md`,
 `eloundou_sector_level_employment_validation.md`.
 
-The dynamic model's sector signal is roughly **2.8× the magnitude** of the next
-strongest predictor (observed coverage) and is the only one significant at
+The dynamic model's sector signal is roughly **1.8× the magnitude** of the next
+strongest predictor (rebound-adjusted) and is the only one significant at
 p < 0.05 in every period from 2023 onward. The explicit conservation constraint —
 routing displaced labor into sectors with Unbounded or Adversarial capacity — is
 what sharpens the diffuse "Unbounded sectors grow" tendency that observed
 coverage only hints at. One sector carries much of it: dropping Office and
-Administrative Support leaves r = +0.375 (p = 0.094).
+Administrative Support leaves r = +0.344 (p = 0.126).
 
 ### Confound: pre-existing sector composition
 
 Extending the historical BLS baseline back to 2005 (see `model_signal_over_time.md`)
 reveals that the dynamic model's sector-level r was already elevated **before AI**:
-r ≈ +0.43–0.48 in 2005→06 and 2006→07, well before meaningful AI adoption. Unbounded
-sectors — Computer and Mathematical, Healthcare, Life Sciences — have grown faster
++0.40 to +0.50 in 2006→09 and +0.37 in 2017→18, well before meaningful AI
+adoption. Sectors with Unbounded and Adversarial demand — Computer and
+Mathematical, Healthcare, Life Sciences, Legal, Management — have grown faster
 than Bounded sectors for decades as part of a long-running secular transition in
 the labour market. The dynamic model formalises this tendency and is therefore
 partly tracking a structural property of the economy, not purely an AI-era effect.
 
-The AI-era values (r ≈ +0.57 in 2023→24 and 2024→25) are modestly above the
-pre-AI peak of +0.45–0.48, consistent with AI accelerating the redistribution
-rather than creating it from scratch. However, three years of post-AI data (2022→25)
-is insufficient to cleanly separate amplification from the secular baseline.
+The AI-era values (+0.53 in 2023→24, +0.48 in 2024→25) sit inside that pre-AI
+range, not above it. This is not a defect: the demand-type classification is a
+general theory of how labor-saving disruption shows up in employment
+composition, and earlier waves — conventional software, business-process
+automation — should produce the same signature. What is specific to AI is the
+expectation that it will accelerate the pattern, and three post-2022 years
+cannot yet distinguish acceleration from continuation.
 
-**The rebound-adjusted model is not subject to this confound.** Its negative
-AI-era signal (r ≈ −0.41 in 2023→24) has no pre-AI analog — the blue line
-fluctuates near zero or weakly positive throughout 2005–2021. Demand-type
-discounting is doing work that pre-AI composition cannot account for; the
-sector-level displacement signal appears to be genuinely AI-attributable.
+**The rebound-adjusted model has a pre-AI analog too, in the same direction.**
+Its AI-era signal (r = −0.43 in 2023→24, the only significant sector-level
+period for that model) is preceded by −0.15 to −0.27 in 2016→19, when Office
+and Administrative Support employment was already falling. The
+penetration-weighted displacement term identifies clerical work, and clerical
+work was shrinking before generative AI; the AI-era reading is best described
+as the same displacement, larger.
 
-Definitive attribution of the dynamic model's sector signal to AI effects would
-require OEWS 2025→2026 annual data (not yet available), which would add another
-post-AI data point and widen the gap with the pre-AI baseline.
+Definitive attribution of either signal to AI specifically would require
+OEWS 2025→2026 annual data (not yet available) and, more fundamentally, a
+longer pre-AI baseline against which an acceleration could be measured.
 
 ---
 
@@ -207,17 +212,26 @@ the occupation level (composite r = −0.007, n.s.; no period exceeds |r| = 0.07
 ### Sector level
 
 The dynamic model shows no wage signal at the sector level either (composite
-r = −0.163, p = 0.47; no period significant — see
-`dynamic_sector_level_wage_validation.md`). The apparent negative wage
-correlations in 2022→23 for the *gross* measures (Eloundou r = −0.504,
-observed r = −0.416) are a **post-COVID recovery confound**, not an AI signal —
-see `eloundou_sector_level_wage_validation.md`. The dynamic model, being a signed
-redistribution measure rather than a gross-exposure measure, does not even
-reproduce that confound.
+r = −0.222, p = 0.32; no period significant — see
+`dynamic_sector_level_wage_validation.md`), and neither does the rebound-adjusted
+model (composite r = −0.218, p = 0.33). Measured against each major group's own
+median wage, though, **observed coverage does**: composite r = −0.502
+(p = 0.017), negative in 2022→23 (r = −0.442, p = 0.040) and 2023→24
+(r = −0.484, p = 0.022), and negative on every leave-one-sector-out subsample.
+High-coverage knowledge sectors — Computer and Mathematical, Business and
+Financial, Legal, Arts and Media, Sales — had the weakest median-wage growth of
+any sectors over 2022→25. Part of that is the post-COVID catch-up in physical
+and care sectors, but excluding the six recovery sectors leaves r = −0.42, so it
+is not only that. See `anthropic_observed_sector_level_wage_validation.md`.
+Eloundou's earlier apparent 2022→23 wage result is not significant on the
+totals series (r = −0.394, p = 0.070).
 
-Conceptually this is expected: wage growth is shaped by productivity premiums and
-labor scarcity across all demand types, not by structural displacement pressure.
-None of the three models is built to predict it.
+The demand-type models do not reproduce this: a sector's median wage growth
+tracks how much of its work AI already covers, not the model's structural
+pressure or redistribution score. Conceptually that is expected — wage growth
+is shaped by productivity premiums and labor scarcity across all demand types,
+and neither model is built to predict it — but it does mean raw coverage
+carries wage information the demand-type discount throws away.
 
 ---
 
@@ -228,14 +242,15 @@ both *what* you are predicting and at *what level of aggregation*.
 
 | | Occupation level | Sector level |
 |--------------|------------------------------------------|----------------------------------|
-| **Employment** | All three weak; dynamic best-signed (+0.17 composite), rebound-adjusted beats observed on the penetrated subset | **Dynamic net change (+0.54)** — strongest signal in the project; one-sector dependent |
-| **Wages** | Observed AI task coverage | None significant (2022→23 gross-measure dips are a post-COVID confound) |
+| **Employment** | All three weak; dynamic best-signed (+0.17 composite), rebound-adjusted beats observed on the penetrated subset | **Dynamic net change (+0.51)** — strongest signal in the project; one-sector dependent |
+| **Wages** | Observed AI task coverage | Observed AI task coverage (composite r = −0.50, p = 0.017); demand-type models null |
 
 Takeaways:
 
 - **Demand type earns its keep on employment, not wages.** Both the
   rebound-adjusted discount and the dynamic redistribution improve employment
-  prediction; neither helps with wages, where raw observed coverage is best.
+  prediction; neither helps with wages, where raw observed coverage is best at
+  both levels.
 - **Aggregation level decides which model to use.** For occupation-level
   structural-pressure ranking, the rebound-adjusted score is the cleaner gross
   measure. For *where net labor flows across the economy*, the dynamic model at

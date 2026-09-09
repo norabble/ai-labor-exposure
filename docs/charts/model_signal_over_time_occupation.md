@@ -59,5 +59,10 @@ Historical BLS files use different SOC code generations (SOC 2000 for 2005–200
 SOC 2010 for 2010–2018). The occupation set is anchored at 2022 (SOC 2018 codes)
 and all earlier years are left-joined. Occupations whose codes changed across
 generations produce NaN for those historical columns and are excluded from those
-periods' correlations. Survivorship is ~82% for 2005–2009, ~83–87% for 2010–2018;
-the per-period n is shown at the bottom of the chart.
+periods' correlations. Survivorship is ~82% for 2005–2009, ~83–87% for 2010–2018
+overall, but it is very uneven by sector — Computer and Mathematical keeps 3% of
+its employment before 2019 — so pre-2019 points here under-represent the sectors
+the SOC 2018 revision renumbered. The sector-level chart avoids this by using
+major-group totals; this occupation-level chart cannot, short of a full SOC
+crosswalk harmonisation, which is not implemented. The per-period n is shown at
+the bottom of the chart.

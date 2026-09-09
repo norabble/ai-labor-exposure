@@ -6,7 +6,7 @@
 
 ## What this chart shows
 
-Each bubble is one of the 22 BLS major occupational groups (e.g., "Healthcare Practitioners," "Computer and Mathematical"). The x-axis is the sector's employment-weighted mean rebound-adjusted exposure score; the y-axis is its composite employment or wage growth. Bubble size scales with total employment in the sector.
+Each bubble is one of the 22 BLS major occupational groups (e.g., "Healthcare Practitioners," "Computer and Mathematical"). The x-axis is the sector's employment-weighted mean rebound-adjusted exposure score; the y-axis is its composite employment or median-wage growth, read from the major-group summary row of each OEWS file (`bls_sector_trends.csv`). Bubble size scales with total employment in the sector.
 
 ## Why sector aggregation strengthens the test
 
@@ -14,9 +14,9 @@ Individual occupation-level validation is noisy: a single occupation's growth ca
 
 ## Composite correlation statistics
 
-**Employment panel (left):** r = −0.247, p = 0.267. No statistically significant relationship between sector-level rebound-adjusted exposure scores and composite employment growth.
+**Employment panel (left):** r = −0.290, p = 0.191. No statistically significant relationship between sector-level rebound-adjusted exposure scores and composite employment growth.
 
-**Wage panel (right):** r = −0.086, p = 0.704. No statistically significant relationship at the sector level. The sign is in the expected direction (higher displacement impact → weaker wage growth), but the magnitude is small and the p-value is well above conventional significance thresholds.
+**Wage panel (right):** r = −0.218, p = 0.330. No statistically significant relationship at the sector level. The sign is in the expected direction (higher displacement impact → weaker wage growth), but the p-value is well above conventional significance thresholds.
 
 ## Per-year breakdown
 
@@ -30,23 +30,23 @@ The composite view masks variation across years. See `sector_level_employment_va
 
 | Period | r | p |
 |--------|---|---|
-| 2022→2023 | +0.043 | 0.850 |
-| 2023→2024 | −0.412 | 0.057 |
-| 2024→2025 | −0.347 | 0.313 |
-| Composite | −0.247 | 0.267 |
+| 2022→2023 | −0.089 | 0.695 |
+| 2023→2024 | −0.428 | 0.047 |
+| 2024→2025 | −0.288 | 0.193 |
+| Composite | −0.290 | 0.191 |
 
-The 2023→24 period is the most informative single-period view: r = −0.412 approaches conventional significance (p = 0.057), with Office and Administrative Support as the key driver — the largest Bounded-exposure sector with below-average employment growth that year. No individual period reaches p < 0.05.
+The 2023→24 period is the only one that reaches significance: r = −0.428 (p = 0.047), with Office and Administrative Support as the key driver — the largest Bounded-exposure sector, and one whose total employment fell that year.
 
 ### Wage correlations by period
 
 | Period | r | p |
 |--------|---|---|
-| 2022→2023 | +0.249 | 0.264 |
-| 2023→2024 | +0.097 | 0.668 |
-| 2024→2025 | +0.218 | 0.329 |
-| Composite | +0.087 | 0.700 |
+| 2022→2023 | −0.108 | 0.631 |
+| 2023→2024 | −0.297 | 0.179 |
+| 2024→2025 | +0.104 | 0.645 |
+| Composite | −0.218 | 0.330 |
 
-Wage correlations are consistently positive but never significant. See `sector_level_wage_validation.md` for interpretation.
+Wage correlations are never significant. See `sector_level_wage_validation.md` for interpretation.
 
 ## Comparison to the dynamic model
 
@@ -54,10 +54,10 @@ The dynamic equilibrium model produces substantially stronger sector-level emplo
 
 | Period | Rebound emp r | Dynamic emp r |
 |--------|--------------|---------------|
-| 2022→2023 | +0.043 | +0.333 |
-| 2023→2024 | −0.412 | +0.570 ** |
-| 2024→2025 | −0.347 | +0.571 ** |
-| Composite | −0.247 | +0.542 ** |
+| 2022→2023 | −0.089 | +0.343 |
+| 2023→2024 | −0.428 * | +0.530 * |
+| 2024→2025 | −0.288 | +0.482 * |
+| Composite | −0.290 | +0.509 * |
 
 (* p < 0.05, ** p < 0.01)
 

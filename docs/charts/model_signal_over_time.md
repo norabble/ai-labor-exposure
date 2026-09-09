@@ -33,27 +33,31 @@ effect would show a weak or absent pre-AI signal and a strengthening post-2022.
 ## What the chart shows
 
 **The dynamic model tracks a pre-existing structural trend.** The dynamic
-`net_employment_change` score shows significant positive r ≈ +0.43–0.48 in
-2005→06 and 2006→07, well before any AI adoption. Sectors that the dynamic model
-predicts to gain workers (high Unbounded composition) were already growing faster
-in the pre-AI economy. This is the long-running secular transition from Bounded
-(supply-constrained) work toward Unbounded (demand-elastic) work that
-industrialization and technology have driven for decades.
+`net_employment_change` score shows positive r of +0.40 to +0.50 in 2006→09
+(significant in 2007→08, p = 0.016) and +0.37 in 2017→18, well before any AI
+adoption. Sectors that the dynamic model predicts to gain workers (high
+Unbounded and Adversarial composition) were already growing faster in the pre-AI
+economy. This is the long-running secular transition from Bounded
+(supply-constrained) work toward demand-elastic work that industrialization and
+technology have driven for decades — and it is what the demand-type
+classification, as a general theory of labor-saving disruption, should show for
+earlier waves of automation too.
 
-**The AI era amplifies the pre-existing dynamic signal.** In 2023→24 and
-2024→25, the dynamic model's r rises to +0.57 (p < 0.01) — above the pre-AI
-peaks of +0.45–0.48. The signal was already there; AI strengthens it. This is
-consistent with AI accelerating the redistribution of labor toward Unbounded
-sectors rather than creating an entirely new structural break.
+**The AI era sits inside the pre-AI range.** In 2023→24 and 2024→25 the dynamic
+model's r is +0.53 (p = 0.011) and +0.48 (p = 0.023) — comparable to the 2007→08
+peak of +0.50, not above it. The signal was already there. Whether AI is
+accelerating it is a question three post-2022 years cannot answer; what can be
+said is that the AI-era readings are the two most consistent consecutive
+significant years in the series, where the pre-AI peaks were single years.
 
-**The rebound-adjusted model shows NO consistent pre-AI signal.** The blue line
-fluctuates near zero or positive throughout 2005–2021 — the wrong sign for a
-gross displacement measure. A pre-existing negative relationship between
-rebound-adjusted exposure and sector employment growth would require occupations
-to be shedding headcount proportional to their exposure score, which only becomes
-visible once AI adoption is substantial. The AI-era negative signal (r ≈ −0.4
-in 2024→25) is genuinely new: the demand-type discount is doing work that
-pre-AI structural factors alone could not produce.
+**The rebound-adjusted model has a weaker pre-AI analog in the same direction.**
+The blue line is near zero or weakly positive through 2005→16, then turns
+negative — the correct sign for a gross displacement measure — at −0.15 to
+−0.27 in 2016→19, when Office and Administrative Support employment was already
+falling. The AI-era reading (r = −0.43 in 2023→24, p = 0.047, the model's only
+significant sector-level period) is the same displacement, larger. The
+penetration-weighted term identifies clerical work, and clerical work was
+shrinking before generative AI.
 
 **The financial crisis (2007→09)** disrupts both models, as expected from a
 demand shock concentrated in financial, construction, and related sectors. The
@@ -67,22 +71,22 @@ for AI trend detection.
 
 ## What this means for model interpretation
 
-The **dynamic model** is partly tracking a structural property of the economy
-(Unbounded sectors have long grown faster) and partly tracking an AI-amplified
-version of that trend in 2023–25. The pre-AI signal at r ≈ +0.43–0.48 is a
-partial confound: if Unbounded sectors were already growing, the model would
-appear predictive even without AI. The AI-era signal at r ≈ +0.57 is modestly
-above that baseline, suggesting a real incremental contribution from AI adoption
-on top of the existing structural tendency — but not a clean separation.
+The **dynamic model** is tracking a structural property of the economy —
+demand-elastic sectors have long grown faster — that the AI era continues at
+about the same strength. The pre-AI signal (+0.40 to +0.50 in 2006→09) means
+the model would appear predictive even without AI; the AI-era values (+0.53,
++0.48) do not rise above that baseline, so the data so far support
+"continuation" and cannot yet distinguish "acceleration". That is the expected
+shape for a general theory of labor-saving disruption; the AI-specific claim
+rests on acceleration, which needs more post-2022 years to test.
 
-The **rebound-adjusted model** is not subject to this confound in the same way.
-Its negative AI-era signal (r ≈ −0.40 in 2024→25) has no pre-AI analog,
-suggesting it is more specifically measuring an AI-driven displacement effect
-rather than a pre-existing composition trend. That reading now carries a caveat:
-the CPS panel puts the same model at the *opposite* sign for 2025→2026 (see
-[The CPS panel](#the-cps-panel-2025-2026)). The CPS values are not significant, so
-they do not overturn the OEWS result, but the AI-era negative signal has not yet
-reproduced on a second survey.
+The **rebound-adjusted model** shows the same shape at smaller magnitude: a
+pre-AI analog in 2016→19 (−0.15 to −0.27) and a larger AI-era reading (−0.43 in
+2023→24). It is the clerical-displacement term, visible before and after
+generative AI. Two caveats: only 2023→24 reaches significance, and the CPS panel
+puts the same model at the *opposite* sign for 2025→2026 (see
+[The CPS panel](#the-cps-panel-2025-2026)), though the CPS values are not
+significant, so they do not overturn the OEWS result.
 
 The **observed AI coverage** model shows weakly positive pre-AI r and small
 negative AI-era r — behaving like the rebound-adjusted model without the
@@ -136,7 +140,7 @@ falling sequence is the specific misreading this layout exists to prevent.
 
 **The dynamic model does not reproduce on CPS.** Two of three endpoints are
 weakly positive and none approaches significance, well below its AI-era OEWS
-values (≈ +0.57). This changed when Adversarial share was added to absorption
+values (+0.53, +0.48). This changed when Adversarial share was added to absorption
 capacity: the previous model version read +0.24, +0.37 and +0.48 (p = 0.023)
 here, and the Adversarial-heavy sectors whose scores rose — Legal, Sales,
 Protective Service, Management — fit their 2022→2025 OEWS growth better but
@@ -152,8 +156,10 @@ caution against treating the OEWS-era negative signal as established. Which of t
 three explanations above accounts for the flip is not determinable from the data
 on hand.
 
-**Observed AI coverage is flat and slightly wrong-signed**, consistent with its
-weak showing throughout.
+**Observed AI coverage is flat and slightly wrong-signed** on employment,
+consistent with its weak employment showing throughout. (Its sector-level
+*wage* signal is a different matter — see
+`anthropic_observed_sector_level_wage_validation.md`.)
 
 ### Why CPS is absent from the occupation-level chart
 
@@ -163,12 +169,26 @@ nothing to correlate at the occupation level. Adding CPS there would require the
 detailed-occupation CPS route sketched in
 [cps_data_expansion.md](../cps_data_expansion.md), which is unimplemented.
 
-## Survivorship note
+## How sector growth is measured
 
-All joins are left-joins anchored at the 2022 occupation set (830 occupations).
-Survivorship against 2022: ~82% for 2005–2009 (SOC 2000 codes), ~83–87% for
-2010–2018 (SOC 2010 codes). Each period's sector correlation is computed on the
-occupations with non-NaN values for both years in that pair; sectors with
-insufficient data are excluded. The sector-level aggregation (n=22 sectors,
-hundreds of occupations each) is robust to the ~13–18% occupation attrition from
-code changes.
+The model score on the x-axis of every point is the 2025-employment-weighted
+mean over the scored occupations in each sector. Sector *growth* is **not** the
+weighted mean of those occupations' growth rates. It is the change in the
+sector's total employment, read from the major-group summary row of each year's
+OEWS file (`data/output/bls_sector_trends.csv`).
+
+The distinction matters before 2019. Detailed-occupation joins are anchored at
+the 2022 code set, and the SOC 2018 revision renumbered whole blocks: Computer
+and Mathematical retains four small mathematics occupations, 3% of its
+employment, in every year before 2019, so a survivor-based sector growth rate
+for that sector would have been the growth of actuaries and statisticians
+standing in for software developers. Major-group codes are the same across SOC
+2000, 2010 and 2018, so the totals series is complete for all 22 sectors in all
+20 periods. Switching to it lowered several pre-AI points — the dynamic model's
+2009→10 r fell from +0.35 to +0.02 and the rebound-adjusted 2016→19 values
+roughly halved — while the AI-era points moved little.
+
+Two level breaks remain even at major-group level, because the SOC revisions
+moved some occupations between groups: 2009→2010 and 2018→2019 (Office and
+Administrative Support drops from 21.8M to 19.5M across the latter). Those two
+periods should be read with that in mind.

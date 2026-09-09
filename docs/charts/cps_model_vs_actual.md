@@ -33,14 +33,14 @@ Data: CPS A-19 through August 2026; model scores from the current pipeline run.
 |-------|--------|--:|--:|--:|:-------------:|
 | Rebound-adjusted | Since OEWS (Apr 2025 → Aug 2026) | +0.024 | 0.915 | 22 | No |
 | Rebound-adjusted | Year-over-year (Aug 2025 → Aug 2026) | +0.124 | 0.582 | 22 | No |
-| Dynamic net change | Since OEWS (Apr 2025 → Aug 2026) | +0.146 | 0.517 | 22 | Yes (positive, expected positive) |
-| Dynamic net change | Year-over-year (Aug 2025 → Aug 2026) | **+0.482** | **0.023** | 22 | Yes (positive, expected positive) |
+| Dynamic net change | Since OEWS (Apr 2025 → Aug 2026) | −0.014 | 0.950 | 22 | No |
+| Dynamic net change | Year-over-year (Aug 2025 → Aug 2026) | +0.181 | 0.421 | 22 | Yes (positive, expected positive) |
 
-**One result is now conventionally significant: the dynamic model's year-over-year r = +0.482 (p = 0.023).** It has the correct sign, it sits on the seasonally cleaner of the two windows, and it is consistent in both sign and rough magnitude with the dynamic model's OEWS sector-level result (r = +0.528, p = 0.012). Two independent datasets — an employer survey and a household survey — pointing the same way at the same magnitude is a meaningfully better showing than either alone.
+**No result is conventionally significant.** The dynamic model's year-over-year r = +0.181 has the correct sign but is far from significance, and the since-OEWS window is flat.
 
-It is still one underpowered test at n = 22, and the significance is not robust: it emerged only with the August 2026 release. The two-month-earlier vintage of this same table (CPS through June 2026) gave r = +0.370 (p = 0.090) for this row, and the June vintage's since-OEWS window carried the opposite sign (r = −0.125). A result that moves that much on a two-month shift in endpoints is not yet a stable finding. Treat it as the hypothesis worth tracking across the next few releases, not as confirmation.
+This is a material change from the previous model version. Before Adversarial share was counted as absorption capacity (it was scored as pure displacement, contradicting the framework's definition of Adversarial as a carve-out from Unbounded — see `framework.md` § Redistribution rule), this row read r = +0.482 (p = 0.023) and was cited as a cross-survey replication of the OEWS sector result. The change improved the OEWS fit at the time (composite r +0.528 → +0.542; measured on major-group totals the composite now reads +0.509) and removed the CPS one. The sectors that move most under the change — Legal, Sales and Related, Protective Service, Management — are the Adversarial-heavy ones, and their 2025→2026 CPS growth does not line up with their improved scores the way their 2022→2025 OEWS growth does. Which survey is closer to the truth for those sectors is not determinable from the data on hand; the CPS reading is one endpoint of a household survey at n = 22, and the earlier significant value moved by 0.1 on a two-month shift in endpoints, so neither the old result nor its loss should carry much weight. Treat the cross-survey replication as an open question rather than a settled one.
 
-**The rebound-adjusted model has no support here, and its sign is wrong on both windows.** Its correct sign is negative; both windows return small positive correlations. Neither is anywhere near significant (p = 0.92 and p = 0.58), so this is best read as no signal rather than as evidence against — but it is the second consecutive vintage in which the rebound-adjusted score fails to separate groups the way the dynamic score does.
+**The rebound-adjusted model has no support here, and its sign is wrong on both windows.** Its correct sign is negative; both windows return small positive correlations. Neither is anywhere near significant (p = 0.92 and p = 0.58), so this is best read as no signal rather than as evidence against.
 
 ## Why the results are weak
 
@@ -50,12 +50,12 @@ It is still one underpowered test at n = 22, and the significance is not robust:
 
 **CPS monthly data has high sampling variance.** Smaller groups (Farming, Legal, Life Science) carry margins of error that can exceed the measured change itself.
 
-**The since-OEWS window is not seasonally adjusted.** It spans Apr→Aug and crosses a January population-control update. Farming, Fishing, and Forestry at +12.7% over that window against −3.2% year-over-year is the clearest illustration — a seasonal agricultural ramp, not a structural shift. This is the likeliest reason the since-OEWS row stays flat (r = +0.146) while the year-over-year row does not.
+**The since-OEWS window is not seasonally adjusted.** It spans Apr→Aug and crosses a January population-control update. Farming, Fishing, and Forestry at +12.7% over that window against −3.2% year-over-year is the clearest illustration — a seasonal agricultural ramp, not a structural shift. This is one reason to weight the year-over-year row over the since-OEWS one.
 
 **The window is short.** Major-group employment is driven by sector-specific confounders (interest rates, post-pandemic normalization, policy changes) that dominate a roughly one-year AI signal.
 
 ## Comparison with occupation-level and OEWS sector-level results
 
-The occupation-level rebound-adjusted validation (n ≈ 397, 2024→2025 OEWS) finds r = −0.219 (p < 0.001) — significant because of the larger sample. The dynamic model's sector-level OEWS validation finds r = +0.528 (p = 0.012) at n = 22 sectors — stronger because it uses four years of OEWS data per sector, not a single short CPS window.
+The occupation-level rebound-adjusted validation (n ≈ 397, 2024→2025 OEWS) finds r = −0.219 (p < 0.001) — significant because of the larger sample. The dynamic model's sector-level OEWS validation finds r = +0.509 (p = 0.015) at n = 22 sectors — stronger because it uses four years of OEWS data per sector, not a single short CPS window.
 
-These charts are best read as a descriptive extension of the time series — showing the broad direction by group since OEWS ends — rather than as a validation, notwithstanding the dynamic model's year-over-year result above. The OEWS-based charts ([dynamic_sector_level_employment_validation.md](dynamic_sector_level_employment_validation.md), [sector_level_employment_validation.md](sector_level_employment_validation.md)) remain the more reliable test.
+These charts are best read as a descriptive extension of the time series — showing the broad direction by group since OEWS ends — rather than as a validation. The OEWS-based charts ([dynamic_sector_level_employment_validation.md](dynamic_sector_level_employment_validation.md), [sector_level_employment_validation.md](sector_level_employment_validation.md)) remain the more reliable test.

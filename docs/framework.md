@@ -14,7 +14,7 @@ This project produces two complementary model outputs:
 
 2. **Dynamic net employment change** (`net_employment_change`) — a macro-level
    redistribution model that holds total employment constant and routes displaced
-   labor into Unbounded-capacity occupations. Produces a signed score per
+   labor into occupations with Unbounded or Adversarial capacity. Produces a signed score per
    occupation summing to zero economy-wide.
 
 The distinction between exposure and prediction matters:
@@ -30,9 +30,10 @@ Both models are tested against BLS employment data as ongoing confidence
 checks. A null result at the occupation level is expected and not damaging —
 the effects of AI on labor markets may not yet be detectable in annual
 occupation-level data. The dynamic model does show a significant sector-level
-employment signal (r ≈ +0.53, p < 0.02 in 2023→24 and 2024→25), which
+employment signal (r = +0.53 and +0.48, p < 0.05, in 2023→24 and 2024→25), which
 constitutes evidence that the sector-level demand-type composition is tracking
-something real.
+something real. That signal rests heavily on one sector — see [Leave-one-sector-out
+jackknife](#leave-one-sector-out-jackknife).
 
 ## Exposure Type Taxonomy
 
@@ -209,15 +210,47 @@ when that becomes available.
 ## Dynamic Labor Equilibrium Model
 
 The dynamic model is a second output layer that builds on the rebound-adjusted
-exposure inputs to model economy-wide labor redistribution under a
-total-employment-constant assumption.
+exposure inputs to model economy-wide labor redistribution.
 
-### Core assumption
+### What conservation is for — and what it is not
 
-If total employment is held fixed, labor displaced from Bounded and Adversarial
-tasks must flow somewhere. The dynamic model routes that displaced labor into
-Unbounded-capacity occupations, in proportion to each occupation's share of
-total economy-wide Unbounded-weighted employment.
+The naive exposure models this project is arguing against share an implicit
+assumption: that AI capability over a task removes the labor doing it, full
+stop. Displaced work simply disappears from the accounting, and no equilibrating
+response is modeled. That is not a neutral baseline — it is the strong claim
+that the reabsorption rate is exactly zero.
+
+The dynamic model's conservation constraint is the device for stating the
+opposite: displaced labor goes *somewhere*, and where it goes is a function of
+which occupations have demand that can expand to receive it. Holding total
+employment fixed is the simplest way to write that down. It is a normalization
+that makes the redistribution question askable, not an empirical claim.
+
+**In particular, the model does not assert that total employment is constant,
+that headcount is conserved economy-wide, or that occupational employment
+fractions are fixed.** Any of those would be a strong and probably false claim
+about the labor market. What the model asserts is weaker and more defensible:
+*some* equilibrating response exists, and its direction is toward Unbounded
+capacity.
+
+The distinction matters because the results turn out to be insensitive to the
+constraint holding exactly — see [Robustness to the equilibration
+rate](#robustness-to-the-equilibration-rate) below. The conservation constraint
+picks one defensible point on a wide plateau, and the finding survives anywhere
+on it. Reading conservation as a load-bearing assumption overstates what the
+model needs.
+
+### Redistribution rule
+
+Displaced labor is routed into occupations whose demand can expand to receive
+it, in proportion to each occupation's share of total economy-wide
+capacity-weighted employment. **Absorption capacity** is the share of an
+occupation's task importance that is Unbounded *or* Adversarial. Adversarial is
+a carve-out from Unbounded — the productivity-to-demand feedback is the same,
+only the expansion is zero-sum — so it receives displaced labor on the same
+footing. Treating Adversarial as pure displacement with no capacity, as an
+earlier version of the model did, contradicted the taxonomy above and scored
+Legal and Sales and Related as net losers while both grew.
 
 ### Computation
 
@@ -230,15 +263,116 @@ gross_displacement_o = bounded_exposure_contribution_o
 
 total_displaced = Σ_o(employment_o × gross_displacement_o) / Σ_o(employment_o)
 
-absorption_o = (pct_unbounded_o / economy_weighted_avg_pct_unbounded)
+absorption_capacity_o = pct_unbounded_o + pct_adversarial_o
+
+absorption_o = (absorption_capacity_o / economy_weighted_avg_absorption_capacity)
              × total_displaced
 
 net_employment_change_o = absorption_o − gross_displacement_o
 ```
 
 The employment-weighted sum of `net_employment_change` is zero by construction
-(verified by assertion at runtime). Occupations with above-average Unbounded
+(verified by assertion at runtime). Occupations with above-average absorption
 capacity gain workers; Bounded-heavy occupations lose them.
+
+Because `total_displaced`, `total_employment`, and the capacity total are all
+economy-wide scalars, the absorption step collapses to a single global constant
+— the **absorption scalar** — times each occupation's `absorption_capacity`:
+
+```
+absorption_o = absorption_scalar × absorption_capacity_o
+
+  where absorption_scalar = Σ_o(employment_o × gross_displacement_o)
+                          / Σ_o(employment_o × absorption_capacity_o)
+
+net_employment_change_o = absorption_scalar × absorption_capacity_o
+                        − gross_displacement_o
+```
+
+This is an identity, not an approximation (asserted in `tests/test_pipeline.py`).
+It is what makes the robustness check below possible: the absorption scalar is
+the model's entire equilibration assumption reduced to one number, so varying it
+sweeps the model across equilibration rates. At the current parameters the
+conservation-pinned value is **0.1578**.
+
+### Robustness to the equilibration rate
+
+`compute_equilibration_sensitivity` in `synthesize_dynamic.py` re-runs the
+sector-level employment validation with the absorption scalar scaled to
+fractions and multiples of its conservation-pinned value. Multiplier 0 is the
+no-equilibrium model — displaced labor vanishes and the score is pure
+displacement pressure. Large multipliers approach the opposite limit, where
+reabsorption dominates and the score is pure absorption-capacity composition.
+
+Sector-level Pearson r against composite BLS employment growth, n = 22:
+
+| × conservation value | absorption scalar | sector r | p |
+|---------------------:|------------------:|---------:|------:|
+| 0 (no equilibrium) | 0.0000 | +0.351 | 0.109 |
+| 0.10 | 0.0158 | +0.389 | 0.073 |
+| 0.25 | 0.0395 | +0.435 | 0.043 |
+| 0.50 | 0.0789 | +0.483 | 0.023 |
+| 0.75 | 0.1184 | +0.503 | 0.017 |
+| **1.00 (conservation-pinned)** | **0.1578** | **+0.509** | **0.015** |
+| 1.50 | 0.2367 | +0.504 | 0.017 |
+| 2.00 | 0.3156 | +0.492 | 0.020 |
+| 5.00 | 0.7890 | +0.448 | 0.037 |
+| 10.00 | 1.5781 | +0.425 | 0.048 |
+| 100.00 | 15.7805 | +0.401 | 0.064 |
+
+Sector growth here and in every other sector-level test is the change in each
+major group's total employment from the OEWS file's own summary row
+(`bls_sector_trends.csv`), not the mean growth of the scored occupations — see
+`docs/charts/model_signal_over_time.md` § How sector growth is measured.
+
+Three things follow.
+
+**The no-equilibrium assumption is the worst-performing point on the curve.**
+At multiplier 0 the correlation falls to +0.351 and loses significance
+(p = 0.109). This is the model's central claim stated as a measurement:
+assuming displaced labor simply disappears fits the BLS sector data worse than
+assuming it goes somewhere.
+
+**The result does not depend on conservation holding exactly.** Every
+equilibration rate from 25% to 1,000% of the conservation-pinned value clears
+p < 0.05; the pure-composition limit at 100× just misses (p = 0.064). The
+finding sits on a broad plateau rather than a knife-edge, so a reader who
+rejects strict labor conservation — reasonably — does not thereby lose the
+result. It survives at a quarter of the reabsorption rate and at ten times it.
+
+**Conservation lands near the optimum, but not meaningfully so.** The curve
+peaks at r = +0.509 at the pinned value. That is a favorable coincidence rather
+than evidence: at n = 22 the difference between +0.509 and the +0.40 asymptote
+is not statistically distinguishable (Steiger's test on the dependent
+correlations gives p = 0.42). The plateau is the finding; its peak is not.
+
+Written to `data/output/equilibration_sensitivity.csv` and printed during
+`validate`.
+
+### Leave-one-sector-out jackknife
+
+A Pearson r over 22 sector means can be carried by a single sector far from the
+others. `compute_sector_jackknife` in `synthesize_dynamic.py` drops each sector
+in turn and recomputes the composite employment correlation. Written to
+`data/output/sector_jackknife.csv` and summarised during `validate`.
+
+| Dropped sector | sector r | p |
+|---|---:|---:|
+| Office and Administrative Support | +0.344 | 0.126 |
+| Community and Social Service | +0.462 | 0.035 |
+| Life, Physical, and Social Science | +0.482 | 0.027 |
+| Sales and Related | +0.495 | 0.023 |
+| *(17 others)* | +0.50 to +0.55 | ≤ 0.021 |
+| Arts, Design, Entertainment, Sports, and Media | +0.591 | 0.005 |
+
+Office and Administrative Support is the one sector whose removal takes the
+result above p = 0.05. It sits alone in the lower-left of the scatter: the most
+negative sector score by a wide margin, the largest employment weight, and the
+only large sector with negative composite growth. It should be read as the core
+of the finding rather than as an outlier — clerical work is where the model's
+mechanism (high penetration, almost entirely Bounded, employment falling since
+2016) is most visible — but the headline r should always be quoted with its
+jackknife range, +0.34 to +0.59, beside it.
 
 ### Relationship to the rebound-adjusted model
 
@@ -248,9 +382,9 @@ The two models are complementary:
 |----------|-----------------|---------|
 | Output range | ≥ 0 (structural pressure) | signed (redistribution) |
 | Unbounded treatment | Small positive exposure (0.3×penetration) | Absorption sink |
-| Adversarial treatment | Near-zero exposure (0.1×penetration) | Displacement source |
-| Conservation | None | Sums to zero by construction |
-| Validated at sector level | No significant signal | r ≈ +0.53, p < 0.02 (2023→25) |
+| Adversarial treatment | Near-zero exposure (0.1×penetration) | Absorption sink alongside Unbounded; its 0.1×penetration still counts as displacement |
+| Conservation | None | Sums to zero — a normalization, not an assumption |
+| Validated at sector level | 2023→24 only (r = −0.43, p = 0.047) | r = +0.53 and +0.48, p < 0.05 (2023→25); jackknife range +0.34 to +0.59 |
 
 The rebound-adjusted model identifies *which occupations are under structural
 pressure*; the dynamic model identifies *where net labor flows* under a
@@ -259,13 +393,16 @@ conservation constraint.
 ### Scope and limitations
 
 **Scope:** The model operates on the ~770 BLS-matched occupations. Conservation
-holds within this subset, not the full labor force.
+holds within this subset, not the full labor force — which is a statement about
+the normalization, not a limitation of the result, since the sector-level
+finding holds across two orders of magnitude of equilibration rate (see
+[Robustness to the equilibration rate](#robustness-to-the-equilibration-rate)).
 
 **Absorption proportional to headcount, not skill adjacency.** The current
-absorption formula routes displaced workers to all Unbounded occupations
-proportionally to `pct_unbounded × employment`. This means a displaced medical
-records specialist is modeled as partially flowing into Cardiologists —
-occupations with high Unbounded capacity and large employment. This is
+absorption formula routes displaced workers to all Unbounded and Adversarial
+occupations proportionally to `absorption_capacity × employment`. This means a
+displaced medical records specialist is modeled as partially flowing into
+Cardiologists — occupations with high absorption capacity and large employment. This is
 economically incoherent over any near-to-medium-term horizon: workers cannot
 retrain into high-credential professions in a single market cycle.
 
@@ -281,3 +418,22 @@ occupations that are more accessible to displaced workers.
 from time-averaged AI penetration scores. They capture the accumulated state of
 AI adoption rather than a real-time flow signal, limiting the model's ability to
 predict near-term occupation-specific dynamics.
+
+### Future investigation: the business cycle
+
+Not pursued; recorded so the observation is not lost. Pairing each 2005→2025
+period with the change in national unemployment suggests the demand-type
+composition fits sector growth best when unemployment is *rising* and worst in
+recoveries (2010→13, 2020→22), when cyclical rehiring returns Bounded jobs the
+model assumes do not come back. Within sector, the Unbounded growth premium is
+counter-cyclical (large in downturns, near zero in recoveries) while the
+Adversarial premium is roughly steady through the cycle and persists in
+recoveries. A plausible mechanism is that Adversarial spending — sales, legal,
+security — is defensive within the firm and needs no capital investment,
+whereas labor-saving adoption does. This rests on three rising-unemployment
+periods and 2025 task labels applied backwards, so it is a hypothesis only.
+The crosswalk harmonization now in `harmonize_soc.py` covers exactly this kind
+of code churn for 2005→2025 at occupation level; testing the hypothesis back to
+1960 would need the same treatment applied to the pre-2000 SOC classifications,
+plus per-year task reclassification against the occupational definitions of
+that era.

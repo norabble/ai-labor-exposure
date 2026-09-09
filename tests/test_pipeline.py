@@ -16,8 +16,10 @@ These are pure-function tests over synthetic frames; they need no downloaded dat
 
 import pandas as pd
 import pytest
+from scipy import stats
 
-from synthesize_dynamic import compute_dynamic_equilibrium
+from analyze_bls import attach_growth_columns, select_detailed_rows, select_major_group_rows
+from synthesize_dynamic import compute_dynamic_equilibrium, compute_equilibration_sensitivity, compute_sector_jackknife
 from synthesize_impacts import (
     ADVERSARIAL_REBOUND,
     BOUNDED_REBOUND,
@@ -28,6 +30,7 @@ from synthesize_impacts import (
     derive_exposure_tier,
     rollup_to_occupation,
 )
+from validate_bls import build_unit_scores
 
 
 def _task_df(rows):
@@ -202,11 +205,261 @@ class TestDynamicEquilibrium:
         bounded_row = result[result["OCC_CODE"] == "11-0000"].iloc[0]
         assert bounded_row["net_employment_change"] < 0
 
-    def test_zero_unbounded_capacity_raises(self):
-        no_unbounded_df = self._fixture_df().copy()
-        no_unbounded_df["pct_unbounded"] = 0.0
-        with pytest.raises(ValueError, match="No Unbounded capacity"):
-            compute_dynamic_equilibrium(no_unbounded_df, "employment")
+    def test_zero_absorption_capacity_raises(self):
+        no_capacity_df = self._fixture_df().copy()
+        no_capacity_df["pct_unbounded"] = 0.0
+        no_capacity_df["pct_adversarial"] = 0.0
+        with pytest.raises(ValueError, match="No absorption capacity"):
+            compute_dynamic_equilibrium(no_capacity_df, "employment")
+
+    def test_absorption_is_one_scalar_times_absorption_capacity(self):
+        """
+        Absorption carries no per-occupation information beyond absorption_capacity
+        — the redistribution step is a single economy-wide constant. The
+        equilibration sweep depends on this holding exactly.
+        """
+        result = compute_dynamic_equilibrium(self._fixture_df(), "employment")
+        with_capacity_df = result[result["absorption_capacity"] > 0]
+        implied_scalars = with_capacity_df["absorption"] / with_capacity_df["absorption_capacity"]
+        assert implied_scalars.max() - implied_scalars.min() == pytest.approx(0.0, abs=1e-12)
+
+    def test_absorption_capacity_is_unbounded_plus_adversarial(self):
+        """
+        Adversarial is a carve-out from Unbounded in the framework: productivity
+        feeds back into demand for both, so both can receive displaced labor.
+        """
+        result = compute_dynamic_equilibrium(self._adversarial_fixture_df(), "employment")
+        expected = result["pct_unbounded"] + result["pct_adversarial"]
+        pd.testing.assert_series_equal(result["absorption_capacity"], expected, check_names=False)
+
+    def test_pure_adversarial_occupation_absorbs(self):
+        """
+        A pure Adversarial occupation with no measured penetration displaces nothing
+        and must gain workers, not be scored as a net loser with zero capacity.
+        """
+        result = compute_dynamic_equilibrium(self._adversarial_fixture_df(), "employment")
+        adversarial_row = result[result["OCC_CODE"] == "23-0000"].iloc[0]
+        assert adversarial_row["absorption"] > 0
+        assert adversarial_row["net_employment_change"] > 0
+
+    def _adversarial_fixture_df(self):
+        """The base fixture plus a pure Adversarial occupation with zero penetration."""
+        fixture_df = self._fixture_df()
+        adversarial_row = pd.DataFrame(
+            {
+                "OCC_CODE": ["23-0000"],
+                "Title": ["Lawyers"],
+                "dominant_demand": ["Adversarial"],
+                "dominant_strength": [1.0],
+                "employment": [800.0],
+                "occupation_exposure": [0.0],
+                "pct_bounded": [0.0],
+                "pct_unbounded": [0.0],
+                "pct_adversarial": [1.0],
+                "bounded_exposure_contribution": [0.0],
+                "unbounded_exposure_contribution": [0.0],
+                "adversarial_exposure_contribution": [0.0],
+            }
+        )
+        return pd.concat([fixture_df, adversarial_row], ignore_index=True)
+
+
+class TestEquilibrationSensitivity:
+    """
+    The sweep varies the absorption scalar to show how much of the sector-level
+    result depends on the conservation constraint holding exactly. Multiplier 0
+    is the no-equilibrium model the dynamic model argues against.
+    """
+
+    def _validation_df(self):
+        sweep_df = TestDynamicEquilibrium()._fixture_df()
+        sweep_df["gross_displacement"] = sweep_df["bounded_exposure_contribution"] + sweep_df["adversarial_exposure_contribution"]
+        sweep_df["soc_major"] = sweep_df["OCC_CODE"].str[:2]
+        sweep_df["emp_growth_composite"] = [-0.05, 0.01, 0.08]
+        return sweep_df
+
+    def test_returns_one_row_per_multiplier(self):
+        result = compute_equilibration_sensitivity(self._validation_df(), "employment", "emp_growth_composite", multipliers=(0.0, 1.0, 5.0))
+        assert list(result["equilibration_multiplier"]) == [0.0, 1.0, 5.0]
+
+    def test_zero_multiplier_is_pure_displacement(self):
+        """At multiplier 0 nothing is reabsorbed, so the score is −gross_displacement."""
+        validation_df = self._validation_df()
+        result = compute_equilibration_sensitivity(validation_df, "employment", "emp_growth_composite", multipliers=(0.0,))
+        expected_r = stats.pearsonr(-validation_df["gross_displacement"], validation_df["emp_growth_composite"])[0]
+        assert result.iloc[0]["sector_r"] == pytest.approx(expected_r)
+
+    def test_sweep_uses_sector_growth_table_when_given(self):
+        validation_df = self._validation_df()
+        sector_growth_df = pd.DataFrame({"emp_growth_composite": [0.08, 0.01, -0.05]}, index=pd.Index(["11", "13", "15"], name="soc_major"))
+        result = compute_equilibration_sensitivity(
+            validation_df, "employment", "emp_growth_composite", multipliers=(1.0,), sector_growth_df=sector_growth_df
+        )
+        assert result.iloc[0]["sector_r"] < 0
+
+    def test_unit_multiplier_matches_the_fitted_model(self):
+        """Multiplier 1 must reproduce the net_employment_change the model actually publishes."""
+        validation_df = self._validation_df()
+        fitted_df = compute_dynamic_equilibrium(validation_df, "employment")
+        result = compute_equilibration_sensitivity(validation_df, "employment", "emp_growth_composite", multipliers=(1.0,))
+        expected_r = stats.pearsonr(fitted_df["net_employment_change"], validation_df["emp_growth_composite"])[0]
+        assert result.iloc[0]["sector_r"] == pytest.approx(expected_r)
+
+
+class TestBlsRowSelection:
+    """
+    Each OEWS file carries detailed-occupation rows and major-group summary rows.
+    Detailed rows feed the occupation-level trends; major-group rows feed the
+    sector-level trends, because major-group codes are stable across SOC
+    revisions while detailed codes are not.
+    """
+
+    def _modern_frame(self):
+        return pd.DataFrame(
+            {
+                "OCC_CODE": ["00-0000", "15-0000", "15-1100", "15-1252", "15-2011"],
+                "OCC_TITLE": ["All", "Computer and Mathematical", "Computer", "Software Developers", "Actuaries"],
+                "O_GROUP": ["total", "major", "minor", "detailed", "detailed"],
+                "I_GROUP": ["cross-industry"] * 5,
+                "TOT_EMP": [150000000, 5000000, 4800000, 1500000, 25000],
+                "A_MEDIAN": [48000, 100000, 101000, 130000, 120000],
+            }
+        )
+
+    def _legacy_frame(self):
+        return pd.DataFrame(
+            {
+                "OCC_CODE": ["00-0000", "15-0000", "15-1131", "15-1132"],
+                "OCC_TITLE": ["All", "Computer and Mathematical", "Programmers", "Software Developers, Applications"],
+                "GROUP": ["total", "major", None, None],
+                "TOT_EMP": ["130,000,000", "3,283,950", "333,620", "499,280"],
+                "A_MEDIAN": ["33,000", "76,000", "71,000", "87,000"],
+            }
+        )
+
+    def test_major_rows_keyed_by_two_digit_soc_major(self):
+        result = select_major_group_rows(self._modern_frame())
+        assert list(result["soc_major"]) == ["15"]
+        assert result.iloc[0]["TOT_EMP"] == 5000000
+
+    def test_major_rows_from_legacy_group_column_parse_numbers(self):
+        result = select_major_group_rows(self._legacy_frame())
+        assert list(result["soc_major"]) == ["15"]
+        assert result.iloc[0]["TOT_EMP"] == 3283950
+        assert result.iloc[0]["A_MEDIAN"] == 76000
+
+    def test_i_group_column_does_not_shadow_o_group(self):
+        """2019+ files carry I_GROUP before O_GROUP; the occupation grouping must win."""
+        shadowed_df = self._modern_frame()[["OCC_CODE", "OCC_TITLE", "I_GROUP", "O_GROUP", "TOT_EMP", "A_MEDIAN"]]
+        assert len(select_major_group_rows(shadowed_df)) == 1
+        assert list(select_detailed_rows(shadowed_df)["OCC_CODE"]) == ["15-1252", "15-2011"]
+
+    def test_detailed_rows_exclude_summary_rows_in_legacy_files(self):
+        result = select_detailed_rows(self._legacy_frame())
+        assert list(result["OCC_CODE"]) == ["15-1131", "15-1132"]
+
+
+class TestAttachGrowthColumns:
+    def _trend_frame(self):
+        return pd.DataFrame(
+            {
+                "key": ["a"],
+                "TOT_EMP_21": [100.0],
+                "TOT_EMP_22": [110.0],
+                "TOT_EMP_23": [121.0],
+                "A_MEDIAN_22": [50.0],
+                "A_MEDIAN_23": [55.0],
+            }
+        )
+
+    def test_pre_anchor_periods_get_hist_prefix(self):
+        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        assert result.iloc[0]["hist_emp_growth_21_22"] == pytest.approx(0.10)
+        assert result.iloc[0]["emp_growth_22_23"] == pytest.approx(0.10)
+        assert "hist_emp_growth_22_23" not in result.columns
+
+    def test_composite_and_pre_ai_anchored_at_2022(self):
+        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        assert result.iloc[0]["emp_growth_composite"] == pytest.approx(0.10)
+        assert result.iloc[0]["wage_growth_composite"] == pytest.approx(0.10)
+        assert result.iloc[0]["hist_emp_growth_pre_ai"] == pytest.approx(0.10)
+
+    def test_wage_growth_skipped_when_a_year_lacks_wages(self):
+        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        assert "hist_wage_growth_21_22" not in result.columns
+        assert "emp_growth_22_23" in result.columns
+
+
+class TestSectorJackknife:
+    """
+    Leave-one-sector-out recomputation of the sector-level correlation. With
+    n = 22 sectors a single sector can carry the headline result, and the
+    jackknife is what shows whether one does.
+    """
+
+    def _validation_df(self):
+        jackknife_df = TestDynamicEquilibrium()._fixture_df()
+        jackknife_df = pd.concat(
+            [
+                jackknife_df,
+                pd.DataFrame(
+                    {
+                        "OCC_CODE": ["29-0000"],
+                        "Title": ["Nurses"],
+                        "dominant_demand": ["Unbounded"],
+                        "dominant_strength": [1.0],
+                        "employment": [3000.0],
+                        "occupation_exposure": [0.01],
+                        "pct_bounded": [0.1],
+                        "pct_unbounded": [0.9],
+                        "pct_adversarial": [0.0],
+                        "bounded_exposure_contribution": [0.01],
+                        "unbounded_exposure_contribution": [0.0],
+                        "adversarial_exposure_contribution": [0.0],
+                    }
+                ),
+            ],
+            ignore_index=True,
+        )
+        jackknife_df["net_employment_change"] = [-0.3, -0.05, 0.2, 0.15]
+        jackknife_df["soc_major"] = jackknife_df["OCC_CODE"].str[:2]
+        jackknife_df["emp_growth_composite"] = [-0.05, 0.01, 0.08, 0.06]
+        return jackknife_df
+
+    def test_one_row_per_sector(self):
+        result = compute_sector_jackknife(self._validation_df(), "employment", "emp_growth_composite", "net_employment_change")
+        assert sorted(result["dropped_sector"]) == ["11", "13", "15", "29"]
+        assert (result["n_sectors"] == 3).all()
+
+    def test_dropping_a_sector_matches_a_manual_recomputation(self):
+        validation_df = self._validation_df()
+        result = compute_sector_jackknife(validation_df, "employment", "emp_growth_composite", "net_employment_change")
+        remaining_df = validation_df[validation_df["soc_major"] != "11"]
+        expected_r = stats.pearsonr(remaining_df["net_employment_change"], remaining_df["emp_growth_composite"])[0]
+        dropped_11 = result[result["dropped_sector"] == "11"].iloc[0]
+        assert dropped_11["sector_r"] == pytest.approx(expected_r)
+
+    def test_uses_sector_growth_table_when_given(self):
+        """
+        Sector growth comes from the major-group totals in bls_sector_trends.csv
+        when available, not from the survivor-occupation mean. Here the table
+        reverses the ordering, so the correlation must flip sign.
+        """
+        validation_df = self._validation_df()
+        sector_growth_df = pd.DataFrame(
+            {"emp_growth_composite": [0.08, 0.06, 0.01, -0.05]}, index=pd.Index(["11", "13", "15", "29"], name="soc_major")
+        )
+        result = compute_sector_jackknife(
+            validation_df, "employment", "emp_growth_composite", "net_employment_change", sector_growth_df=sector_growth_df
+        )
+        assert result["full_sample_r"].iloc[0] < 0
+
+    def test_carries_the_full_sample_correlation_for_reference(self):
+        validation_df = self._validation_df()
+        result = compute_sector_jackknife(validation_df, "employment", "emp_growth_composite", "net_employment_change")
+        expected_r = stats.pearsonr(validation_df["net_employment_change"], validation_df["emp_growth_composite"])[0]
+        assert result["full_sample_r"].nunique() == 1
+        assert result["full_sample_r"].iloc[0] == pytest.approx(expected_r)
 
 
 class TestBuildPenetrationLookup:
@@ -369,3 +622,29 @@ class TestAttachDominantDemand:
             )[0]
             assert row["dominant_demand"] == expected
             assert row["dominant_strength"] == pytest.approx(row[f"pct_{expected.lower()}"])
+
+
+class TestBuildUnitScores:
+    def test_scores_are_employment_weighted_over_anchor_year_members(self):
+        merged_validation_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["15-1252", "15-1253", "11-9013"],
+                "TOT_EMP_25": [1000.0, 200.0, 50.0],
+                "occupation_exposure": [0.10, 0.40, 0.02],
+                "net_employment_change": [0.15, None, -0.05],
+            }
+        )
+        unit_membership_df = pd.DataFrame(
+            {
+                "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-99-0000"],
+                "year": ["22", "22", "21", "22", "22"],
+                "oews_code": ["15-1252", "15-1253", "15-1132", "11-9013", "99-0000"],
+            }
+        )
+        unit_scores_df = build_unit_scores(
+            merged_validation_df, unit_membership_df, "TOT_EMP_25", ["occupation_exposure", "net_employment_change"]
+        ).set_index("unit_id")
+        assert unit_scores_df.loc["U-15-1252", "occupation_exposure"] == pytest.approx(0.15)
+        assert unit_scores_df.loc["U-15-1252", "net_employment_change"] == pytest.approx(0.15)
+        assert unit_scores_df.loc["U-11-9013", "occupation_exposure"] == pytest.approx(0.02)
+        assert "U-99-0000" not in unit_scores_df.index

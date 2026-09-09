@@ -9,6 +9,8 @@ from analyze_bls import YEAR_CONFIGS, load_bls_year, select_detailed_rows
 from harmonize_soc import (
     GENERATION_BY_YEAR,
     HarmonizationResult,
+    boundary_continuity_report,
+    build_harmonized_trends,
     build_harmonized_units,
     clean_crosswalk_title,
     is_residual_title,
@@ -307,3 +309,84 @@ class TestBuildHarmonizedUnits:
         residual = result.membership_df.query("year == '22' and oews_code == '15-1299'")["unit_id"].iloc[0]
         assert developers == residual
         assert result.pruned_edges_df.empty
+
+
+class TestBuildHarmonizedTrends:
+    def _harmonization(self):
+        membership_df = pd.DataFrame(
+            {
+                "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-11-9013"],
+                "year": ["21", "21", "22", "23", "23", "22", "23"],
+                "oews_code": ["15-1132", "15-1133", "15-1252", "15-1252", "15-1253", "11-9013", "11-9013"],
+                "oews_title": ["a", "b", "c", "c", "d", "e", "e"],
+            }
+        )
+        completeness_df = pd.DataFrame(
+            {
+                "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-11-9013", "U-11-9013"],
+                "year": ["21", "22", "23", "21", "22", "23"],
+                "complete": [True, True, True, False, True, True],
+            }
+        )
+        unit_summary_df = pd.DataFrame(
+            {
+                "unit_id": ["U-15-1252", "U-11-9013"],
+                "n_soc_2018_codes": [2, 1],
+                "soc_2018_codes": ["15-1252;15-1253", "11-9013"],
+                "major_groups": ["15", "11"],
+                "n_nodes": [6, 3],
+                "discontinued": [False, False],
+            }
+        )
+        return HarmonizationResult(membership_df, unit_summary_df, pd.DataFrame(), completeness_df)
+
+    def _year_frames(self):
+        return {
+            "21": pd.DataFrame(
+                {"OCC_CODE": ["15-1132", "15-1133"], "OCC_TITLE": ["a", "b"], "TOT_EMP": [600.0, 400.0], "A_MEDIAN": [100.0, 120.0]}
+            ),
+            "22": pd.DataFrame(
+                {"OCC_CODE": ["15-1252", "11-9013"], "OCC_TITLE": ["c", "e"], "TOT_EMP": [1100.0, 50.0], "A_MEDIAN": [110.0, 60.0]}
+            ),
+            "23": pd.DataFrame(
+                {
+                    "OCC_CODE": ["15-1252", "15-1253", "11-9013"],
+                    "OCC_TITLE": ["c", "d", "e"],
+                    "TOT_EMP": [1000.0, 210.0, 55.0],
+                    "A_MEDIAN": [115.0, None, 62.0],
+                }
+            ),
+        }
+
+    def test_unit_employment_sums_members_and_growth_columns_follow(self):
+        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["21", "22", "23"]).set_index("unit_id")
+        assert trends_df.loc["U-15-1252", "TOT_EMP_21"] == 1000.0
+        assert trends_df.loc["U-15-1252", "TOT_EMP_23"] == 1210.0
+        assert trends_df.loc["U-15-1252", "emp_growth_22_23"] == pytest.approx(0.1)
+        assert trends_df.loc["U-15-1252", "hist_emp_growth_21_22"] == pytest.approx(0.1)
+
+    def test_unit_wage_is_employment_weighted_over_members_with_a_median(self):
+        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["21", "22", "23"]).set_index("unit_id")
+        assert trends_df.loc["U-15-1252", "A_MEDIAN_21"] == pytest.approx(108.0)
+        assert trends_df.loc["U-15-1252", "A_MEDIAN_23"] == pytest.approx(115.0)
+
+    def test_incomplete_year_is_nan(self):
+        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["21", "22", "23"]).set_index("unit_id")
+        assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_21"])
+        assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_21_22"])
+        assert trends_df.loc["U-11-9013", "emp_growth_22_23"] == pytest.approx(0.1)
+
+    def test_units_without_an_anchor_year_member_are_dropped(self):
+        harmonization = self._harmonization()
+        harmonization.membership_df = harmonization.membership_df[harmonization.membership_df["unit_id"] != "U-11-9013"]
+        trends_df = build_harmonized_trends(self._year_frames(), harmonization, ["21", "22", "23"])
+        assert list(trends_df["unit_id"]) == ["U-15-1252"]
+
+    def test_boundary_report_counts_large_moves(self):
+        trends_df = pd.DataFrame(
+            {"unit_id": ["a", "b", "c"], "hist_emp_growth_18_19": [0.5, 0.01, None], "emp_growth_22_23": [0.02, -0.3, 0.1]}
+        )
+        report_df = boundary_continuity_report(trends_df).set_index("period")
+        assert report_df.loc["18_19", "n_units"] == 2
+        assert report_df.loc["18_19", "share_abs_growth_over_25pct"] == pytest.approx(0.5)
+        assert report_df.loc["22_23", "share_abs_growth_over_25pct"] == pytest.approx(1 / 3)

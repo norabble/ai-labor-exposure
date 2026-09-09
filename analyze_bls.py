@@ -35,6 +35,16 @@ Outputs:
       TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
       hist_emp_growth_{yy}_{yy}            — YoY growth for periods before 2022
       hist_emp_growth_pre_ai               — composite from earliest available year → 2022
+  • data/output/bls_harmonized_trends.csv
+    Same column layout as bls_trends.csv, keyed by unit_id: the trend series on
+    harmonized occupation units built by harmonize_soc.py, which follow BLS's
+    own crosswalks across the SOC 2000 → 2010 → 2018 revisions instead of
+    relying on a detailed code surviving them unchanged.
+  • data/output/soc_harmonization_units.csv
+    Which OEWS code of which year belongs to which harmonized unit.
+  • data/output/soc_harmonization_pruned_edges.csv
+    Crosswalk edges dropped for linking a residual 'All Other' category to a
+    specific occupation — the leakage the harmonization accepts, for audit.
 
 Note on SOC codes and file formats:
   • 2005–2009: SOC 2000 codes, .xls format (requires xlrd), GROUP column (NaN = detailed)
@@ -296,6 +306,28 @@ def main():
         sector_trends_df = attach_growth_columns(_merge_years(sector_dataframes, "soc_major", sector_years), sector_years)
         sector_trends_df.to_csv("data/output/bls_sector_trends.csv", index=False)
         print(f"Saved data/output/bls_sector_trends.csv ({len(sector_trends_df)} major groups)")
+
+    # Harmonized occupation units: consistent series across SOC revisions.
+    from harmonize_soc import boundary_continuity_report, build_harmonized_trends, build_harmonized_units
+
+    oews_codes_by_year = {year_suffix: year_dataframes[year_suffix][["OCC_CODE", "OCC_TITLE"]] for year_suffix in available_years}
+    harmonization = build_harmonized_units(oews_codes_by_year)
+    harmonization.membership_df.merge(harmonization.unit_summary_df, on="unit_id", how="left").to_csv(
+        "data/output/soc_harmonization_units.csv", index=False
+    )
+    harmonization.pruned_edges_df.to_csv("data/output/soc_harmonization_pruned_edges.csv", index=False)
+    harmonized_trends_df = build_harmonized_trends(year_dataframes, harmonization, available_years)
+    harmonized_trends_df.to_csv("data/output/bls_harmonized_trends.csv", index=False)
+    print(
+        f"Saved data/output/bls_harmonized_trends.csv ({len(harmonized_trends_df)} units; "
+        f"{len(harmonization.pruned_edges_df)} residual crosswalk edges pruned)"
+    )
+    print("\n── Unit growth continuity across SOC revision boundaries (share of units moving >25% in a year) ──")
+    for _, report_row in boundary_continuity_report(harmonized_trends_df).iterrows():
+        boundary_flag = "  ← SOC revision" if report_row["period"] in ("09_10", "18_19", "20_21") else ""
+        print(
+            f"  {report_row['period']}  n={int(report_row['n_units']):4d}  {report_row['share_abs_growth_over_25pct']:.1%}{boundary_flag}"
+        )
 
 
 if __name__ == "__main__":

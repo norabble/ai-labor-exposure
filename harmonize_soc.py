@@ -33,6 +33,8 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from analyze_bls import COMPOSITE_ANCHOR_YEAR, attach_growth_columns
+
 CROSSWALK_DIR = "seeds/soc_crosswalks"
 
 SOC_CODE_PATTERN = re.compile(r"^\d\d-\d{4}$")
@@ -508,3 +510,96 @@ def build_harmonized_units(
         pruned_edges_df=pd.DataFrame(pruned_rows, columns=PRUNED_EDGE_COLUMNS).drop_duplicates().reset_index(drop=True),
         completeness_df=_build_completeness(component_by_unit_id, resolved_codes_by_year, unit_id_by_node),
     )
+
+
+# ── Unit-level trend series ───────────────────────────────────────────────────
+
+HARMONIZED_TREND_ID_COLUMNS = ["unit_id", "soc_2018_codes", "major_groups"]
+_GROWTH_PERIOD_PATTERN = re.compile(r"^(?:hist_)?emp_growth_(\d\d_\d\d)$")
+LARGE_ANNUAL_MOVE_THRESHOLD = 0.25
+
+
+def _unit_year_totals(year_frame: pd.DataFrame, year_membership_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    One year's employment total and employment-weighted median wage per unit.
+
+    The wage is weighted over the members that actually report a median: OEWS
+    suppresses A_MEDIAN for some detailed rows, and letting a suppressed member
+    drop the whole unit would lose far more series than it protects.
+    """
+    member_rows_df = year_membership_df.merge(
+        year_frame[["OCC_CODE", "TOT_EMP", "A_MEDIAN"]], left_on="oews_code", right_on="OCC_CODE", how="inner"
+    )
+    member_rows_df["wage_weight"] = member_rows_df["TOT_EMP"].where(member_rows_df["A_MEDIAN"].notna())
+    member_rows_df["weighted_wage"] = member_rows_df["A_MEDIAN"] * member_rows_df["wage_weight"]
+    unit_totals_df = member_rows_df.groupby("unit_id").agg(
+        TOT_EMP=("TOT_EMP", lambda member_employment: member_employment.sum(min_count=1)),
+        weighted_wage_total=("weighted_wage", "sum"),
+        wage_weight_total=("wage_weight", "sum"),
+    )
+    unit_totals_df["A_MEDIAN"] = (unit_totals_df["weighted_wage_total"] / unit_totals_df["wage_weight_total"]).where(
+        unit_totals_df["wage_weight_total"] > 0
+    )
+    return unit_totals_df[["TOT_EMP", "A_MEDIAN"]]
+
+
+def build_harmonized_trends(
+    year_frames: dict[str, pd.DataFrame], harmonization: HarmonizationResult, available_years: list[str]
+) -> pd.DataFrame:
+    """
+    Employment and median-wage series per harmonized unit, with the same growth
+    columns as bls_trends.csv.
+
+    One row per unit that OEWS publishes in the composite anchor year. A unit's
+    year is NaN — never 0 — when the unit has no member row in that year's file
+    at all, or when its membership for that year is incomplete: summing a
+    partial membership would read as a collapse in employment rather than as
+    the missing observation it is.
+    """
+    membership_df = harmonization.membership_df
+    anchor_unit_ids = sorted(set(membership_df.loc[membership_df["year"] == COMPOSITE_ANCHOR_YEAR, "unit_id"]))
+    completeness_by_unit_year = harmonization.completeness_df.set_index(["unit_id", "year"])["complete"].to_dict()
+
+    trend_df = pd.DataFrame(index=pd.Index(anchor_unit_ids, name="unit_id"))
+    for year_suffix in available_years:
+        unit_totals_df = _unit_year_totals(year_frames[year_suffix], membership_df[membership_df["year"] == year_suffix]).reindex(
+            anchor_unit_ids
+        )
+        complete_flags = pd.Series(
+            [bool(completeness_by_unit_year.get((unit_id, year_suffix), False)) for unit_id in anchor_unit_ids], index=anchor_unit_ids
+        )
+        trend_df[f"TOT_EMP_{year_suffix}"] = unit_totals_df["TOT_EMP"].where(complete_flags)
+        trend_df[f"A_MEDIAN_{year_suffix}"] = unit_totals_df["A_MEDIAN"].where(complete_flags)
+
+    trend_df = trend_df.reset_index()
+    unit_labels_df = harmonization.unit_summary_df[["unit_id", "soc_2018_codes", "major_groups"]]
+    trend_df = trend_df.merge(unit_labels_df, on="unit_id", how="left", validate="one_to_one")
+    ordered_columns = HARMONIZED_TREND_ID_COLUMNS + [column for column in trend_df.columns if column not in HARMONIZED_TREND_ID_COLUMNS]
+    return attach_growth_columns(trend_df[ordered_columns], available_years)
+
+
+def boundary_continuity_report(harmonized_trends_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Share of units moving more than 25% in each year-over-year period.
+
+    A SOC revision that the harmonization failed to absorb would show up as a
+    spike in this share at the 2009→10, 2018→19 or 2020→21 boundary; an ordinary
+    year is the comparison.
+    """
+    report_rows: list[dict[str, object]] = []
+    for column_name in harmonized_trends_df.columns:
+        period_match = _GROWTH_PERIOD_PATTERN.match(str(column_name))
+        if period_match is None:
+            continue
+        growth_values = harmonized_trends_df[column_name].dropna()
+        report_rows.append(
+            {
+                "period": period_match.group(1),
+                "n_units": len(growth_values),
+                "share_abs_growth_over_25pct": float((growth_values.abs() > LARGE_ANNUAL_MOVE_THRESHOLD).mean())
+                if len(growth_values)
+                else float("nan"),
+            }
+        )
+    report_df = pd.DataFrame(report_rows, columns=["period", "n_units", "share_abs_growth_over_25pct"])
+    return report_df.sort_values("period").reset_index(drop=True)

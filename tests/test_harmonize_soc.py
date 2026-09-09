@@ -135,7 +135,6 @@ class TestResolveOewsCodes:
             resolve_oews_codes(oews_codes_df, "soc2010", vocabularies, aggregate_codes_df, hybrid_df)
 
 
-@pytest.mark.skipif(not RAW_BLS_PRESENT, reason="raw OEWS zips not present")
 class TestAggregateSeedConsistency:
     """The hand-derived aggregate seed must stay expressible in the crosswalks' own vocabulary."""
 
@@ -170,6 +169,7 @@ class TestAggregateSeedConsistency:
         assert shadowed_oews_codes == {"47-2111"}
 
 
+@pytest.mark.skipif(not RAW_BLS_PRESENT, reason="raw OEWS zips not present")
 class TestEveryOewsCodeResolves:
     def test_all_years_resolve_without_error(self):
         vocabularies = soc_vocabularies()

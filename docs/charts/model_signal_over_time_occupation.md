@@ -104,3 +104,14 @@ together until most of a major group fuses into a single unit. 62 edges are
 pruned, and every one is listed in
 `data/output/soc_harmonization_pruned_edges.csv` with its source and target
 code and title, so the approximation is auditable rather than implicit.
+
+Pruning does not touch the partial crosswalk edges that run between two *named*
+occupations, and those fuse occupations too: SOC 2010 carved `47-2231 Solar
+Photovoltaic Installers` out of several existing construction trades, so
+`U-47-2111` holds Electricians, Roofers, HVAC Mechanics and Installers, and
+Construction and Related Workers, All Other in one unit, while `U-15-1211`
+holds eight SOC 2018 computer codes and 16 units span more than one SOC major
+group. Each unit's score is the employment-weighted average across the
+occupations it fuses, so a unit like that cannot separate electricians from
+roofers — granularity the chart gives up in exchange for a series that means
+the same thing in 2005 as in 2025.

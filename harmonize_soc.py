@@ -19,7 +19,7 @@ Inputs (all read-only, committed under seeds/soc_crosswalks/):
                                           and May 2020, with their SOC 2018,
                                           OEWS 2018 and SOC 2010 equivalents
   • seeds/oews_aggregate_codes.csv      — OEWS-only aggregate codes the files
-                                          above do not cover (see Task 2)
+                                          above do not cover (see `load_aggregate_codes`)
 
 Outputs (written by analyze_bls.py):
   • data/output/soc_harmonization_units.csv         — unit membership per year
@@ -528,7 +528,7 @@ def _unit_year_totals(year_frame: pd.DataFrame, year_membership_df: pd.DataFrame
     drop the whole unit would lose far more series than it protects.
     """
     member_rows_df = year_membership_df.merge(
-        year_frame[["OCC_CODE", "TOT_EMP", "A_MEDIAN"]], left_on="oews_code", right_on="OCC_CODE", how="inner"
+        year_frame[["OCC_CODE", "TOT_EMP", "A_MEDIAN"]], left_on="oews_code", right_on="OCC_CODE", how="inner", validate="one_to_one"
     )
     member_rows_df["wage_weight"] = member_rows_df["TOT_EMP"].where(member_rows_df["A_MEDIAN"].notna())
     member_rows_df["weighted_wage"] = member_rows_df["A_MEDIAN"] * member_rows_df["wage_weight"]

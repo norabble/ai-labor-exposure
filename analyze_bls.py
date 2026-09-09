@@ -50,7 +50,9 @@ Note on SOC codes and file formats:
   • 2005–2009: SOC 2000 codes, .xls format (requires xlrd), GROUP column (NaN = detailed)
   • 2010–2013: SOC 2010 codes, .xls format, GROUP column (NaN = detailed)
   • 2014–2018: SOC 2010 codes, .xlsx format, OCC_GROUP column
-  • 2019+:      SOC 2018 codes, .xlsx format, O_GROUP column
+  • 2019–2020: OEWS hybrid structure codes, .xlsx format, O_GROUP column
+  • 2021+:      SOC 2018 codes, .xlsx format, O_GROUP column
+  (see harmonize_soc.GENERATION_BY_YEAR for the generation each year resolves into)
 All joins are left-joins anchored at 2022, preserving the existing 830-occupation result set.
 Survivorship when joining against 2022: ~82% for 2005–2009, ~83–87% for 2010–2018
 overall, but as low as 3% for individual sectors — which is why sector-level
@@ -307,26 +309,36 @@ def main():
         sector_trends_df.to_csv("data/output/bls_sector_trends.csv", index=False)
         print(f"Saved data/output/bls_sector_trends.csv ({len(sector_trends_df)} major groups)")
 
-    # Harmonized occupation units: consistent series across SOC revisions.
-    from harmonize_soc import boundary_continuity_report, build_harmonized_trends, build_harmonized_units
+    # Harmonized occupation units: consistent series across SOC revisions. An
+    # unknown OEWS code or year is a seed gap, not a reason to lose the trend
+    # files already written above, so the whole stage degrades to a warning.
+    try:
+        # Local import: harmonize_soc imports attach_growth_columns from this module at import time.
+        from harmonize_soc import boundary_continuity_report, build_harmonized_trends, build_harmonized_units
 
-    oews_codes_by_year = {year_suffix: year_dataframes[year_suffix][["OCC_CODE", "OCC_TITLE"]] for year_suffix in available_years}
-    harmonization = build_harmonized_units(oews_codes_by_year)
-    harmonization.membership_df.merge(harmonization.unit_summary_df, on="unit_id", how="left").to_csv(
-        "data/output/soc_harmonization_units.csv", index=False
-    )
-    harmonization.pruned_edges_df.to_csv("data/output/soc_harmonization_pruned_edges.csv", index=False)
-    harmonized_trends_df = build_harmonized_trends(year_dataframes, harmonization, available_years)
-    harmonized_trends_df.to_csv("data/output/bls_harmonized_trends.csv", index=False)
-    print(
-        f"Saved data/output/bls_harmonized_trends.csv ({len(harmonized_trends_df)} units; "
-        f"{len(harmonization.pruned_edges_df)} residual crosswalk edges pruned)"
-    )
-    print("\n── Unit growth continuity across SOC revision boundaries (share of units moving >25% in a year) ──")
-    for _, report_row in boundary_continuity_report(harmonized_trends_df).iterrows():
-        boundary_flag = "  ← SOC revision" if report_row["period"] in ("09_10", "18_19", "20_21") else ""
+        oews_codes_by_year = {year_suffix: year_dataframes[year_suffix][["OCC_CODE", "OCC_TITLE"]] for year_suffix in available_years}
+        harmonization = build_harmonized_units(oews_codes_by_year)
+        harmonization.membership_df.merge(harmonization.unit_summary_df, on="unit_id", how="left").to_csv(
+            "data/output/soc_harmonization_units.csv", index=False
+        )
+        harmonization.pruned_edges_df.to_csv("data/output/soc_harmonization_pruned_edges.csv", index=False)
+        harmonized_trends_df = build_harmonized_trends(year_dataframes, harmonization, available_years)
+        harmonized_trends_df.to_csv("data/output/bls_harmonized_trends.csv", index=False)
         print(
-            f"  {report_row['period']}  n={int(report_row['n_units']):4d}  {report_row['share_abs_growth_over_25pct']:.1%}{boundary_flag}"
+            f"Saved data/output/bls_harmonized_trends.csv ({len(harmonized_trends_df)} units; "
+            f"{len(harmonization.pruned_edges_df)} residual crosswalk edges pruned)"
+        )
+        print("\n── Unit growth continuity across SOC revision boundaries (share of units moving >25% in a year) ──")
+        for _, report_row in boundary_continuity_report(harmonized_trends_df).iterrows():
+            boundary_flag = "  ← SOC revision" if report_row["period"] in ("09_10", "18_19", "20_21") else ""
+            print(
+                f"  {report_row['period']}  n={int(report_row['n_units']):4d}  "
+                f"{report_row['share_abs_growth_over_25pct']:.1%}{boundary_flag}"
+            )
+    except (ValueError, KeyError) as harmonization_error:
+        print(
+            f"Warning: harmonized units skipped — {harmonization_error}. "
+            f"Add the code or year to seeds/oews_aggregate_codes.csv / harmonize_soc.GENERATION_BY_YEAR."
         )
 
 

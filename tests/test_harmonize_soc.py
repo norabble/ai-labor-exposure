@@ -136,6 +136,40 @@ class TestResolveOewsCodes:
 
 
 @pytest.mark.skipif(not RAW_BLS_PRESENT, reason="raw OEWS zips not present")
+class TestAggregateSeedConsistency:
+    """The hand-derived aggregate seed must stay expressible in the crosswalks' own vocabulary."""
+
+    def _crosswalk_only_vocabularies(self) -> dict[str, set[str]]:
+        """The three generation vocabularies as soc_vocabularies builds them, before it folds in the seed's own members."""
+        soc_2000_to_2010_df = load_soc_2000_to_2010()
+        soc_2010_to_2018_df = load_soc_2010_to_2018()
+        return {
+            "soc2000": set(soc_2000_to_2010_df["from_code"]),
+            "soc2010": set(soc_2000_to_2010_df["to_code"]) | set(soc_2010_to_2018_df["from_code"]),
+            "soc2018": set(soc_2010_to_2018_df["to_code"]),
+        }
+
+    def test_every_seed_member_is_in_its_generation_crosswalk_vocabulary(self):
+        crosswalk_vocabularies = self._crosswalk_only_vocabularies()
+        aggregate_codes_df = load_aggregate_codes()
+        unknown_members = [
+            (seed_row.generation, seed_row.oews_code, seed_row.member_soc_code)
+            for seed_row in aggregate_codes_df.itertuples(index=False)
+            if seed_row.member_soc_code not in crosswalk_vocabularies[seed_row.generation]
+        ]
+        assert unknown_members == []
+
+    def test_only_electricians_seed_row_is_shadowed_by_identity(self):
+        crosswalk_vocabularies = self._crosswalk_only_vocabularies()
+        aggregate_codes_df = load_aggregate_codes()
+        shadowed_oews_codes = {
+            seed_row.oews_code
+            for seed_row in aggregate_codes_df.itertuples(index=False)
+            if seed_row.oews_code in crosswalk_vocabularies[seed_row.generation]
+        }
+        assert shadowed_oews_codes == {"47-2111"}
+
+
 class TestEveryOewsCodeResolves:
     def test_all_years_resolve_without_error(self):
         vocabularies = soc_vocabularies()
@@ -375,6 +409,16 @@ class TestBuildHarmonizedTrends:
         assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_21"])
         assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_21_22"])
         assert trends_df.loc["U-11-9013", "emp_growth_22_23"] == pytest.approx(0.1)
+
+    def test_memberless_year_is_nan_even_when_flagged_complete(self):
+        harmonization = self._harmonization()
+        completeness_df = harmonization.completeness_df
+        memberless_year_row = (completeness_df["unit_id"] == "U-11-9013") & (completeness_df["year"] == "21")
+        completeness_df.loc[memberless_year_row, "complete"] = True
+        trends_df = build_harmonized_trends(self._year_frames(), harmonization, ["21", "22", "23"]).set_index("unit_id")
+        assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_21"])
+        assert pd.isna(trends_df.loc["U-11-9013", "A_MEDIAN_21"])
+        assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_21_22"])
 
     def test_units_without_an_anchor_year_member_are_dropped(self):
         harmonization = self._harmonization()

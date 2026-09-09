@@ -1096,8 +1096,9 @@ def load_harmonized_trends(path: str = "data/output/bls_harmonized_trends.csv") 
 
 
 def load_unit_membership(path: str = "data/output/soc_harmonization_units.csv") -> pd.DataFrame | None:
-    """Per-year unit membership from analyze_bls.py; None if absent."""
+    """Per-year unit membership from analyze_bls.py; None (with a warning) if the analyze stage did not write it."""
     if not os.path.exists(path):
+        print(f"Warning: {path} not found — occupation-level history will use surviving 2022 codes.")
         return None
     return pd.read_csv(path, dtype={"unit_id": str, "year": str, "oews_code": str})
 
@@ -1123,6 +1124,7 @@ def build_unit_scores(
         left_on="oews_code",
         right_on="OCC_CODE",
         how="inner",
+        validate="many_to_one",
     )
     unit_score_rows = []
     for unit_id, member_rows_df in scored_members_df.groupby("unit_id"):

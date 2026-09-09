@@ -643,13 +643,16 @@ def plot_model_signal_over_time_occupation(
     dynamic_validation_df: pd.DataFrame,
     output_dir: str,
     anthropic_exp_df: pd.DataFrame | None = None,
+    harmonized_trends_df: pd.DataFrame | None = None,
+    unit_membership_df: pd.DataFrame | None = None,
 ) -> None:
     """
     Occupation-level Pearson r between each model score and YoY employment growth,
     plotted as a time series spanning 2005→2025. Unlike the sector-level version,
-    no aggregation step is applied — each occupation is one data point. n varies by
-    period due to historical SOC code survivorship (~82% for 2005–2009, ~83–87%
-    for 2010–2018, higher for 2019+). Significant periods annotated with r, p, and n.
+    no sector aggregation step is applied — each occupation, or each harmonized
+    SOC unit, is one data point. n counts harmonized units when
+    bls_harmonized_trends.csv is present, else surviving 2022 codes. Significant
+    periods annotated with r, p, and n.
     """
 
     # Collect all YoY growth columns in chronological order
@@ -673,6 +676,8 @@ def plot_model_signal_over_time_occupation(
     if len(all_period_cols) < 2:
         return
 
+    latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
+
     base_df = merged_validation_df.copy()
     base_df = base_df.merge(
         dynamic_validation_df[["OCC_CODE", "net_employment_change"]],
@@ -685,8 +690,30 @@ def plot_model_signal_over_time_occupation(
         obs_df = anthropic_exp_df.rename(columns=obs_col_map)[["OCC_CODE", "observed_exposure"]]
         base_df = base_df.merge(obs_df, on="OCC_CODE", how="left")
 
+    # On harmonized units every period is measured on the same occupation definitions,
+    # so n no longer swings with which detailed codes happened to survive a SOC revision.
+    use_units = harmonized_trends_df is not None and unit_membership_df is not None
+    if use_units:
+        score_cols_present = [
+            score_col for score_col in ("occupation_exposure", "net_employment_change", "observed_exposure") if score_col in base_df.columns
+        ]
+        unit_scores_df = build_unit_scores(base_df, unit_membership_df, latest_emp_col, score_cols_present)
+        growth_cols_present = [column for column in harmonized_trends_df.columns if "emp_growth_" in column]
+        base_df = unit_scores_df.merge(harmonized_trends_df[["unit_id"] + growth_cols_present], on="unit_id", how="inner")
+        hist_yoy = sorted(
+            [c for c in base_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
+            key=_sort_period,
+        )
+        current_yoy = sorted(
+            [c for c in base_df.columns if c.startswith("emp_growth_") and "composite" not in c],
+            key=_sort_period,
+        )
+        all_period_cols = hist_yoy + current_yoy
+        if len(all_period_cols) < 2:
+            return
+
     def _occupation_r(emp_col: str, score_col: str) -> tuple[float, float, int] | None:
-        """Compute occupation-level Pearson r for one period and score column."""
+        """Compute unit- or occupation-level Pearson r for one period and score column."""
         subset = base_df[[score_col, emp_col]].dropna()
         if len(subset) < 20:
             return None
@@ -777,12 +804,18 @@ def plot_model_signal_over_time_occupation(
     ax.set_xticklabels(period_labels, fontsize=8)
     ax.set_ylabel("Occupation-Level Pearson r", fontsize=10)
     ax.set_xlabel("YoY Period", fontsize=10)
-    ax.set_title(
+    chart_title = (
         "Model Predictive Signal Over Time: Occupation-Level Correlation with Employment Growth\n"
         "Red shading = COVID-disrupted periods; blue shading = AI era (2022→). "
-        "Significant periods annotated with r and p-value. n varies with historical SOC survivorship.",
-        fontsize=11,
+        "Significant periods annotated with r and p-value."
     )
+    # Off units, n is whatever survived the SOC revisions; on units it is the unit count.
+    chart_title += (
+        "\n(harmonized SOC units — consistent occupation definitions 2005→2025)"
+        if use_units
+        else " n varies with historical SOC survivorship."
+    )
+    ax.set_title(chart_title, fontsize=11)
     ax.legend(fontsize=9, loc="lower left")
     ax.set_ylim(-0.4, 0.4)
 
@@ -1054,9 +1087,61 @@ def load_sector_growth_table(path: str = "data/output/bls_sector_trends.csv") ->
     return sector_trends_df.set_index("soc_major")
 
 
+def load_harmonized_trends(path: str = "data/output/bls_harmonized_trends.csv") -> pd.DataFrame | None:
+    """Unit-level trend series from analyze_bls.py; None (with a warning) if the analyze stage did not write it."""
+    if not os.path.exists(path):
+        print(f"Warning: {path} not found — occupation-level history will use surviving 2022 codes.")
+        return None
+    return pd.read_csv(path, dtype={"unit_id": str})
+
+
+def load_unit_membership(path: str = "data/output/soc_harmonization_units.csv") -> pd.DataFrame | None:
+    """Per-year unit membership from analyze_bls.py; None if absent."""
+    if not os.path.exists(path):
+        return None
+    return pd.read_csv(path, dtype={"unit_id": str, "year": str, "oews_code": str})
+
+
+def build_unit_scores(
+    merged_validation_df: pd.DataFrame,
+    unit_membership_df: pd.DataFrame,
+    employment_col: str,
+    score_cols: list[str],
+    anchor_year: str = "22",
+) -> pd.DataFrame:
+    """
+    Employment-weighted mean of each model score over a unit's anchor-year OEWS codes.
+
+    merged_validation_df is keyed on the 2022 OEWS code set, so a unit's score is
+    the weighted mean over its year-22 members that were scored. Weights are
+    renormalised over members with a non-missing score, and units with no scored
+    member are omitted.
+    """
+    anchor_members_df = unit_membership_df[unit_membership_df["year"] == anchor_year][["unit_id", "oews_code"]]
+    scored_members_df = anchor_members_df.merge(
+        merged_validation_df[["OCC_CODE", employment_col] + score_cols],
+        left_on="oews_code",
+        right_on="OCC_CODE",
+        how="inner",
+    )
+    unit_score_rows = []
+    for unit_id, member_rows_df in scored_members_df.groupby("unit_id"):
+        unit_score_row: dict[str, float | str] = {"unit_id": unit_id}
+        for score_col in score_cols:
+            scored_rows_df = member_rows_df.dropna(subset=[score_col, employment_col])
+            weight_total = scored_rows_df[employment_col].sum()
+            unit_score_row[score_col] = (
+                (scored_rows_df[score_col] * scored_rows_df[employment_col]).sum() / weight_total if weight_total > 0 else float("nan")
+            )
+        unit_score_rows.append(unit_score_row)
+    return pd.DataFrame(unit_score_rows, columns=["unit_id"] + score_cols)
+
+
 def main():
     bls_trends_df = pd.read_csv("data/output/bls_trends.csv")
     sector_growth_df = load_sector_growth_table()
+    harmonized_trends_df = load_harmonized_trends()
+    unit_membership_df = load_unit_membership()
     occupation_exposure_df = pd.read_csv("data/output/occupation_exposure_report.csv")
 
     occupation_exposure_df["OCC_CODE"] = occupation_exposure_df["O*NET-SOC Code"].astype(str).str.split(".").str[0]
@@ -1383,7 +1468,14 @@ def main():
     plot_model_signal_over_time(
         merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df, signal_cps_panel_df, sector_growth_df=sector_growth_df
     )
-    plot_model_signal_over_time_occupation(merged_validation_df, dynamic_validation_df, output_dir, _anthropic_exp_df)
+    plot_model_signal_over_time_occupation(
+        merged_validation_df,
+        dynamic_validation_df,
+        output_dir,
+        _anthropic_exp_df,
+        harmonized_trends_df=harmonized_trends_df,
+        unit_membership_df=unit_membership_df,
+    )
 
     # ── AI exposure volume ────────────────────────────────────────────────────
     # exposure_volume = (occupation employment / total modeled employment) × mean_penetration

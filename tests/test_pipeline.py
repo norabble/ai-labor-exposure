@@ -30,6 +30,7 @@ from synthesize_impacts import (
     derive_exposure_tier,
     rollup_to_occupation,
 )
+from validate_bls import build_unit_scores
 
 
 def _task_df(rows):
@@ -621,3 +622,29 @@ class TestAttachDominantDemand:
             )[0]
             assert row["dominant_demand"] == expected
             assert row["dominant_strength"] == pytest.approx(row[f"pct_{expected.lower()}"])
+
+
+class TestBuildUnitScores:
+    def test_scores_are_employment_weighted_over_anchor_year_members(self):
+        merged_validation_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["15-1252", "15-1253", "11-9013"],
+                "TOT_EMP_25": [1000.0, 200.0, 50.0],
+                "occupation_exposure": [0.10, 0.40, 0.02],
+                "net_employment_change": [0.15, None, -0.05],
+            }
+        )
+        unit_membership_df = pd.DataFrame(
+            {
+                "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-99-0000"],
+                "year": ["22", "22", "21", "22", "22"],
+                "oews_code": ["15-1252", "15-1253", "15-1132", "11-9013", "99-0000"],
+            }
+        )
+        unit_scores_df = build_unit_scores(
+            merged_validation_df, unit_membership_df, "TOT_EMP_25", ["occupation_exposure", "net_employment_change"]
+        ).set_index("unit_id")
+        assert unit_scores_df.loc["U-15-1252", "occupation_exposure"] == pytest.approx(0.15)
+        assert unit_scores_df.loc["U-15-1252", "net_employment_change"] == pytest.approx(0.15)
+        assert unit_scores_df.loc["U-11-9013", "occupation_exposure"] == pytest.approx(0.02)
+        assert "U-99-0000" not in unit_scores_df.index

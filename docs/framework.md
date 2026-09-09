@@ -432,6 +432,8 @@ recoveries. A plausible mechanism is that Adversarial spending — sales, legal,
 security — is defensive within the firm and needs no capital investment,
 whereas labor-saving adoption does. This rests on three rising-unemployment
 periods and 2025 task labels applied backwards, so it is a hypothesis only.
-Testing it properly would mean extending the BLS series much further back
-(e.g. to 1960) and re-classifying tasks per year against the occupational
-definitions of that era, rather than carrying today's labels backwards.
+The crosswalk harmonization now in `harmonize_soc.py` covers exactly this kind
+of code churn for 2005→2025 at occupation level; testing the hypothesis back to
+1960 would need the same treatment applied to the pre-2000 SOC classifications,
+plus per-year task reclassification against the occupational definitions of
+that era.

@@ -192,3 +192,8 @@ Two level breaks remain even at major-group level, because the SOC revisions
 moved some occupations between groups: 2009→2010 and 2018→2019 (Office and
 Administrative Support drops from 21.8M to 19.5M across the latter). Those two
 periods should be read with that in mind.
+
+The occupation-level chart (`model_signal_over_time_occupation.png`) solves the
+same survivorship problem at finer grain, correlating on harmonized SOC units
+rather than major-group totals — see *Harmonized units* in
+[model_signal_over_time_occupation.md](model_signal_over_time_occupation.md).

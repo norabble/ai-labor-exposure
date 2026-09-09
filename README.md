@@ -40,6 +40,8 @@ disruption, so a pre-AI analog is expected; what AI adds is the expectation of
 acceleration, which three post-2022 years cannot yet show. Sector growth is
 measured from BLS major-group totals, so these correlations do not depend on
 which detailed SOC codes survived the 2010 and 2018 code revisions.
+Occupation-level history is likewise measured on harmonized crosswalk units
+(`bls_harmonized_trends.csv`).
 
 ![Dynamic model sector-level employment validation](docs/charts/images/dynamic_sector_level_employment_validation.png)
 

@@ -36,13 +36,17 @@ The two charts are complementary:
 
 ## What the chart shows
 
-**The dynamic model's occupation-level signal is less clean than at sector level.**
-Individual occupation employment growth is driven by many idiosyncratic factors
-(firm-specific hiring, licensing changes, local demand shocks) that cancel at the
-sector level but add noise at the occupation level. The pre-AI positive r for the
-dynamic model (visible in 2005–2009 at sector level) is weaker and less consistent
-here, as the sector-composition effect dilutes across hundreds of individually noisy
-occupations.
+**The dynamic model's occupation-level signal is positive throughout the whole
+2005→2025 span.** The orange line stays above zero in all 20 periods and is
+significant in most of them, both before and after 2022 — peaking at r=+0.23
+(p<0.001) in 2008→09 and holding at r=+0.09 to +0.14 (p<0.05) across all three
+AI-era periods. Individual occupation employment growth is still driven by many
+idiosyncratic factors (firm-specific hiring, licensing changes, local demand
+shocks) that cancel at the sector level but add noise at the occupation level,
+so the occupation-level r values run smaller in magnitude than the sector-level
+ones. But on harmonized units that noise no longer erases the pre-AI pattern:
+the same pre-2010 tendency for Unbounded/Adversarial-heavy occupations to grow
+faster that the sector-level chart shows also shows up here.
 
 **The rebound-adjusted model shows a consistent negative r in the AI era** (2022→25),
 broadly consistent with the sector-level finding. The occupation-level r values are
@@ -72,12 +76,15 @@ points computed that way silently under-represented exactly the sectors the
 models care most about. Correlating on units removes that selection: the same
 occupation definitions carry the whole 2005→2025 span.
 
-**What n is.** The unit file holds 751 units. A unit enters the chart when at
-least one of its 2022 OEWS member codes carries a model score — 706 do — and
-drops out of a period only when its growth for that period is NaN, leaving
-n ≈ 695 in every period. Before harmonization the pre-2019 n sat around 650–690
-and dipped unevenly by sector; it is now essentially flat, so movement in the
-lines is signal rather than a changing sample.
+**What n is.** The unit file holds 762 unit ids, 751 of which have a 2022
+member, and 706 of those have at least one 2022 member with a model score,
+which is why n on the chart sits at 694–698 (the remainder is per-period NaN
+growth). Before harmonization the pre-2019 n sat around 650–690 and dipped
+unevenly by sector; it is now essentially flat, so movement in the lines is
+signal rather than a changing sample. The trade-off is power: AI-era periods
+previously used all 830 detailed 2022 codes and now use about 698 units, so
+this chart has somewhat less power in 2022→2025 than before, in exchange for a
+consistent series back to 2005.
 
 A unit's score is the 2025-employment-weighted mean over its scored 2022
 members, with weights renormalised over the members that actually have the

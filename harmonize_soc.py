@@ -27,7 +27,9 @@ Outputs (written by analyze_bls.py):
   • data/output/bls_harmonized_trends.csv           — unit-level trend series
 """
 
+import os
 import re
+from dataclasses import dataclass
 
 import pandas as pd
 
@@ -67,8 +69,16 @@ def _load_two_column_crosswalk(path: str, header_row_index: int) -> pd.DataFrame
 
 
 def load_soc_2000_to_2010(crosswalk_dir: str = CROSSWALK_DIR) -> pd.DataFrame:
-    """SOC 2000 → SOC 2010 crosswalk as from_code/from_title/to_code/to_title rows."""
-    return _load_two_column_crosswalk(f"{crosswalk_dir}/soc_2000_to_2010_crosswalk.xls", header_row_index=6)
+    """
+    SOC 2000 → SOC 2010 crosswalk as from_code/from_title/to_code/to_title rows.
+
+    BLS publishes this one as a legacy .xls, which is what the seed holds; an
+    .xlsx of the same name is accepted as a fallback so the file can also be
+    supplied by writers that cannot emit the legacy format.
+    """
+    legacy_path = f"{crosswalk_dir}/soc_2000_to_2010_crosswalk.xls"
+    crosswalk_path = legacy_path if os.path.exists(legacy_path) else f"{crosswalk_dir}/soc_2000_to_2010_crosswalk.xlsx"
+    return _load_two_column_crosswalk(crosswalk_path, header_row_index=6)
 
 
 def load_soc_2010_to_2018(crosswalk_dir: str = CROSSWALK_DIR) -> pd.DataFrame:
@@ -205,3 +215,296 @@ def resolve_oews_codes(
             f"Add them to {AGGREGATE_CODES_PATH}."
         )
     return pd.DataFrame(resolved_rows, columns=["oews_code", "soc_code", "resolution"])
+
+
+# ── Harmonized units ──────────────────────────────────────────────────────────
+
+SocNode = tuple[str, str]
+
+CONSECUTIVE_GENERATION_PAIRS = [("soc2000", "soc2010"), ("soc2010", "soc2018")]
+
+MEMBERSHIP_COLUMNS = ["unit_id", "year", "oews_code", "oews_title"]
+UNIT_SUMMARY_COLUMNS = ["unit_id", "n_soc_2018_codes", "soc_2018_codes", "major_groups", "n_nodes", "discontinued"]
+PRUNED_EDGE_COLUMNS = ["from_generation", "from_code", "from_title", "to_generation", "to_code", "to_title"]
+COMPLETENESS_COLUMNS = ["unit_id", "year", "complete"]
+
+
+class _UnionFind:
+    """Disjoint-set forest over (generation, soc_code) nodes, with path halving."""
+
+    def __init__(self) -> None:
+        self._parent: dict[SocNode, SocNode] = {}
+
+    def find(self, node: SocNode) -> SocNode:
+        """The representative of the node's component, registering the node the first time it is seen."""
+        self._parent.setdefault(node, node)
+        while self._parent[node] != node:
+            self._parent[node] = self._parent[self._parent[node]]
+            node = self._parent[node]
+        return node
+
+    def union(self, left: SocNode, right: SocNode) -> None:
+        """Merge the components holding the two nodes."""
+        self._parent[self.find(left)] = self.find(right)
+
+    def components(self) -> dict[SocNode, set[SocNode]]:
+        """Every component, keyed by its representative node."""
+        grouped: dict[SocNode, set[SocNode]] = {}
+        for node in list(self._parent):
+            grouped.setdefault(self.find(node), set()).add(node)
+        return grouped
+
+
+@dataclass
+class HarmonizationResult:
+    """
+    The four tables describing harmonized occupation units: which OEWS code of
+    each year belongs to which unit, what each unit is made of, which crosswalk
+    edges were pruned before the components were cut, and whether each unit's
+    membership is fully observed in each year.
+    """
+
+    membership_df: pd.DataFrame
+    unit_summary_df: pd.DataFrame
+    pruned_edges_df: pd.DataFrame
+    completeness_df: pd.DataFrame
+
+
+def resolved_generation(year_suffix: str) -> str:
+    """The SOC generation an OEWS year's codes resolve into (hybrid years resolve to SOC 2018)."""
+    generation = GENERATION_BY_YEAR[year_suffix]
+    return "soc2018" if generation == "hybrid" else generation
+
+
+def _unit_id_for(component: set[SocNode]) -> str:
+    """Name a component after its lowest SOC 2018 code, or after its lowest code at all when it survives into no SOC 2018 code."""
+    soc_2018_codes = sorted(code for generation, code in component if generation == "soc2018")
+    if soc_2018_codes:
+        return f"U-{soc_2018_codes[0]}"
+    return f"U-{min(code for _, code in component)}-discontinued"
+
+
+def _split_residual_edges(
+    titled_pairs_df: pd.DataFrame, from_generation: str, to_generation: str, prune_residual_edges: bool
+) -> tuple[list[tuple[SocNode, SocNode]], list[dict[str, str]]]:
+    """
+    Turn from_code/from_title/to_code/to_title rows into node pairs, holding back
+    the edges that run between a residual 'All Other' category and a named one.
+    Those edges are how a catch-all fuses unrelated occupations into one unit.
+    """
+    kept_edges: list[tuple[SocNode, SocNode]] = []
+    pruned_rows: list[dict[str, str]] = []
+    for titled_pair in titled_pairs_df.itertuples(index=False):
+        crosses_residual_boundary = is_residual_title(titled_pair.from_title) != is_residual_title(titled_pair.to_title)
+        if prune_residual_edges and crosses_residual_boundary:
+            pruned_rows.append(
+                {
+                    "from_generation": from_generation,
+                    "from_code": titled_pair.from_code,
+                    "from_title": titled_pair.from_title,
+                    "to_generation": to_generation,
+                    "to_code": titled_pair.to_code,
+                    "to_title": titled_pair.to_title,
+                }
+            )
+            continue
+        kept_edges.append(((from_generation, titled_pair.from_code), (to_generation, titled_pair.to_code)))
+    return kept_edges, pruned_rows
+
+
+def _hybrid_titled_pairs(hybrid_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    The SOC 2010 → SOC 2018 links the hybrid structure implies, in the column
+    shape of a crosswalk. They mostly duplicate crosswalk rows; they are carried
+    so that the aggregates the hybrid file spells out are linked as well.
+    """
+    linked_rows_df = hybrid_df.dropna(subset=["soc_2010_code", "soc_2018_code"])
+    titled_pairs_df = linked_rows_df.rename(
+        columns={
+            "soc_2010_code": "from_code",
+            "soc_2010_title": "from_title",
+            "soc_2018_code": "to_code",
+            "soc_2018_title": "to_title",
+        }
+    )
+    return titled_pairs_df[["from_code", "from_title", "to_code", "to_title"]].drop_duplicates().reset_index(drop=True)
+
+
+def _identity_edges_for_unlinked_codes(
+    vocabularies: dict[str, set[str]], crosswalk_edges_df: pd.DataFrame, from_generation: str, to_generation: str
+) -> list[tuple[SocNode, SocNode]]:
+    """
+    Link a code to itself across a generation boundary when both generations
+    publish it but the crosswalk between them never mentions it — BLS omits
+    codes it did not touch, and without this they would split into two units.
+    """
+    codes_named_by_crosswalk = set(crosswalk_edges_df["from_code"]) | set(crosswalk_edges_df["to_code"])
+    unchanged_codes = (vocabularies.get(from_generation, set()) & vocabularies.get(to_generation, set())) - codes_named_by_crosswalk
+    return [((from_generation, code), (to_generation, code)) for code in sorted(unchanged_codes)]
+
+
+def _aggregate_membership_edges(resolved_codes_by_year: dict[str, pd.DataFrame]) -> list[tuple[SocNode, SocNode]]:
+    """Union the members of every OEWS code that reports several SOC codes together, so such a row never straddles two units."""
+    aggregate_edges: list[tuple[SocNode, SocNode]] = []
+    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
+        generation = resolved_generation(year_suffix)
+        for _, resolved_rows_df in resolved_codes_df.groupby("oews_code"):
+            member_nodes = [(generation, soc_code) for soc_code in sorted(set(resolved_rows_df["soc_code"]))]
+            aggregate_edges.extend((member_nodes[0], member_node) for member_node in member_nodes[1:])
+    return aggregate_edges
+
+
+def _assign_unit_ids(union_find: _UnionFind) -> tuple[dict[SocNode, str], dict[str, set[SocNode]]]:
+    """Name every component and index its nodes by that name."""
+    component_by_unit_id: dict[str, set[SocNode]] = {}
+    unit_id_by_node: dict[SocNode, str] = {}
+    for component in union_find.components().values():
+        unit_id = _unit_id_for(component)
+        if unit_id in component_by_unit_id:
+            raise AssertionError(f"unit id {unit_id!r} names two components; the lowest-code naming rule is ambiguous here")
+        component_by_unit_id[unit_id] = component
+        unit_id_by_node.update({node: unit_id for node in component})
+    return unit_id_by_node, component_by_unit_id
+
+
+def _build_membership(
+    oews_codes_by_year: dict[str, pd.DataFrame], resolved_codes_by_year: dict[str, pd.DataFrame], unit_id_by_node: dict[SocNode, str]
+) -> pd.DataFrame:
+    """One row per OEWS code per year, naming the unit that code's employment belongs to."""
+    membership_rows: list[dict[str, str]] = []
+    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
+        generation = resolved_generation(year_suffix)
+        oews_codes_df = oews_codes_by_year[year_suffix]
+        title_by_oews_code = dict(zip(oews_codes_df["OCC_CODE"].astype(str), oews_codes_df["OCC_TITLE"].astype(str)))
+        for oews_code, resolved_rows_df in resolved_codes_df.groupby("oews_code"):
+            unit_ids = {unit_id_by_node[(generation, soc_code)] for soc_code in resolved_rows_df["soc_code"]}
+            if len(unit_ids) != 1:
+                raise AssertionError(f"OEWS code {oews_code!r} in year {year_suffix!r} straddles units {sorted(unit_ids)}")
+            membership_rows.append(
+                {
+                    "unit_id": unit_ids.pop(),
+                    "year": year_suffix,
+                    "oews_code": oews_code,
+                    "oews_title": title_by_oews_code.get(oews_code, ""),
+                }
+            )
+    return pd.DataFrame(membership_rows, columns=MEMBERSHIP_COLUMNS)
+
+
+def _build_completeness(
+    component_by_unit_id: dict[str, set[SocNode]], resolved_codes_by_year: dict[str, pd.DataFrame], unit_id_by_node: dict[SocNode, str]
+) -> pd.DataFrame:
+    """
+    Whether each unit's employment can be summed for each year: true when every
+    member code of that year's generation that the OEWS ever published is
+    actually present in that year's file.
+    """
+    published_vocabulary_by_generation: dict[str, set[str]] = {}
+    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
+        published_vocabulary_by_generation.setdefault(resolved_generation(year_suffix), set()).update(resolved_codes_df["soc_code"])
+
+    completeness_rows: list[dict[str, object]] = []
+    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
+        generation = resolved_generation(year_suffix)
+        present_codes_by_unit_id: dict[str, set[str]] = {}
+        for soc_code in set(resolved_codes_df["soc_code"]):
+            present_codes_by_unit_id.setdefault(unit_id_by_node[(generation, soc_code)], set()).add(soc_code)
+        for unit_id, component in component_by_unit_id.items():
+            member_codes = {code for node_generation, code in component if node_generation == generation}
+            expected_codes = member_codes & published_vocabulary_by_generation[generation]
+            completeness_rows.append(
+                {
+                    "unit_id": unit_id,
+                    "year": year_suffix,
+                    "complete": expected_codes <= present_codes_by_unit_id.get(unit_id, set()),
+                }
+            )
+    return pd.DataFrame(completeness_rows, columns=COMPLETENESS_COLUMNS)
+
+
+def _build_unit_summary(component_by_unit_id: dict[str, set[SocNode]]) -> pd.DataFrame:
+    """One row per unit describing what it is made of, for auditing which occupations a unit fuses."""
+    summary_rows: list[dict[str, object]] = []
+    for unit_id, component in sorted(component_by_unit_id.items()):
+        soc_2018_codes = sorted({code for generation, code in component if generation == "soc2018"})
+        major_groups = sorted({code[:2] for _, code in component})
+        summary_rows.append(
+            {
+                "unit_id": unit_id,
+                "n_soc_2018_codes": len(soc_2018_codes),
+                "soc_2018_codes": ";".join(soc_2018_codes),
+                "major_groups": ";".join(major_groups),
+                "n_nodes": len(component),
+                "discontinued": not soc_2018_codes,
+            }
+        )
+    return pd.DataFrame(summary_rows, columns=UNIT_SUMMARY_COLUMNS)
+
+
+def build_harmonized_units(
+    oews_codes_by_year: dict[str, pd.DataFrame],
+    crosswalk_dir: str = CROSSWALK_DIR,
+    aggregate_codes_path: str = AGGREGATE_CODES_PATH,
+    prune_residual_edges: bool = True,
+) -> HarmonizationResult:
+    """
+    Cut the SOC code generations into harmonized units whose employment can be
+    summed consistently across years.
+
+    Nodes are (generation, soc_code) pairs; a unit is one connected component of
+    the graph joining them by BLS crosswalk rows, hybrid-structure rows,
+    membership of an OEWS aggregate code, and identity across a generation
+    boundary the crosswalk does not mention. Edges between a residual 'All
+    Other' category and a named occupation are pruned first unless
+    `prune_residual_edges` is false — left in, they fuse the whole computer
+    block with unrelated residuals into a single unit.
+
+    Each value of `oews_codes_by_year` holds that year's detailed OEWS rows with
+    columns OCC_CODE and OCC_TITLE, keyed by two-digit year suffix.
+    """
+    soc_2000_to_2010_df = load_soc_2000_to_2010(crosswalk_dir)
+    soc_2010_to_2018_df = load_soc_2010_to_2018(crosswalk_dir)
+    hybrid_df = load_oews_hybrid_structure(crosswalk_dir)
+    aggregate_codes_df = load_aggregate_codes(aggregate_codes_path)
+    vocabularies = soc_vocabularies(crosswalk_dir, aggregate_codes_path)
+
+    resolved_codes_by_year = {
+        year_suffix: resolve_oews_codes(oews_codes_df, GENERATION_BY_YEAR[year_suffix], vocabularies, aggregate_codes_df, hybrid_df)
+        for year_suffix, oews_codes_df in oews_codes_by_year.items()
+    }
+
+    unit_edges: list[tuple[SocNode, SocNode]] = []
+    pruned_rows: list[dict[str, str]] = []
+    for titled_pairs_df, (from_generation, to_generation) in (
+        (soc_2000_to_2010_df, CONSECUTIVE_GENERATION_PAIRS[0]),
+        (soc_2010_to_2018_df, CONSECUTIVE_GENERATION_PAIRS[1]),
+        (_hybrid_titled_pairs(hybrid_df), CONSECUTIVE_GENERATION_PAIRS[1]),
+    ):
+        kept_edges, edges_pruned_here = _split_residual_edges(titled_pairs_df, from_generation, to_generation, prune_residual_edges)
+        unit_edges.extend(kept_edges)
+        pruned_rows.extend(edges_pruned_here)
+
+    for crosswalk_edges_df, (from_generation, to_generation) in (
+        (soc_2000_to_2010_df, CONSECUTIVE_GENERATION_PAIRS[0]),
+        (soc_2010_to_2018_df, CONSECUTIVE_GENERATION_PAIRS[1]),
+    ):
+        unit_edges.extend(_identity_edges_for_unlinked_codes(vocabularies, crosswalk_edges_df, from_generation, to_generation))
+    unit_edges.extend(_aggregate_membership_edges(resolved_codes_by_year))
+
+    union_find = _UnionFind()
+    for generation, generation_codes in vocabularies.items():
+        for soc_code in generation_codes:
+            union_find.find((generation, soc_code))
+    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
+        for soc_code in set(resolved_codes_df["soc_code"]):
+            union_find.find((resolved_generation(year_suffix), soc_code))
+    for left_node, right_node in unit_edges:
+        union_find.union(left_node, right_node)
+
+    unit_id_by_node, component_by_unit_id = _assign_unit_ids(union_find)
+    return HarmonizationResult(
+        membership_df=_build_membership(oews_codes_by_year, resolved_codes_by_year, unit_id_by_node),
+        unit_summary_df=_build_unit_summary(component_by_unit_id),
+        pruned_edges_df=pd.DataFrame(pruned_rows, columns=PRUNED_EDGE_COLUMNS).drop_duplicates().reset_index(drop=True),
+        completeness_df=_build_completeness(component_by_unit_id, resolved_codes_by_year, unit_id_by_node),
+    )

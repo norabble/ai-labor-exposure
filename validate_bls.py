@@ -1018,6 +1018,137 @@ def _plot_cps_model_vs_actual(
     print(f"  Saved {output_dir}/{output_filename}")
 
 
+def analyse_wage_censoring_sensitivity(
+    merged_validation_df: pd.DataFrame,
+    dynamic_validation_df: pd.DataFrame | None,
+    anchor_year: str,
+    latest_year: str,
+    employment_col: str,
+    soc_major_col: str,
+    output_dir: str,
+) -> pd.DataFrame | None:
+    """
+    Ask whether censored wages could account for the composite wage nulls.
+
+    BLS replaces a wage at or above its ceiling with "#", so those occupations are
+    dropped from every wage correlation. They are not a random sample: they are the
+    top of the wage distribution, almost entirely physicians and surgeons, and the
+    variable they are censored on is the one being analysed.
+
+    The value cannot be recovered — BLS does not revise old releases, and both the
+    annual and hourly figures are censored in the same rows — but it can be bounded,
+    which is enough to answer whether the exclusion changed the conclusion:
+
+      excluded  the status quo: censored occupations dropped
+      floor     the anchor wage sits at its lower bound, so growth is at its maximum
+      ceiling   the anchor wage already equals the latest year's, so growth is zero
+
+    Anything outside [floor, ceiling] would require the anchor wage to be below the
+    year's published maximum (contradicting the censoring) or to have fallen in
+    nominal terms across the window. If r is stable across the three, censoring did
+    not drive the wage result.
+
+    Bounding needs one observed endpoint. Where both are censored — every physician
+    before 2025, since censoring only stopped in 2025 — nothing can be said, and
+    those occupations are counted and reported rather than quietly bounded.
+    """
+    censoring_path = "data/output/wage_censoring.csv"
+    censored_flag_col = f"A_MEDIAN_censored_{anchor_year}"
+    latest_wage_col = f"A_MEDIAN_{latest_year}"
+    if not os.path.exists(censoring_path) or censored_flag_col not in merged_validation_df.columns:
+        print("\n  Skipping wage censoring sensitivity — no censoring metadata available.")
+        return None
+
+    censoring_df = pd.read_csv(censoring_path, dtype={"year_suffix": str})
+    anchor_rows = censoring_df[censoring_df["year_suffix"] == anchor_year]
+    if anchor_rows.empty or pd.isna(anchor_rows["censoring_floor"].iloc[0]):
+        print("\n  Skipping wage censoring sensitivity — no censored wages in the anchor year.")
+        return None
+    censoring_floor = float(anchor_rows["censoring_floor"].iloc[0])
+
+    sensitivity_df = merged_validation_df.copy()
+    anchor_censored = sensitivity_df[censored_flag_col].fillna(False).astype(bool)
+    latest_observed = sensitivity_df[latest_wage_col].notna()
+    boundable = anchor_censored & latest_observed
+    unboundable = anchor_censored & ~latest_observed
+
+    # Growth if the anchor wage sat exactly at its floor: the largest growth the
+    # censoring permits. The true value is at or above the floor, so true growth is
+    # at or below this.
+    sensitivity_df["wage_growth_floor"] = sensitivity_df["wage_growth_composite"].where(
+        ~boundable, sensitivity_df[latest_wage_col] / censoring_floor - 1.0
+    )
+    # Growth if the anchor wage already equalled the latest year's: zero. Below this
+    # the wage would have fallen in nominal terms across the window.
+    sensitivity_df["wage_growth_ceiling"] = sensitivity_df["wage_growth_composite"].where(~boundable, 0.0)
+
+    print(f"\n── Wage Censoring Sensitivity (composite 20{anchor_year}→20{latest_year}) ──")
+    print(f"   Censored in 20{anchor_year}: {int(anchor_censored.sum())} occupations | floor ${censoring_floor:,.0f}")
+    print(f"   Boundable (latest year observed): {int(boundable.sum())} | unboundable (both censored): {int(unboundable.sum())}")
+    if boundable.any():
+        widest = sensitivity_df.loc[boundable, "wage_growth_floor"].max()
+        print(f"   Widest admissible growth for a bounded occupation: {widest:+.1%}")
+
+    scenario_columns = {
+        "excluded": "wage_growth_composite",
+        "floor": "wage_growth_floor",
+        "ceiling": "wage_growth_ceiling",
+    }
+    model_frames = {"rebound_adjusted": (sensitivity_df, "occupation_exposure")}
+    if dynamic_validation_df is not None and "net_employment_change" in dynamic_validation_df.columns:
+        dynamic_sensitivity_df = sensitivity_df.merge(
+            dynamic_validation_df[["OCC_CODE", "net_employment_change"]], on="OCC_CODE", how="inner"
+        )
+        model_frames["dynamic"] = (dynamic_sensitivity_df, "net_employment_change")
+
+    sensitivity_rows = []
+    for model_name, (model_df, score_col) in model_frames.items():
+        for scenario, growth_col in scenario_columns.items():
+            for level in ("occupation", "sector"):
+                usable_df = model_df.dropna(subset=[score_col, growth_col, employment_col])
+                if level == "sector":
+                    usable_df = usable_df.assign(soc_group=usable_df[soc_major_col].map(SOC_MAJOR_GROUPS).fillna("Other"))
+                    grouped_rows = [
+                        {
+                            "score": (group_df[score_col] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
+                            "growth": (group_df[growth_col] * group_df[employment_col]).sum() / group_df[employment_col].sum(),
+                        }
+                        for _, group_df in usable_df.groupby("soc_group")
+                    ]
+                    usable_df = pd.DataFrame(grouped_rows).dropna()
+                    score_values, growth_values = usable_df["score"], usable_df["growth"]
+                else:
+                    score_values, growth_values = usable_df[score_col], usable_df[growth_col]
+
+                if len(usable_df) < 3:
+                    continue
+                pearson_r, pearson_p = stats.pearsonr(score_values, growth_values)
+                sensitivity_rows.append(
+                    {
+                        "model": model_name,
+                        "level": level,
+                        "scenario": scenario,
+                        "n": len(usable_df),
+                        "r": round(pearson_r, 4),
+                        "p": round(pearson_p, 4),
+                    }
+                )
+
+    sensitivity_results_df = pd.DataFrame(sensitivity_rows)
+    for model_name in sensitivity_results_df["model"].unique():
+        for level in ("occupation", "sector"):
+            subset = sensitivity_results_df[(sensitivity_results_df["model"] == model_name) & (sensitivity_results_df["level"] == level)]
+            if subset.empty:
+                continue
+            rendered = "  ".join(f"{row.scenario}: r={row.r:+.3f} (p={row.p:.3f}, n={row.n})" for row in subset.itertuples())
+            spread = subset["r"].max() - subset["r"].min()
+            print(f"   {model_name:<17} {level:<11} {rendered}  | spread {spread:.3f}")
+
+    sensitivity_results_df.to_csv(f"{os.path.dirname(output_dir)}/wage_censoring_sensitivity.csv", index=False)
+    print("  Saved data/output/wage_censoring_sensitivity.csv")
+    return sensitivity_results_df
+
+
 def main():
     bls_trends_df = pd.read_csv("data/output/bls_trends.csv")
     occupation_exposure_df = pd.read_csv("data/output/occupation_exposure_report.csv")
@@ -1047,9 +1178,15 @@ def main():
 
     merged_validation_df = pd.merge(aggregated_exposure_df, bls_trends_df, on="OCC_CODE", how="inner")
 
-    # Detect all growth periods from columns in bls_trends
-    emp_growth_cols = [c for c in merged_validation_df.columns if c.startswith("emp_growth_")]
-    wage_growth_cols = [c for c in merged_validation_df.columns if c.startswith("wage_growth_")]
+    # Detect all growth periods from columns in bls_trends. The numeric guard matters:
+    # the prefixes are also a natural fit for companion columns describing a period
+    # rather than measuring it, and a non-numeric one reaches stats.pearsonr as a
+    # column of strings and fails deep inside scipy rather than here.
+    def _growth_period_columns(prefix: str) -> list[str]:
+        return [c for c in merged_validation_df.columns if c.startswith(prefix) and pd.api.types.is_numeric_dtype(merged_validation_df[c])]
+
+    emp_growth_cols = _growth_period_columns("emp_growth_")
+    wage_growth_cols = _growth_period_columns("wage_growth_")
 
     # Extract period keys (e.g. "22_23", "23_24", "composite"), sorted with composite last
     def _sort_key(col: str) -> tuple:
@@ -1275,6 +1412,17 @@ def main():
         xlabel="Sector Mean Net Employment Change (dynamic model)",
         ylabel="Sector Mean Wage Growth",
         suptitle="Sector-Level Validation: Dynamic Net Employment Change vs. Wage Growth",
+    )
+
+    # ── Wage censoring sensitivity ───────────────────────────────────────────
+    analyse_wage_censoring_sensitivity(
+        merged_validation_df,
+        dynamic_validation_df,
+        anchor_year="22",
+        latest_year=latest_emp_col.replace("TOT_EMP_", ""),
+        employment_col=latest_emp_col,
+        soc_major_col="soc_major",
+        output_dir=output_dir,
     )
 
     # ── Model signal over time (historical baseline) ─────────────────────────

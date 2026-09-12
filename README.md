@@ -95,6 +95,7 @@ Create a `.env` file in the project root:
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_LOCATION=us-central1
 BLS_CONTACT_EMAIL=you@example.com
+BLS_API_KEY=your-bls-api-key
 ```
 
 `BLS_CONTACT_EMAIL` is required only by `download_dws.py`. BLS enforces its bot
@@ -102,6 +103,13 @@ policy at the edge and answers 403 to any request whose User-Agent does not carr
 a parenthesised contact email — and to any User-Agent containing a URL. Use your
 own address: it identifies your traffic to BLS, which is what their policy asks
 for, and it is deliberately not committed to the repository.
+
+`BLS_API_KEY` is optional and used by `historical_displacement.py` for the BLS
+time-series API. Requests succeed without one, but a free key registered at
+https://data.bls.gov/registrationEngine/ raises the limits from 25 requests/day,
+25 series and 10 years per request to 500/day, 50 series and 20 years — enough to
+pull 2005–2025 in a single call. It is a different system from the news-release
+pages above, so it does not replace `BLS_CONTACT_EMAIL`.
 
 ## Running the Pipeline
 

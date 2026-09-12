@@ -43,8 +43,6 @@ import sys
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
-
 RELEASE_TABLE_URLS: dict[str, str] = {
     "disp_t02.html": "https://www.bls.gov/news.release/disp.t02.htm",
     "disp_t05.html": "https://www.bls.gov/news.release/disp.t05.htm",
@@ -60,6 +58,7 @@ CONTACT_EMAIL_VARIABLE = "BLS_CONTACT_EMAIL"
 
 def build_request_headers() -> dict[str, str]:
     """Build the User-Agent BLS requires: a tool name plus a parenthesised contact email."""
+    load_dotenv()
     contact_email = os.environ.get(CONTACT_EMAIL_VARIABLE, "").strip()
     if not contact_email:
         raise RuntimeError(

@@ -94,7 +94,14 @@ Create a `.env` file in the project root:
 ```
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_LOCATION=us-central1
+BLS_CONTACT_EMAIL=you@example.com
 ```
+
+`BLS_CONTACT_EMAIL` is required only by `download_dws.py`. BLS enforces its bot
+policy at the edge and answers 403 to any request whose User-Agent does not carry
+a parenthesised contact email — and to any User-Agent containing a URL. Use your
+own address: it identifies your traffic to BLS, which is what their policy asks
+for, and it is deliberately not committed to the repository.
 
 ## Running the Pipeline
 

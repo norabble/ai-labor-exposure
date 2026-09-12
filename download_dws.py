@@ -26,12 +26,26 @@ publishes no archive of prior releases, so history accumulates in
 seeds/dws_displacement_panel.csv. See dws_panel.py for how that panel is built
 and why the archive is unavailable.
 
-BLS enforces its bot policy at the edge: a request whose User-Agent does not
-carry a parenthesised contact email is answered with a 403 "Access Denied" page,
-and so is any User-Agent containing a URL. BLS_CONTACT_EMAIL therefore has to be
-set — in .env alongside GCP_PROJECT_ID, or in the environment. It is deliberately
-not hardcoded, because a shared address in a public repository would attribute
-every user's traffic to one person.
+BLS enforces its bot policy at the edge, and the rules are narrower than they
+first appear (probed 2026-09-12):
+
+  • A User-Agent with no parenthesised contact email gets a 403 "Access Denied"
+    page. So does a bare "curl/8.5.0".
+  • A User-Agent containing the literal string "github.com" is refused whatever
+    surrounds it — a repo URL, and also a GitHub noreply address such as
+    6422297+user@users.noreply.github.com. The equivalent gitlab.com noreply
+    domain is accepted, so this is a specific block rather than a general
+    URL-detection rule.
+  • A "+" in the local part is fine: 6422297+user@example.com is accepted.
+
+So a GitHub noreply address cannot be used here, which is just as well — those
+addresses do not receive mail, and the point of the policy is that BLS can warn
+an operator before blocking them. A provider alias such as user+bls@gmail.com
+works and stays reachable.
+
+BLS_CONTACT_EMAIL therefore has to be set — in .env alongside GCP_PROJECT_ID, or
+in the environment. It is deliberately not hardcoded, because a shared address in
+a public repository would attribute every user's traffic to one person.
 
 Like download_cps.js, this warns and exits 0 under CI when a fetch fails, so the
 pipeline still renders from the committed seed alone.

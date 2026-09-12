@@ -100,9 +100,11 @@ BLS_API_KEY=your-bls-api-key
 
 `BLS_CONTACT_EMAIL` is required only by `download_dws.py`. BLS enforces its bot
 policy at the edge and answers 403 to any request whose User-Agent does not carry
-a parenthesised contact email — and to any User-Agent containing a URL. Use your
-own address: it identifies your traffic to BLS, which is what their policy asks
-for, and it is deliberately not committed to the repository.
+a parenthesised contact email. Note that it also refuses any User-Agent
+containing the string `github.com`, so a GitHub noreply address
+(`12345+you@users.noreply.github.com`) will not work — use a deliverable address
+or a provider alias such as `you+bls@gmail.com`. Your own address is what their
+policy asks for, and it is deliberately not committed to the repository.
 
 `BLS_API_KEY` is optional and used by `historical_displacement.py` for the BLS
 time-series API. Requests succeed without one, but a free key registered at

@@ -535,6 +535,40 @@ Together these support both claims at once. The framework is general, and AI is
 a distinguishable instance of it — which resolves the pre-existing-composition
 confound in the AI model's favour rather than against it.
 
+### Two further tests
+
+**Predicted displacement against measured displacement.** The growth-based tests
+above score `net_employment_change`, which is `K·absorption_capacity −
+gross_displacement` — both halves at once, so a failure cannot be attributed.
+`composition_displacement_validation.py` tests the displacement half alone, against
+Displaced Worker Supplement Table 5's count of workers who actually lost a job by
+occupation group. Employment growth never enters, so circularity is structurally
+impossible rather than merely avoided.
+
+The result is null at n = 10: composition Pearson +0.220 (p = 0.541), Spearman
++0.600 (p = 0.067); the AI model +0.261 and +0.491. Both point the right way. The
+per-group misses are systematic and more informative than the correlation — the
+composition model under-predicts management and professional displacement by 17.8
+and 9.9 percentage points while over-predicting service by 15.7, and the AI model
+places 49% of all displacement in Office and administrative support against a
+measured 9.6%.
+
+Two things bound it. The DWS publishes no occupation × reason cross-tab, so the
+test runs on all-reasons displacement, of which only 44.4% is "position or shift
+abolished"; the rest is plant closings and insufficient work, which fall heavily
+on management and professional staff and plausibly explain much of the largest
+miss. And n = 10 groups from a single survey. See
+`docs/charts/dws_observed_vs_predicted_displacement.md`.
+
+**Does fit strength track the displacement rate itself?** The cycle decomposition
+uses the change in unemployment; the more direct question is whether periods of
+greater economy-wide displacement show stronger demand-type sorting. The DWS
+cannot answer it — one survey, one rate repeated across 2023–2025, no time
+variation — so smoothed productivity growth is the only annual D available.
+Composition fit strength correlates with it at +0.425 (p = 0.079, n = 18),
+trending in the predicted direction without reaching significance. A hypothesis
+check, not a result.
+
 ### Limitations
 
 **2025 labels applied backwards.** The demand-type classifications come from

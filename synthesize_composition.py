@@ -222,5 +222,20 @@ def attach_composition_dominant_demand(composition_model_df: pd.DataFrame) -> pd
     return attach_dominant_demand(composition_model_df)
 
 
-if __name__ == "__main__":
+def run_stage() -> None:
+    """The full demand composition experiment: build the model, then both validations.
+
+    Runs after `validate` rather than after `synthesize`, because the era
+    comparison scores the composition model beside the AI dynamic model and that
+    report is written by the validate stage.
+    """
+    import composition_displacement_validation
+    import composition_era_validation
+
     synthesize()
+    composition_era_validation.run()
+    composition_displacement_validation.run()
+
+
+if __name__ == "__main__":
+    run_stage()

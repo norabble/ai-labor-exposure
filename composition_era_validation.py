@@ -385,6 +385,58 @@ def decompose_fit_strength(
     return pd.DataFrame(coefficient_rows, columns=CYCLE_OUTPUT_COLUMNS)
 
 
+def correlate_with_displacement_rate(period_correlation_df: pd.DataFrame, exclude_covid: bool = True) -> pd.DataFrame:
+    """Does each model's fit strength track the economy-wide displacement rate itself?
+
+    The prediction from docs/framework.md § Future investigation: the business
+    cycle is that periods of greater displacement show stronger demand-type
+    sorting. The DWS cannot answer this — BLS publishes no archive of prior
+    releases, so the panel holds a single survey whose one rate is repeated across
+    2023-2025, giving no time variation at all. Smoothed productivity growth is
+    the only displacement estimate with annual coverage back to 2005, so it is
+    what this test uses.
+
+    This is a weak test by construction: roughly 18 usable periods, autocorrelated,
+    against a smoothed regressor. It is reported as a hypothesis check.
+    """
+    from historical_displacement import productivity_displacement_rate
+
+    displacement_rate = productivity_displacement_rate()
+    if displacement_rate is None:
+        return pd.DataFrame(columns=["score", "pearson_r", "pearson_p", "n_periods"])
+
+    comparison_df = period_correlation_df[~period_correlation_df["is_covid"]] if exclude_covid else period_correlation_df
+
+    correlation_rows = []
+    for score_col in comparison_df["score"].unique():
+        score_df = comparison_df[comparison_df["score"] == score_col].copy()
+        score_df["displacement_rate"] = score_df["period"].map(
+            lambda key: displacement_rate.get(2000 + int(key.split("_")[1]), float("nan"))
+        )
+        score_df = score_df.dropna(subset=["displacement_rate", "sector_r"])
+        if len(score_df) < 5:
+            continue
+        correlation, p_value = stats.pearsonr(np.arctanh(score_df["sector_r"]), score_df["displacement_rate"])
+        correlation_rows.append(
+            {"score": score_col, "pearson_r": float(correlation), "pearson_p": float(p_value), "n_periods": len(score_df)}
+        )
+
+    return pd.DataFrame(correlation_rows, columns=["score", "pearson_r", "pearson_p", "n_periods"])
+
+
+def print_displacement_rate_tracking(tracking_df: pd.DataFrame) -> None:
+    """Print whether fit strength tracks the economy-wide displacement rate."""
+    if tracking_df.empty:
+        return
+    print("\n── Does fit strength track the economy-wide displacement rate? (smoothed productivity) ──")
+    for _, tracking_row in tracking_df.iterrows():
+        print(
+            f"  {tracking_row['score']:<26} Pearson {tracking_row['pearson_r']:+.3f} "
+            f"(p={tracking_row['pearson_p']:.3f}, n={int(tracking_row['n_periods'])})"
+        )
+    print("  Hypothesis check only: the DWS has one survey, so productivity is the only annual D available.")
+
+
 def print_cycle_decomposition(cycle_decomposition_df: pd.DataFrame) -> None:
     """Print the cycle-versus-AI-era decomposition of each model's fit strength."""
     print("\n── Fit strength decomposed: general mechanism, business cycle, or AI era? ──")
@@ -522,6 +574,8 @@ def run(output_dir: str = "data/output/visualizations") -> pd.DataFrame | None:
         cycle_decomposition_df.to_csv(CYCLE_OUTPUT_PATH, index=False)
         print_cycle_decomposition(cycle_decomposition_df)
         print(f"  ✓ {CYCLE_OUTPUT_PATH}")
+
+    print_displacement_rate_tracking(correlate_with_displacement_rate(period_correlation_df))
 
     plot_signal_over_time(period_correlation_df, output_dir)
     print(f"  ✓ {OUTPUT_PATH}")

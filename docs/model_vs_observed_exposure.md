@@ -187,6 +187,16 @@ Definitive attribution of either signal to AI specifically would require
 OEWS 2025→2026 annual data (not yet available) and, more fundamentally, a
 longer pre-AI baseline against which an acceleration could be measured.
 
+**This confound is now tested directly** — see `docs/framework.md` § Demand
+Composition Model. Stripping every trace of AI data from the predictor, leaving
+demand-type composition alone, leaves a general non-cyclical signal (intercept
++0.238, p = 0.0004) whose strength is strongly cycle-dependent (+0.160 per
+percentage point of rising unemployment, p = 0.0024) and which shows *no* AI-era
+premium once the cycle is controlled (+0.093, p = 0.476). The AI-penetration
+model, run through the same decomposition, does show one (+0.238, p = 0.021). So
+the pre-existing elevation recorded above is real and is largely cyclical, and an
+AI-specific increment survives it.
+
 ---
 
 ## Wages: the dynamic model adds nothing

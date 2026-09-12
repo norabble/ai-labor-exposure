@@ -18,6 +18,7 @@ download-data:
 	node download_bls.js
 	uv run download_data.py
 	node download_cps.js
+	uv run download_dws.py
 
 run-pipeline:
 	uv run main.py

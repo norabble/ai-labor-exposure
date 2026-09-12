@@ -17,10 +17,13 @@ import argparse
 
 from analyze_bls import main as analyze_bls
 from generate_plots import main as generate_plots
+from synthesize_composition import run_stage as synthesize_composition
 from synthesize_impacts import synthesize
 from validate_bls import main as validate_bls
 
-STAGES = ["analyze", "synthesize", "plot", "validate"]
+# composition runs last: its era comparison scores the demand composition model
+# beside the AI dynamic model, whose report the validate stage writes.
+STAGES = ["analyze", "synthesize", "plot", "validate", "composition"]
 
 
 def run_pipeline(stages: list[str]) -> None:
@@ -29,6 +32,7 @@ def run_pipeline(stages: list[str]) -> None:
         "synthesize": ("Synthesizing Task Impacts", synthesize),
         "plot": ("Generating Plots", generate_plots),
         "validate": ("Validating Against BLS Trends", validate_bls),
+        "composition": ("Demand Composition Model (experimental)", synthesize_composition),
     }
     total = len(stages)
     for i, stage in enumerate(stages, 1):
@@ -49,6 +53,7 @@ stages:
   synthesize Merge classifications with AI penetration data
   plot       Generate all visualizations
   validate   Correlate predictions with actual BLS trends
+  composition Demand composition model — the experimental pre-AI generality test
 
 examples:
   uv run main.py                     # run all stages

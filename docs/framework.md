@@ -419,6 +419,184 @@ from time-averaged AI penetration scores. They capture the accumulated state of
 AI adoption rather than a real-time flow signal, limiting the model's ability to
 predict near-term occupation-specific dynamics.
 
+## Demand Composition Model (experimental)
+
+A third model output, added to test whether the Bounded/Unbounded/Adversarial
+taxonomy is a *general* theory of how productivity shocks route into labor
+demand, rather than an AI-specific one.
+
+`docs/model_vs_observed_exposure.md` § "Confound: pre-existing sector
+composition" records that the dynamic model's sector-level correlation was
+already +0.40 to +0.50 in 2006–09, before AI, and files that as a threat to AI
+attribution. If the taxonomy describes a general mechanism, that is instead the
+expected result. This model makes the question testable by removing AI data from
+the predictor entirely.
+
+### Computation
+
+```
+gross_displacement_o  = D · [(1 − BOUNDED_REBOUND)·pct_bounded_o
+                           + (1 − ADVERSARIAL_REBOUND)·pct_adversarial_o]
+absorption_capacity_o = pct_unbounded_o + pct_adversarial_o
+K                     = Σ E·gross_displacement / Σ E·absorption_capacity
+net_employment_change_o = K·absorption_capacity_o − gross_displacement_o
+```
+
+This is the dynamic model with the per-task penetration score `p_t` replaced by a
+single economy-wide displacement rate `D`. The rebound constants are unchanged,
+so the Adversarial residual-displacement term survives. The predictor contains no
+technology-exposure information of any kind, which makes it a strictly harder
+test than the AI model faces.
+
+`D` comes from `historical_displacement.py`, primarily from the BLS Displaced
+Worker Supplement — the only candidate that isolates structural displacement by
+definition rather than by statistical purging, because its "position or shift
+abolished" category separates technological and organisational displacement from
+plant closings and insufficient work at the survey instrument. That category is
+44.4% of long-tenured displacement in the January 2026 release, the largest of
+the three reasons. Alternatives were measured and rejected: CPS permanent job
+losers correlate 0.944 with the unemployment rate, BED gross job losses 0.860
+with its change, and labor productivity growth is negative in 2 of 20 years,
+which would invert the model's sign.
+
+### Why D cancels, and why that matters
+
+Because `K = D·κ` where `κ` is a pure composition constant, `net_o = D·(κ·c_o −
+g_o)`: the whole score vector scales with `D`, and Pearson r is scale-invariant.
+So **D drops out of every cross-sectional correlation.**
+
+This is what makes the design non-circular. The obvious hazard in measuring
+displacement from employment data and then validating against employment growth
+is that the model predicts its own input. A single economy-wide scalar cannot
+manufacture a cross-sectional pattern across 22 sectors or 770 occupations: `D`
+sets the amplitude, the taxonomy sets the shape, and only the shape is tested.
+`tests/test_composition_model.py` asserts the invariance directly, so it fails
+loudly if `D` ever begins carrying cross-sectional information.
+
+`D` therefore governs two things only: the model's amplitude in worker counts,
+and its time variation.
+
+### Result: the signal is general, cyclical, and AI adds to it
+
+Sector-level Pearson r against year-over-year employment growth, n = 22 sectors,
+averaged in Fisher-z space, COVID periods excluded:
+
+| Model | pre-2022 (15 periods) | AI era (3 periods) | difference | Welch p |
+|---|---:|---:|---:|---:|
+| Demand composition only | +0.202 | +0.348 | +0.146 | 0.050 |
+| Dynamic, AI penetration | +0.218 | +0.455 | +0.237 | 0.033 |
+| Rebound-adjusted | −0.067 | −0.274 | −0.207 | 0.172 |
+| Observed AI coverage | +0.053 | −0.212 | −0.265 | 0.113 |
+
+The composition-only model has a pre-AI signal, and pre-2022 it is
+indistinguishable from the full AI model (+0.202 against +0.218) — unsurprising,
+since AI penetration is anachronistic in that era and can add nothing. Its
+strongest periods are 2006→07, 2007→08 and 2008→09 (+0.61, +0.66, +0.54, all
+individually significant), which is the financial crisis.
+
+That concentration is the confound the era comparison cannot settle on its own: a
+pre-AI signal could mean the taxonomy describes a general mechanism, or it could
+mean it is picking up cyclical sorting, since Bounded and clerical work is shed
+in downturns and rehired in recoveries. `decompose_fit_strength` separates them
+by regressing Fisher-z fit strength on the change in unemployment plus an AI-era
+indicator (n = 18 periods, COVID excluded):
+
+| Term | Composition only | Dynamic, AI penetration |
+|---|---|---|
+| intercept (signal at zero cyclical movement) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
+| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
+| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
+| R² | 0.498 | 0.494 |
+
+Three findings follow.
+
+**The taxonomy has a general, non-cyclical baseline.** The intercept is +0.238
+(p = 0.0004) — a real sector-level signal at zero cyclical movement, from a
+predictor containing no technology data at all. This is the direct evidence that
+the Bounded/Unbounded/Adversarial framework applies before AI.
+
+**Its strength is strongly cyclical.** Each percentage point of rising
+unemployment adds +0.160 to composition-only fit strength (p = 0.0024). This
+confirms, as a measurement, the hypothesis recorded under
+[Future investigation: the business cycle](#future-investigation-the-business-cycle):
+the composition fits sector growth best when unemployment is rising. The
+mechanism is plausible — labor-saving reorganisation is implemented under
+pressure, and recoveries return Bounded jobs the model assumes do not come back
+— but the cyclical term is twice the size of the AI model's, so composition
+alone is the more cycle-dependent measure.
+
+**AI penetration adds a real, separable increment.** Composition-only shows no
+AI-era premium once the cycle is controlled (+0.093, p = 0.476), while the
+AI-penetration model does (+0.238, p = 0.021). So the AI-era signal is not
+merely the general mechanism running in a particular decade: penetration data
+carries information beyond composition, specifically after 2022.
+
+Together these support both claims at once. The framework is general, and AI is
+a distinguishable instance of it — which resolves the pre-existing-composition
+confound in the AI model's favour rather than against it.
+
+### Two further tests
+
+**Predicted displacement against measured displacement.** The growth-based tests
+above score `net_employment_change`, which is `K·absorption_capacity −
+gross_displacement` — both halves at once, so a failure cannot be attributed.
+`composition_displacement_validation.py` tests the displacement half alone, against
+Displaced Worker Supplement Table 5's count of workers who actually lost a job by
+occupation group. Employment growth never enters, so circularity is structurally
+impossible rather than merely avoided.
+
+The result is null at n = 10: composition Pearson +0.220 (p = 0.541), Spearman
++0.600 (p = 0.067); the AI model +0.261 and +0.491. Both point the right way. The
+per-group misses are systematic and more informative than the correlation — the
+composition model under-predicts management and professional displacement by 17.8
+and 9.9 percentage points while over-predicting service by 15.7, and the AI model
+places 49% of all displacement in Office and administrative support against a
+measured 9.6%.
+
+Two things bound it. The DWS publishes no occupation × reason cross-tab, so the
+test runs on all-reasons displacement, of which only 44.4% is "position or shift
+abolished"; the rest is plant closings and insufficient work, which fall heavily
+on management and professional staff and plausibly explain much of the largest
+miss. And n = 10 groups from a single survey. See
+`docs/charts/dws_observed_vs_predicted_displacement.md`.
+
+**Does fit strength track the displacement rate itself?** The cycle decomposition
+uses the change in unemployment; the more direct question is whether periods of
+greater economy-wide displacement show stronger demand-type sorting. The DWS
+cannot answer it — one survey, one rate repeated across 2023–2025, no time
+variation — so smoothed productivity growth is the only annual D available.
+Composition fit strength correlates with it at +0.425 (p = 0.079, n = 18),
+trending in the predicted direction without reaching significance. A hypothesis
+check, not a result.
+
+### Limitations
+
+**2025 labels applied backwards.** The demand-type classifications come from
+2025 O\*NET task statements. Occupational task content genuinely changed over
+2005–2025, so earlier periods carry more anachronism; reaching further back buys
+power at the cost of construct validity.
+
+**The era test is under-powered.** Three AI-era periods against fifteen pre-AI,
+autocorrelated. The Welch comparison is descriptive; the cycle decomposition,
+with 18 periods and a continuous regressor, is the stronger of the two and should
+carry the interpretation.
+
+**Uniform technology exposure.** The model asserts that technology touches every
+task equally, which is false — 1990s software hit routine tasks hardest. It is
+the minimal assumption that keeps the test clean. Where it shows: scores are a
+function of composition alone, so 239 of 770 occupations are exactly 100% Bounded
+and tie on one floor value. Drywall and Ceiling Tile Installers and Procurement
+Clerks score identically, because the model cannot know software reaches the
+second and not the first. Any claim from this model about a specific occupation
+is really a claim about its composition class. Relaxing this — plausibly by
+weighting with a Routine Task Intensity index built from the O\*NET data already
+on disk — is the first thing to try next.
+
+**One DWS survey.** BLS publishes no archive of prior Displaced Worker Supplement
+releases, so the panel holds only January 2026 (covering 2023–2025) and
+accumulates forward. This bounds the amplitude and time-variation work, not the
+correlations, which are invariant to `D`.
+
 ### Future investigation: the business cycle
 
 Not pursued; recorded so the observation is not lost. Pairing each 2005→2025

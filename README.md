@@ -133,6 +133,7 @@ make run-pipeline
 # or selectively:
 uv run main.py synthesize plot
 uv run main.py validate
+uv run main.py composition   # experimental: the demand composition model
 ```
 
 Stages:
@@ -173,12 +174,36 @@ net_employment_change = absorption − gross_displacement
 
 The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.509 (p = 0.015) for composite employment growth, r = +0.53 (p = 0.011) in 2023→24 and +0.48 (p = 0.023) in 2024→25; leave-one-sector-out range +0.34 to +0.59.
 
+### Demand composition (experimental)
+
+A third model asks whether the taxonomy is a *general* theory of how productivity shocks route into labor demand, rather than an AI-specific one. It is the dynamic model with every trace of technology-exposure data removed: displacement comes from demand-type composition alone, scaled by a single economy-wide displacement rate `D` drawn primarily from the BLS Displaced Worker Supplement.
+
+```
+gross_displacement    = D × [0.9 × pct_bounded + 0.1 × pct_adversarial]
+absorption_capacity   = pct_unbounded + pct_adversarial
+net_employment_change = K × absorption_capacity − gross_displacement
+```
+
+Because `K = D·κ` with `κ` a pure composition constant, the whole score vector scales with `D` and **`D` cancels out of every cross-sectional correlation**. That is what keeps the test non-circular: a single economy-wide scalar cannot manufacture a pattern across 22 sectors or 770 occupations, so `D` sets the amplitude and the taxonomy sets the shape.
+
+Regressing each model's per-period sector-level fit strength on the change in unemployment plus an AI-era indicator (n = 18 periods, COVID excluded) gives:
+
+| Term | Composition only | Dynamic, AI penetration |
+|---|---|---|
+| general baseline (intercept) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
+| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
+| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
+
+The taxonomy has a real sector-level signal before AI, from a predictor carrying no technology data at all; its strength is strongly cyclical; and AI penetration adds a separable increment that composition alone does not. See [docs/framework.md](docs/framework.md) § Demand Composition Model.
+
 ## Outputs
 
 | File | Description |
 |------|-------------|
 | `occupation_exposure_report.csv` | Per-occupation rebound-adjusted exposure score, demand type breakdown, penetration metrics, and exposure tier |
 | `occupation_dynamic_model_report.csv` | Dynamic equilibrium model — signed `net_employment_change` per occupation; employment-weighted sum = 0 |
+| `occupation_composition_model_report.csv` | Demand composition model — the same equilibrium with all AI data stripped from the predictor (experimental) |
+| `composition_cycle_decomposition.csv` | Each model's fit strength split into a general baseline, a cyclical component, and an AI-era increment |
 | `bls_trends.csv` | BLS employment and wage growth by occupation (2022–2025) |
 | `exposure_volume_by_occupation.csv` | Employment-weighted AI exposure by occupation |
 | `exposure_volume_by_group.csv` | Same metric rolled up to SOC major group |

@@ -67,3 +67,25 @@ class TestPreAiComposite:
         trend_df = attach_growth_columns(_trend_frame(year_keys), year_keys)
         discovered = discover_period_columns(trend_df)
         assert not any("pre_ai" in column for column in discovered)
+
+
+class TestHistoricalYearCoverage:
+    def test_year_configs_reach_1999(self):
+        from analyze_bls import YEAR_CONFIGS
+
+        configured_years = [year_key for year_key, _ in YEAR_CONFIGS]
+        assert configured_years[0] == "1999"
+        assert configured_years == sorted(configured_years)
+
+    def test_every_configured_year_has_a_soc_generation(self):
+        from analyze_bls import YEAR_CONFIGS
+        from harmonize_soc import GENERATION_BY_YEAR
+
+        for year_key, _ in YEAR_CONFIGS:
+            assert year_key in GENERATION_BY_YEAR, f"{year_key} has no SOC generation"
+
+    def test_pre_2005_years_are_soc_2000(self):
+        from harmonize_soc import GENERATION_BY_YEAR
+
+        for year_key in ("1999", "2000", "2001", "2002", "2003", "2004"):
+            assert GENERATION_BY_YEAR[year_key] == "soc2000"

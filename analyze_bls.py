@@ -7,6 +7,8 @@ years, plus a composite total change from the anchor year (2022) to the most
 recent year.
 
 Inputs (any subset that exists under data/raw/bls/):
+  • oes99nat.zip – oes02nat.zip — annual-estimate national files (1999–2002, pre-"m" naming)
+  • oesm03nat.zip, oesm04nat.zip — national files (2003–2004, May reference month)
   • oesm05nat.zip – oesm14nat.zip — deep-history national files (2005–2014; .xls format for 2005–2013)
   • oesm15nat.zip – oesm21nat.zip — historical national files (2015–2021)
   • oesm22nat.zip — 2022 national-only file (merge anchor; composite base)
@@ -47,6 +49,8 @@ Outputs:
     specific occupation — the leakage the harmonization accepts, for audit.
 
 Note on SOC codes and file formats:
+  • 1999–2004: SOC 2000 codes, .xls format (requires xlrd); 1999–2002 are annual estimates
+    with no "m" in the filename, 2003–2004 carry a May reference month like 2005+
   • 2005–2009: SOC 2000 codes, .xls format (requires xlrd), GROUP column (NaN = detailed)
   • 2010–2013: SOC 2010 codes, .xls format, GROUP column (NaN = detailed)
   • 2014–2018: SOC 2010 codes, .xlsx format, OCC_GROUP column
@@ -66,6 +70,12 @@ import zipfile
 import pandas as pd
 
 YEAR_CONFIGS = [
+    ("1999", "data/raw/bls/oes99nat.zip"),
+    ("2000", "data/raw/bls/oes00nat.zip"),
+    ("2001", "data/raw/bls/oes01nat.zip"),
+    ("2002", "data/raw/bls/oes02nat.zip"),
+    ("2003", "data/raw/bls/oesm03nat.zip"),
+    ("2004", "data/raw/bls/oesm04nat.zip"),
     ("2005", "data/raw/bls/oesm05nat.zip"),
     ("2006", "data/raw/bls/oesm06nat.zip"),
     ("2007", "data/raw/bls/oesm07nat.zip"),

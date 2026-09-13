@@ -124,7 +124,7 @@ def load_oews_hybrid_structure(crosswalk_dir: str = CROSSWALK_DIR) -> pd.DataFra
 # ── Code generations and OEWS-only aggregate codes ────────────────────────────
 
 GENERATION_BY_YEAR: dict[str, str] = {
-    **{year_key: "soc2000" for year_key in ("2005", "2006", "2007", "2008", "2009")},
+    **{year_key: "soc2000" for year_key in ("1999", "2000", "2001", "2002", "2003", "2004", "2005", "2006", "2007", "2008", "2009")},
     **{year_key: "soc2010" for year_key in ("2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018")},
     **{year_key: "hybrid" for year_key in ("2019", "2020")},
     **{year_key: "soc2018" for year_key in ("2021", "2022", "2023", "2024", "2025")},

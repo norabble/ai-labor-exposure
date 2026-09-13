@@ -186,3 +186,32 @@ def compare_with_oews(
                 }
             )
     return pd.DataFrame(comparison_rows)
+
+
+STABILITY_OUTPUT_PATH = "data/output/sector_composition_stability.csv"
+
+
+def sector_composition_stability(
+    occupation_trends_df: pd.DataFrame,
+    earliest_year: str = "1999",
+    anchor_year: str = "2022",
+) -> pd.DataFrame:
+    """Share of each sector's anchor-year employment in occupations that existed at the series start.
+
+    A bound on where the 2025 O*NET demand-type labels are most anachronistic: a
+    sector largely composed of occupations OEWS did not publish in 1999 has been
+    rebuilt since, so carrying today's labels back through it is the least safe.
+    This is a proxy for composition churn, not a measure of task-content drift.
+    """
+    anchor_col, earliest_col = f"TOT_EMP_{anchor_year}", f"TOT_EMP_{earliest_year}"
+    stability_df = occupation_trends_df.dropna(subset=[anchor_col]).copy()
+    stability_df["soc_major"] = stability_df["OCC_CODE"].astype(str).str[:2]
+    stability_df["antecedent_employment"] = stability_df[anchor_col].where(stability_df[earliest_col].notna(), 0.0)
+
+    grouped_df = (
+        stability_df.groupby("soc_major")
+        .agg(anchor_employment=(anchor_col, "sum"), antecedent_employment=("antecedent_employment", "sum"))
+        .reset_index()
+    )
+    grouped_df["stable_share"] = grouped_df["antecedent_employment"] / grouped_df["anchor_employment"]
+    return grouped_df.sort_values("stable_share").reset_index(drop=True)

@@ -196,3 +196,36 @@ class TestInstrumentAgreement:
         oews_trends_df = pd.DataFrame([{"soc_major": "51", "TOT_EMP_2022": 0.0, "TOT_EMP_2023": 103.0}])
         comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations"})
         assert len(comparison_df) == 0
+
+
+class TestCompositionStability:
+    def test_share_is_employment_weighted_not_row_counted(self):
+        from cps_historical_panel import sector_composition_stability
+
+        occupation_trends_df = pd.DataFrame(
+            [
+                {"OCC_CODE": "11-1011", "TOT_EMP_1999": 10.0, "TOT_EMP_2022": 900.0},
+                {"OCC_CODE": "11-1021", "TOT_EMP_1999": None, "TOT_EMP_2022": 100.0},
+            ]
+        )
+        stability_df = sector_composition_stability(occupation_trends_df)
+        assert stability_df["stable_share"].iloc[0] == pytest.approx(0.9)
+
+    def test_a_sector_with_no_antecedents_scores_zero(self):
+        from cps_historical_panel import sector_composition_stability
+
+        occupation_trends_df = pd.DataFrame([{"OCC_CODE": "15-1211", "TOT_EMP_1999": None, "TOT_EMP_2022": 500.0}])
+        stability_df = sector_composition_stability(occupation_trends_df)
+        assert stability_df["stable_share"].iloc[0] == pytest.approx(0.0)
+
+    def test_one_row_per_soc_major(self):
+        from cps_historical_panel import sector_composition_stability
+
+        occupation_trends_df = pd.DataFrame(
+            [
+                {"OCC_CODE": "11-1011", "TOT_EMP_1999": 10.0, "TOT_EMP_2022": 100.0},
+                {"OCC_CODE": "15-1211", "TOT_EMP_1999": 10.0, "TOT_EMP_2022": 100.0},
+            ]
+        )
+        stability_df = sector_composition_stability(occupation_trends_df)
+        assert set(stability_df["soc_major"]) == {"11", "15"}

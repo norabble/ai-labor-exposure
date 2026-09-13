@@ -231,8 +231,13 @@ def run_stage() -> None:
     """
     import composition_displacement_validation
     import composition_era_validation
+    import cps_historical_panel
 
     synthesize()
+    # Must run before composition_era_validation.run(), which reads
+    # cps_group_trends.csv for the CPS level of the era comparison — on a fresh
+    # clone or in CI that file does not exist until this stage writes it.
+    cps_historical_panel.run_stage()
     composition_era_validation.run()
     composition_displacement_validation.run()
 

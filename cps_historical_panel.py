@@ -35,6 +35,9 @@ from historical_displacement import fetch_annual_means
 SEED_PATH = "seeds/cps_occupation_panel.csv"
 PANEL_OUTPUT_PATH = "data/output/cps_occupation_panel.csv"
 TRENDS_OUTPUT_PATH = "data/output/cps_group_trends.csv"
+AGREEMENT_OUTPUT_PATH = "data/output/cps_oews_agreement.csv"
+SECTOR_TRENDS_INPUT_PATH = "data/output/bls_sector_trends.csv"
+OCCUPATION_TRENDS_INPUT_PATH = "data/output/bls_trends.csv"
 
 # Leaf occupation groups only. The aggregate rows (LNU02032201, LNU02032205,
 # LNU02032208, LNU02032212) are deliberately excluded: summing them alongside
@@ -215,3 +218,76 @@ def sector_composition_stability(
     )
     grouped_df["stable_share"] = grouped_df["antecedent_employment"] / grouped_df["anchor_employment"]
     return grouped_df.sort_values("stable_share").reset_index(drop=True)
+
+
+def run_stage(
+    seed_path: str = SEED_PATH,
+    panel_output_path: str = PANEL_OUTPUT_PATH,
+    trends_output_path: str = TRENDS_OUTPUT_PATH,
+    agreement_output_path: str = AGREEMENT_OUTPUT_PATH,
+    stability_output_path: str = STABILITY_OUTPUT_PATH,
+    sector_trends_input_path: str = SECTOR_TRENDS_INPUT_PATH,
+    occupation_trends_input_path: str = OCCUPATION_TRENDS_INPUT_PATH,
+) -> None:
+    """Build and write all four CPS-instrument outputs.
+
+    Follows the same convention as `download_cps.js` and `download_dws.py`: a
+    fetch that returns nothing, or raises, is warned about and the committed
+    seed is used instead — the CPS level of the composition era comparison must
+    still render offline from the seed alone, never crash the pipeline.
+
+    Steps 3-4 (the OEWS agreement and composition-stability tables) each depend
+    on a separate BLS output that may not exist yet on a partial run; either is
+    skipped with a warning without touching the panel or trend table already
+    written in steps 1-2.
+    """
+    try:
+        fetched_df = fetch_cps_group_employment()
+    except Exception as fetch_error:  # any fetch failure must degrade, not crash the pipeline
+        warnings.warn(f"CPS group fetch failed ({fetch_error}); falling back to the committed seed", stacklevel=2)
+        fetched_df = pd.DataFrame(columns=PANEL_COLUMNS)
+
+    if fetched_df.empty:
+        warnings.warn("CPS group fetch returned no data; building the CPS panel from the committed seed only", stacklevel=2)
+        if not os.path.exists(seed_path):
+            warnings.warn(f"{seed_path} also absent; cannot build the CPS panel — skipping the CPS instrument", stacklevel=2)
+            return
+        panel_df = pd.read_csv(seed_path)
+    else:
+        panel_df = merge_into_seed(fetched_df, seed_path)
+
+    os.makedirs(os.path.dirname(panel_output_path), exist_ok=True)
+    panel_df.to_csv(panel_output_path, index=False)
+
+    trends_df = build_cps_group_trends(panel_df)
+    os.makedirs(os.path.dirname(trends_output_path), exist_ok=True)
+    trends_df.to_csv(trends_output_path, index=False)
+
+    if os.path.exists(sector_trends_input_path):
+        try:
+            import composition_displacement_validation
+
+            sector_trends_df = pd.read_csv(sector_trends_input_path, dtype={"soc_major": str})
+            group_lookup = composition_displacement_validation.soc_major_to_dws_group()
+            agreement_df = compare_with_oews(trends_df, sector_trends_df, group_lookup)
+            os.makedirs(os.path.dirname(agreement_output_path), exist_ok=True)
+            agreement_df.to_csv(agreement_output_path, index=False)
+        except Exception as agreement_error:  # must not block the panel/trend table already written
+            warnings.warn(f"Could not build the CPS-vs-OEWS agreement table: {agreement_error}", stacklevel=2)
+    else:
+        warnings.warn(f"{sector_trends_input_path} absent; skipping the CPS-vs-OEWS agreement table", stacklevel=2)
+
+    if os.path.exists(occupation_trends_input_path):
+        try:
+            occupation_trends_df = pd.read_csv(occupation_trends_input_path)
+            stability_df = sector_composition_stability(occupation_trends_df)
+            os.makedirs(os.path.dirname(stability_output_path), exist_ok=True)
+            stability_df.to_csv(stability_output_path, index=False)
+        except Exception as stability_error:  # must not block the panel/trend table already written
+            warnings.warn(f"Could not build the sector composition stability table: {stability_error}", stacklevel=2)
+    else:
+        warnings.warn(f"{occupation_trends_input_path} absent; skipping the composition stability table", stacklevel=2)
+
+
+if __name__ == "__main__":
+    run_stage()

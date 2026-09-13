@@ -229,3 +229,100 @@ class TestCompositionStability:
         )
         stability_df = sector_composition_stability(occupation_trends_df)
         assert set(stability_df["soc_major"]) == {"11", "15"}
+
+
+class TestRunStage:
+    @staticmethod
+    def _fake_full_fetch(start_year=1983, end_year=2026):
+        return pd.DataFrame(
+            [
+                {"year": year, "cps_group": cps_group, "employed_thousands": 100.0 + year_index * 10}
+                for year_index, year in enumerate([2022, 2023])
+                for cps_group in CPS_GROUP_SERIES
+            ]
+        )
+
+    @staticmethod
+    def _sector_trends_frame():
+        return pd.DataFrame([{"soc_major": "51", "TOT_EMP_2022": 100.0, "TOT_EMP_2023": 103.0}])
+
+    @staticmethod
+    def _occupation_trends_frame():
+        return pd.DataFrame([{"OCC_CODE": "51-1011", "TOT_EMP_1999": 10.0, "TOT_EMP_2022": 100.0}])
+
+    def test_writes_all_four_outputs_when_fetch_succeeds(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(cps_historical_panel, "fetch_cps_group_employment", self._fake_full_fetch)
+        sector_trends_path = tmp_path / "bls_sector_trends.csv"
+        self._sector_trends_frame().to_csv(sector_trends_path, index=False)
+        occupation_trends_path = tmp_path / "bls_trends.csv"
+        self._occupation_trends_frame().to_csv(occupation_trends_path, index=False)
+
+        panel_output_path = tmp_path / "cps_occupation_panel.csv"
+        trends_output_path = tmp_path / "cps_group_trends.csv"
+        agreement_output_path = tmp_path / "cps_oews_agreement.csv"
+        stability_output_path = tmp_path / "sector_composition_stability.csv"
+
+        cps_historical_panel.run_stage(
+            seed_path=str(tmp_path / "absent_seed.csv"),
+            panel_output_path=str(panel_output_path),
+            trends_output_path=str(trends_output_path),
+            agreement_output_path=str(agreement_output_path),
+            stability_output_path=str(stability_output_path),
+            sector_trends_input_path=str(sector_trends_path),
+            occupation_trends_input_path=str(occupation_trends_path),
+        )
+
+        assert panel_output_path.exists()
+        assert trends_output_path.exists()
+        assert agreement_output_path.exists()
+        assert stability_output_path.exists()
+
+    def test_empty_fetch_falls_back_to_the_seed_and_warns(self, tmp_path, monkeypatch):
+        def empty_fetch(start_year=1983, end_year=2026):
+            return pd.DataFrame(columns=["year", "cps_group", "employed_thousands"])
+
+        monkeypatch.setattr(cps_historical_panel, "fetch_cps_group_employment", empty_fetch)
+
+        seed_path = tmp_path / "seed.csv"
+        self._fake_full_fetch().to_csv(seed_path, index=False)
+
+        panel_output_path = tmp_path / "cps_occupation_panel.csv"
+        trends_output_path = tmp_path / "cps_group_trends.csv"
+
+        with pytest.warns(UserWarning):
+            cps_historical_panel.run_stage(
+                seed_path=str(seed_path),
+                panel_output_path=str(panel_output_path),
+                trends_output_path=str(trends_output_path),
+                agreement_output_path=str(tmp_path / "cps_oews_agreement.csv"),
+                stability_output_path=str(tmp_path / "sector_composition_stability.csv"),
+                sector_trends_input_path=str(tmp_path / "absent_sector_trends.csv"),
+                occupation_trends_input_path=str(tmp_path / "absent_bls_trends.csv"),
+            )
+
+        assert panel_output_path.exists()
+        assert trends_output_path.exists()
+        trends_df = pd.read_csv(trends_output_path)
+        assert "production occupations" in set(trends_df["cps_group"])
+
+    def test_missing_sector_trends_skips_only_the_agreement_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(cps_historical_panel, "fetch_cps_group_employment", self._fake_full_fetch)
+
+        panel_output_path = tmp_path / "cps_occupation_panel.csv"
+        trends_output_path = tmp_path / "cps_group_trends.csv"
+        agreement_output_path = tmp_path / "cps_oews_agreement.csv"
+
+        with pytest.warns(UserWarning):
+            cps_historical_panel.run_stage(
+                seed_path=str(tmp_path / "absent_seed.csv"),
+                panel_output_path=str(panel_output_path),
+                trends_output_path=str(trends_output_path),
+                agreement_output_path=str(agreement_output_path),
+                stability_output_path=str(tmp_path / "sector_composition_stability.csv"),
+                sector_trends_input_path=str(tmp_path / "absent_sector_trends.csv"),
+                occupation_trends_input_path=str(tmp_path / "absent_bls_trends.csv"),
+            )
+
+        assert panel_output_path.exists()
+        assert trends_output_path.exists()
+        assert not agreement_output_path.exists()

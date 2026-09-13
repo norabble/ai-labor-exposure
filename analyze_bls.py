@@ -59,6 +59,7 @@ overall, but as low as 3% for individual sectors — which is why sector-level
 growth comes from bls_sector_trends.csv rather than from these rows.
 """
 
+import io
 import os
 import zipfile
 
@@ -156,9 +157,29 @@ def select_major_group_rows(bls_dataframe: pd.DataFrame) -> pd.DataFrame:
     if group_column is None:
         return pd.DataFrame(columns=["soc_major", "OCC_TITLE", "TOT_EMP", "A_MEDIAN"])
     major_rows = bls_dataframe[bls_dataframe[group_column] == "major"].copy()
+    # The 2002 national file flags All Occupations (00-0000) as a major group; it is a total, not a sector.
+    major_rows = major_rows[major_rows["OCC_CODE"].astype(str) != "00-0000"]
     major_rows["soc_major"] = major_rows["OCC_CODE"].astype(str).str[:2]
     target_columns = ["soc_major", "OCC_TITLE", "TOT_EMP", "A_MEDIAN"]
     return _numeric_bls_columns(major_rows[[c for c in target_columns if c in major_rows.columns]]).reset_index(drop=True)
+
+
+OEWS_HEADER_SCAN_ROWS = 60
+
+
+def detect_header_row(raw_frame: pd.DataFrame) -> int:
+    """
+    Row index of the OEWS column header, which sits below a title banner in the 1997-2000 files.
+
+    The 1999 and 2000 national files open with ~38 rows of survey description
+    before the header; 2001 onward start at row 0. Falls back to 0 when no
+    occ_code cell is found, which keeps the modern files on their existing path.
+    """
+    for row_index in range(min(OEWS_HEADER_SCAN_ROWS, len(raw_frame))):
+        cells = [str(cell).strip().lower() for cell in raw_frame.iloc[row_index].tolist()]
+        if "occ_code" in cells:
+            return row_index
+    return 0
 
 
 def load_bls_year(zip_path: str) -> pd.DataFrame | None:
@@ -176,9 +197,14 @@ def load_bls_year(zip_path: str) -> pd.DataFrame | None:
             return None
         print(f"Found {xls_files[0]}")
         with zip_file.open(xls_files[0]) as excel_file:
-            bls_dataframe = pd.read_excel(excel_file)
+            excel_bytes = io.BytesIO(excel_file.read())
+        header_row_index = detect_header_row(pd.read_excel(excel_bytes, header=None, nrows=OEWS_HEADER_SCAN_ROWS))
+        excel_bytes.seek(0)
+        bls_dataframe = pd.read_excel(excel_bytes, header=header_row_index)
 
     bls_dataframe.columns = [str(c).upper().strip() for c in bls_dataframe.columns]
+    # The 2000 and 2002 national files spell the title column occ_titl.
+    bls_dataframe = bls_dataframe.rename(columns={"OCC_TITL": "OCC_TITLE"})
 
     # Filter to national cross-industry data. The all-areas files require
     # explicit area and ownership filters; national-only files already satisfy

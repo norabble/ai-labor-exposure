@@ -1,4 +1,4 @@
-# Composition Model Signal Over Time (2005→2025)
+# Composition Model Signal Over Time (1999→2025)
 
 `data/output/visualizations/composition_model_signal_over_time.png`, produced by
 `composition_era_validation.py`.
@@ -7,6 +7,9 @@ Sector-level Pearson r between each model score and year-over-year employment
 growth, one point per period, n = 22 sectors throughout. Ringed markers are
 individually significant at p < 0.05. Red bands are the COVID periods (2019→20,
 2020→21); the dashed blue line and shaded region mark the AI era from 2022→23.
+Periods before 2005 come from OEWS files with an annual rather than May
+reference period before 2003, so the 2002→03 interval is not a clean twelve
+months.
 
 Four lines, with different sign conventions — the redistribution models validate
 with positive r (more net change → more growth), the gross exposure measures with

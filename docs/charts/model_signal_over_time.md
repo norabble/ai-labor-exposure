@@ -1,4 +1,4 @@
-# Model Signal Over Time: Historical Baseline (2005→2025)
+# Model Signal Over Time: Historical Baseline (1999→2025)
 
 **File:** `model_signal_over_time.png`
 
@@ -7,7 +7,7 @@
 ## What this chart shows
 
 Sector-level Pearson r between each model score and YoY BLS employment growth,
-plotted as a time series spanning 2005→2025. Each data point is a correlation
+plotted as a time series spanning 1999→2025. Each data point is a correlation
 across n=22 SOC major sectors (employment-weighted means). Three model lines are
 shown:
 
@@ -19,6 +19,9 @@ shown:
 
 Red shading marks COVID-disrupted periods (2019→20, 2020→21); blue shading marks
 the AI era (2022→23 onward); significant periods (p < 0.05) are annotated.
+Periods before 2005 come from OEWS files with an annual rather than May
+reference period before 2003, so the 2002→03 interval is not a clean twelve
+months.
 
 A **separate right-hand panel** covers 2025→2026 from BLS CPS Table A-19. It is
 not part of the line. See [The CPS panel](#the-cps-panel-2025-2026) below.
@@ -27,7 +30,7 @@ not part of the line. See [The CPS panel](#the-cps-panel-2025-2026) below.
 
 This chart answers the primary confound question: **is the AI-era sector signal
 pre-existing, or does it emerge post-2022?** A pre-existing structural trend
-would show consistent model correlations throughout 2005–2025. An AI-specific
+would show consistent model correlations throughout 1999–2025. An AI-specific
 effect would show a weak or absent pre-AI signal and a strengthening post-2022.
 
 ## What the chart shows
@@ -114,7 +117,7 @@ deliberate.** Three things make a spliced series misleading:
    sector. A CPS sector point is the growth of the *major-group total*, covering
    every occupation in the group including those the model never scored. The model
    score on the x-axis is built identically in both cases — an employment-weighted
-   mean over occupations, weighted by `TOT_EMP_25` — so only the y-variable
+   mean over occupations, weighted by `TOT_EMP_2025` — so only the y-variable
    differs, but that is enough.
 3. **No overlapping period exists to calibrate them.** The panel's earliest month
    is Apr 2025 and OEWS's last reference month is May 2025. There is no span both

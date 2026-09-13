@@ -124,10 +124,10 @@ def load_oews_hybrid_structure(crosswalk_dir: str = CROSSWALK_DIR) -> pd.DataFra
 # ── Code generations and OEWS-only aggregate codes ────────────────────────────
 
 GENERATION_BY_YEAR: dict[str, str] = {
-    **{year_suffix: "soc2000" for year_suffix in ("05", "06", "07", "08", "09")},
-    **{year_suffix: "soc2010" for year_suffix in ("10", "11", "12", "13", "14", "15", "16", "17", "18")},
-    **{year_suffix: "hybrid" for year_suffix in ("19", "20")},
-    **{year_suffix: "soc2018" for year_suffix in ("21", "22", "23", "24", "25")},
+    **{year_key: "soc2000" for year_key in ("2005", "2006", "2007", "2008", "2009")},
+    **{year_key: "soc2010" for year_key in ("2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018")},
+    **{year_key: "hybrid" for year_key in ("2019", "2020")},
+    **{year_key: "soc2018" for year_key in ("2021", "2022", "2023", "2024", "2025")},
 }
 
 AGGREGATE_CODES_PATH = "seeds/oews_aggregate_codes.csv"
@@ -272,9 +272,9 @@ class HarmonizationResult:
     completeness_df: pd.DataFrame
 
 
-def resolved_generation(year_suffix: str) -> str:
+def resolved_generation(year_key: str) -> str:
     """The SOC generation an OEWS year's codes resolve into (hybrid years resolve to SOC 2018)."""
-    generation = GENERATION_BY_YEAR[year_suffix]
+    generation = GENERATION_BY_YEAR[year_key]
     return "soc2018" if generation == "hybrid" else generation
 
 
@@ -348,8 +348,8 @@ def _identity_edges_for_unlinked_codes(
 def _aggregate_membership_edges(resolved_codes_by_year: dict[str, pd.DataFrame]) -> list[tuple[SocNode, SocNode]]:
     """Union the members of every OEWS code that reports several SOC codes together, so such a row never straddles two units."""
     aggregate_edges: list[tuple[SocNode, SocNode]] = []
-    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
-        generation = resolved_generation(year_suffix)
+    for year_key, resolved_codes_df in resolved_codes_by_year.items():
+        generation = resolved_generation(year_key)
         for _, resolved_rows_df in resolved_codes_df.groupby("oews_code"):
             member_nodes = [(generation, soc_code) for soc_code in sorted(set(resolved_rows_df["soc_code"]))]
             aggregate_edges.extend((member_nodes[0], member_node) for member_node in member_nodes[1:])
@@ -374,18 +374,18 @@ def _build_membership(
 ) -> pd.DataFrame:
     """One row per OEWS code per year, naming the unit that code's employment belongs to."""
     membership_rows: list[dict[str, str]] = []
-    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
-        generation = resolved_generation(year_suffix)
-        oews_codes_df = oews_codes_by_year[year_suffix]
+    for year_key, resolved_codes_df in resolved_codes_by_year.items():
+        generation = resolved_generation(year_key)
+        oews_codes_df = oews_codes_by_year[year_key]
         title_by_oews_code = dict(zip(oews_codes_df["OCC_CODE"].astype(str), oews_codes_df["OCC_TITLE"].astype(str)))
         for oews_code, resolved_rows_df in resolved_codes_df.groupby("oews_code"):
             unit_ids = {unit_id_by_node[(generation, soc_code)] for soc_code in resolved_rows_df["soc_code"]}
             if len(unit_ids) != 1:
-                raise AssertionError(f"OEWS code {oews_code!r} in year {year_suffix!r} straddles units {sorted(unit_ids)}")
+                raise AssertionError(f"OEWS code {oews_code!r} in year {year_key!r} straddles units {sorted(unit_ids)}")
             membership_rows.append(
                 {
                     "unit_id": unit_ids.pop(),
-                    "year": year_suffix,
+                    "year": year_key,
                     "oews_code": oews_code,
                     "oews_title": title_by_oews_code.get(oews_code, ""),
                 }
@@ -402,12 +402,12 @@ def _build_completeness(
     actually present in that year's file.
     """
     published_vocabulary_by_generation: dict[str, set[str]] = {}
-    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
-        published_vocabulary_by_generation.setdefault(resolved_generation(year_suffix), set()).update(resolved_codes_df["soc_code"])
+    for year_key, resolved_codes_df in resolved_codes_by_year.items():
+        published_vocabulary_by_generation.setdefault(resolved_generation(year_key), set()).update(resolved_codes_df["soc_code"])
 
     completeness_rows: list[dict[str, object]] = []
-    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
-        generation = resolved_generation(year_suffix)
+    for year_key, resolved_codes_df in resolved_codes_by_year.items():
+        generation = resolved_generation(year_key)
         present_codes_by_unit_id: dict[str, set[str]] = {}
         for soc_code in set(resolved_codes_df["soc_code"]):
             present_codes_by_unit_id.setdefault(unit_id_by_node[(generation, soc_code)], set()).add(soc_code)
@@ -417,7 +417,7 @@ def _build_completeness(
             completeness_rows.append(
                 {
                     "unit_id": unit_id,
-                    "year": year_suffix,
+                    "year": year_key,
                     "complete": expected_codes <= present_codes_by_unit_id.get(unit_id, set()),
                 }
             )
@@ -462,7 +462,7 @@ def build_harmonized_units(
     block with unrelated residuals into a single unit.
 
     Each value of `oews_codes_by_year` holds that year's detailed OEWS rows with
-    columns OCC_CODE and OCC_TITLE, keyed by two-digit year suffix.
+    columns OCC_CODE and OCC_TITLE, keyed by four-digit year.
     """
     soc_2000_to_2010_df = load_soc_2000_to_2010(crosswalk_dir)
     soc_2010_to_2018_df = load_soc_2010_to_2018(crosswalk_dir)
@@ -471,8 +471,8 @@ def build_harmonized_units(
     vocabularies = soc_vocabularies(crosswalk_dir, aggregate_codes_path)
 
     resolved_codes_by_year = {
-        year_suffix: resolve_oews_codes(oews_codes_df, GENERATION_BY_YEAR[year_suffix], vocabularies, aggregate_codes_df, hybrid_df)
-        for year_suffix, oews_codes_df in oews_codes_by_year.items()
+        year_key: resolve_oews_codes(oews_codes_df, GENERATION_BY_YEAR[year_key], vocabularies, aggregate_codes_df, hybrid_df)
+        for year_key, oews_codes_df in oews_codes_by_year.items()
     }
 
     unit_edges: list[tuple[SocNode, SocNode]] = []
@@ -497,9 +497,9 @@ def build_harmonized_units(
     for generation, generation_codes in vocabularies.items():
         for soc_code in generation_codes:
             union_find.find((generation, soc_code))
-    for year_suffix, resolved_codes_df in resolved_codes_by_year.items():
+    for year_key, resolved_codes_df in resolved_codes_by_year.items():
         for soc_code in set(resolved_codes_df["soc_code"]):
-            union_find.find((resolved_generation(year_suffix), soc_code))
+            union_find.find((resolved_generation(year_key), soc_code))
     for left_node, right_node in unit_edges:
         union_find.union(left_node, right_node)
 
@@ -515,7 +515,7 @@ def build_harmonized_units(
 # ── Unit-level trend series ───────────────────────────────────────────────────
 
 HARMONIZED_TREND_ID_COLUMNS = ["unit_id", "soc_2018_codes", "major_groups"]
-_GROWTH_PERIOD_PATTERN = re.compile(r"^(?:hist_)?emp_growth_(\d\d_\d\d)$")
+_GROWTH_PERIOD_PATTERN = re.compile(r"^(?:hist_)?emp_growth_(\d{4}_\d{4})$")
 LARGE_ANNUAL_MOVE_THRESHOLD = 0.25
 
 
@@ -561,15 +561,13 @@ def build_harmonized_trends(
     completeness_by_unit_year = harmonization.completeness_df.set_index(["unit_id", "year"])["complete"].to_dict()
 
     trend_df = pd.DataFrame(index=pd.Index(anchor_unit_ids, name="unit_id"))
-    for year_suffix in available_years:
-        unit_totals_df = _unit_year_totals(year_frames[year_suffix], membership_df[membership_df["year"] == year_suffix]).reindex(
-            anchor_unit_ids
-        )
+    for year_key in available_years:
+        unit_totals_df = _unit_year_totals(year_frames[year_key], membership_df[membership_df["year"] == year_key]).reindex(anchor_unit_ids)
         complete_flags = pd.Series(
-            [bool(completeness_by_unit_year.get((unit_id, year_suffix), False)) for unit_id in anchor_unit_ids], index=anchor_unit_ids
+            [bool(completeness_by_unit_year.get((unit_id, year_key), False)) for unit_id in anchor_unit_ids], index=anchor_unit_ids
         )
-        trend_df[f"TOT_EMP_{year_suffix}"] = unit_totals_df["TOT_EMP"].where(complete_flags)
-        trend_df[f"A_MEDIAN_{year_suffix}"] = unit_totals_df["A_MEDIAN"].where(complete_flags)
+        trend_df[f"TOT_EMP_{year_key}"] = unit_totals_df["TOT_EMP"].where(complete_flags)
+        trend_df[f"A_MEDIAN_{year_key}"] = unit_totals_df["A_MEDIAN"].where(complete_flags)
 
     trend_df = trend_df.reset_index()
     unit_labels_df = harmonization.unit_summary_df[["unit_id", "soc_2018_codes", "major_groups"]]

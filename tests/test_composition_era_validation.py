@@ -33,6 +33,7 @@ from composition_era_validation import (
     _period_sort_key,
     build_period_correlations,
     correlate_with_displacement_rate,
+    cps_group_correlation,
     decompose_fit_strength,
     discover_period_columns,
     is_ai_era,
@@ -449,3 +450,73 @@ class TestOccupationLevelCorrelation:
             self._membership_frame(n_units),
         )
         assert result is None or pd.isna(result[0])
+
+
+class TestCpsGroupCorrelation:
+    @staticmethod
+    def _scored_frame():
+        """Two occupations per DWS group, scores rising with the group's index."""
+        from composition_displacement_validation import soc_major_to_dws_group
+
+        lookup = soc_major_to_dws_group()
+        rows = []
+        for index, (soc_major, group) in enumerate(sorted(lookup.items())):
+            for suffix in ("1001", "1002"):
+                rows.append(
+                    {
+                        "OCC_CODE": f"{soc_major}-{suffix}",
+                        COMPOSITION_SCORE_COLUMN: index / 100.0,
+                        "TOT_EMP_2025": 1000.0,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    @staticmethod
+    def _cps_trends(growth_col, slope):
+        """Growth rising with the same group order _scored_frame implies.
+
+        Groups are contiguous blocks when the lookup is walked in soc_major order
+        (e.g. every "professional and related" code sorts before every "service"
+        code), so that walk order — not alphabetical group-name order — is what
+        lines up with the per-group mean score _scored_frame produces.
+        """
+        from composition_displacement_validation import soc_major_to_dws_group
+
+        groups_in_soc_major_order = []
+        for _soc_major, group in sorted(soc_major_to_dws_group().items()):
+            if group not in groups_in_soc_major_order:
+                groups_in_soc_major_order.append(group)
+        return pd.DataFrame([{"cps_group": group, growth_col: slope * index} for index, group in enumerate(groups_in_soc_major_order)])
+
+    def test_positive_relationship_is_recovered(self):
+        result = cps_group_correlation(
+            self._scored_frame(),
+            COMPOSITION_SCORE_COLUMN,
+            "emp_growth_2022_2023",
+            "TOT_EMP_2025",
+            self._cps_trends("emp_growth_2022_2023", 0.01),
+        )
+        assert result is not None
+        correlation, _, n_groups = result
+        assert correlation > 0.9
+        assert n_groups == 10
+
+    def test_missing_growth_column_returns_none(self):
+        result = cps_group_correlation(
+            self._scored_frame(),
+            COMPOSITION_SCORE_COLUMN,
+            "emp_growth_1983_1984",
+            "TOT_EMP_2025",
+            self._cps_trends("emp_growth_2022_2023", 0.01),
+        )
+        assert result is None
+
+    def test_reported_n_counts_groups_not_occupations(self):
+        result = cps_group_correlation(
+            self._scored_frame(),
+            COMPOSITION_SCORE_COLUMN,
+            "emp_growth_2022_2023",
+            "TOT_EMP_2025",
+            self._cps_trends("emp_growth_2022_2023", 0.01),
+        )
+        assert result[2] == 10  # not 44 occupations

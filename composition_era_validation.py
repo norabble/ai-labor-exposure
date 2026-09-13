@@ -328,6 +328,84 @@ def build_occupation_period_correlations(
     return pd.DataFrame(correlation_rows)
 
 
+CPS_GROUP_TRENDS_PATH = "data/output/cps_group_trends.csv"
+# Ten groups total; require most of them present before a correlation means anything.
+MINIMUM_CPS_GROUPS = 8
+
+
+def cps_group_correlation(
+    scored_df: pd.DataFrame,
+    score_col: str,
+    growth_col: str,
+    employment_col: str,
+    cps_trends_df: pd.DataFrame,
+) -> tuple[float, float, int] | None:
+    """Pearson r between a model score and CPS growth across the ten occupation groups.
+
+    Model scores are aggregated to the CPS groups employment-weighted, using the
+    same SOC-major lookup the DWS displacement validation uses, so the taxonomy is
+    shared rather than re-derived. Returns None when fewer than MINIMUM_CPS_GROUPS
+    groups carry both a score and a growth value.
+    """
+    from composition_displacement_validation import soc_major_to_dws_group
+
+    if growth_col not in cps_trends_df.columns:
+        return None
+
+    group_lookup = soc_major_to_dws_group()
+    aggregation_df = scored_df.dropna(subset=[score_col, employment_col]).copy()
+    aggregation_df["cps_group"] = aggregation_df["OCC_CODE"].astype(str).str[:2].map(group_lookup)
+    aggregation_df = aggregation_df.dropna(subset=["cps_group"])
+    if aggregation_df.empty:
+        return None
+
+    weighted_df = aggregation_df.assign(weighted_score=aggregation_df[score_col] * aggregation_df[employment_col])
+    group_scores_df = (
+        weighted_df.groupby("cps_group")
+        .agg(weighted_score=("weighted_score", "sum"), group_employment=(employment_col, "sum"))
+        .reset_index()
+    )
+    group_scores_df["group_score"] = group_scores_df["weighted_score"] / group_scores_df["group_employment"]
+
+    paired_df = group_scores_df.merge(cps_trends_df[["cps_group", growth_col]], on="cps_group", how="inner")
+    paired_df = paired_df[["group_score", growth_col]].dropna()
+    if len(paired_df) < MINIMUM_CPS_GROUPS:
+        return None
+    if paired_df["group_score"].nunique() < 2 or paired_df[growth_col].nunique() < 2:
+        return None
+
+    correlation, p_value = stats.pearsonr(paired_df["group_score"], paired_df[growth_col])
+    return correlation, p_value, len(paired_df)
+
+
+def build_cps_period_correlations(
+    scored_df: pd.DataFrame,
+    employment_col: str,
+    cps_trends_df: pd.DataFrame,
+    score_columns: list[str],
+) -> pd.DataFrame:
+    """One row per (period, score) on the CPS instrument, in the shared frame shape."""
+    correlation_rows = []
+    for growth_col in discover_period_columns(cps_trends_df):
+        for score_col in score_columns:
+            result = cps_group_correlation(scored_df, score_col, growth_col, employment_col, cps_trends_df)
+            if result is None:
+                continue
+            correlation, p_value, n_groups = result
+            correlation_rows.append(
+                {
+                    "period": period_key(growth_col),
+                    "score": score_col,
+                    "fit_r": correlation,
+                    "fit_p": p_value,
+                    "n_units": n_groups,
+                    "era": "ai" if is_ai_era(growth_col) else "pre_ai",
+                    "is_covid": period_key(growth_col) in COVID_PERIODS,
+                }
+            )
+    return pd.DataFrame(correlation_rows)
+
+
 def summarise_eras(period_correlation_df: pd.DataFrame, exclude_covid: bool = True) -> pd.DataFrame:
     """Compare pre-2022 and AI-era correlations per score.
 

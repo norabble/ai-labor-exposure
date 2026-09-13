@@ -626,3 +626,36 @@ the question through to a 1983 floor and records why 1960 is not defensible:
 per-year task reclassification against the occupational definitions of that era
 would still be required, and the decennial-only data before 1962 cannot support
 year-over-year periods at all.
+
+### A second instrument: CPS, 1983→2026
+
+The OEWS floor above has since been worked around, not lifted: `cps_historical_panel.py`
+adds CPS Table A-19-adjacent annual data as a second, independent employment
+instrument covering ten occupation groups from 1983 to 2026 — 43 year-over-year
+periods, more than double OEWS's 1999→2025 span. It is a separate instrument
+from OEWS, drawn as a separate series and never spliced onto it: CPS is a
+household survey that counts the self-employed and agriculture, so its totals
+(~101M in 1983 rising to ~163M in 2025) legitimately run above OEWS's 127–130M
+for the same years. Over the years both instruments cover, they agree only
+moderately (260 paired group-periods, Pearson r = 0.547, mean |difference| =
+0.0215) — enough to say the pre-1999 CPS-only stretch is not contradicted by
+the one check available, not enough to call it validated to OEWS precision. Ten
+groups also means less power than 22 sectors: significance needs |r| ≈ 0.63
+here against ≈ 0.42 at sector level, so figures at the two levels are not
+comparable in magnitude.
+
+Run through the same era comparison and cycle decomposition as the sector-level
+result above, `composition_net_change` on the CPS instrument is a null: the
+AI-era mean r (+0.256, n=4 periods) is not distinguishable from the pre-2022
+mean (+0.425, n=37 periods; Welch p = 0.445), and the cycle decomposition's
+`ai_era` term is negative and non-significant (n=41 periods, R² = 0.023). Under
+this project's anachronism rule — 2025 O\*NET labels are strong evidence when
+they still produce a positive result, but uninformative rather than
+disconfirming when they do not — this null says nothing against the taxonomy.
+One divergence is worth flagging rather than burying: the business-cycle term
+that is significant at sector level (+0.137, p = 0.002) vanishes at CPS level
+(+0.030, p = 0.692), and the data on hand do not distinguish between candidate
+explanations (ten-group aggregation, genuinely different pre-1999 cyclical
+behaviour, and instrument differences). Full numbers, the two internal
+comparability breaks the CPS series carries, and the composition-stability
+sensitivity check are in `docs/charts/composition_model_signal_over_time_cps.md`.

@@ -1,0 +1,441 @@
+year,cps_group,employed_thousands
+1983,construction and extraction occupations,6462.75
+1983,"farming, fishing, and forestry occupations",1125.9166666666667
+1983,"installation, maintenance, and repair occupations",3874.3333333333335
+1983,"management, business, and financial operations occupations",12191.583333333334
+1983,office and administrative support occupations,16376.75
+1983,production occupations,9305.666666666666
+1983,professional and related occupations,16968.333333333332
+1983,sales and related occupations,11386.25
+1983,service occupations,16039.0
+1983,transportation and material moving occupations,7344.416666666667
+1984,construction and extraction occupations,6805.583333333333
+1984,"farming, fishing, and forestry occupations",1105.9166666666667
+1984,"installation, maintenance, and repair occupations",4077.8333333333335
+1984,"management, business, and financial operations occupations",12838.166666666666
+1984,office and administrative support occupations,16824.416666666668
+1984,production occupations,9762.75
+1984,professional and related occupations,17584.666666666668
+1984,sales and related occupations,12112.75
+1984,service occupations,16407.666666666668
+1984,transportation and material moving occupations,7708.083333333333
+1985,construction and extraction occupations,6938.5
+1985,"farming, fishing, and forestry occupations",1065.0833333333333
+1985,"installation, maintenance, and repair occupations",4170.583333333333
+1985,"management, business, and financial operations occupations",13267.416666666666
+1985,office and administrative support occupations,17451.25
+1985,production occupations,9796.833333333334
+1985,professional and related occupations,18064.583333333332
+1985,sales and related occupations,12196.5
+1985,service occupations,16599.25
+1985,transportation and material moving occupations,7722.083333333333
+1986,construction and extraction occupations,7000.083333333333
+1986,"farming, fishing, and forestry occupations",1064.25
+1986,"installation, maintenance, and repair occupations",4201.583333333333
+1986,"management, business, and financial operations occupations",13640.666666666666
+1986,office and administrative support occupations,17931.0
+1986,production occupations,9955.416666666666
+1986,professional and related occupations,18465.5
+1986,sales and related occupations,12725.75
+1986,service occupations,16836.833333333332
+1986,transportation and material moving occupations,7877.166666666667
+1987,construction and extraction occupations,7088.583333333333
+1987,"farming, fishing, and forestry occupations",1086.0833333333333
+1987,"installation, maintenance, and repair occupations",4251.083333333333
+1987,"management, business, and financial operations occupations",14221.5
+1987,office and administrative support occupations,18446.25
+1987,production occupations,10144.083333333334
+1987,professional and related occupations,19002.583333333332
+1987,sales and related occupations,12975.583333333334
+1987,service occupations,17266.833333333332
+1987,transportation and material moving occupations,8008.75
+1988,construction and extraction occupations,7151.916666666667
+1988,"farming, fishing, and forestry occupations",1067.5833333333333
+1988,"installation, maintenance, and repair occupations",4281.416666666667
+1988,"management, business, and financial operations occupations",14889.0
+1988,office and administrative support occupations,18598.75
+1988,production occupations,10319.333333333334
+1988,professional and related occupations,19716.25
+1988,sales and related occupations,13253.0
+1988,service occupations,17545.583333333332
+1988,transportation and material moving occupations,8180.083333333333
+1989,construction and extraction occupations,7243.75
+1989,"farming, fishing, and forestry occupations",1068.6666666666667
+1989,"installation, maintenance, and repair occupations",4342.25
+1989,"management, business, and financial operations occupations",15383.166666666666
+1989,office and administrative support occupations,18900.25
+1989,production occupations,10459.0
+1989,professional and related occupations,20407.0
+1989,sales and related occupations,13559.083333333334
+1989,service occupations,17775.083333333332
+1989,transportation and material moving occupations,8261.583333333334
+1990,construction and extraction occupations,7239.833333333333
+1990,"farming, fishing, and forestry occupations",1076.5
+1990,"installation, maintenance, and repair occupations",4337.333333333333
+1990,"management, business, and financial operations occupations",15406.5
+1990,office and administrative support occupations,19159.916666666668
+1990,production occupations,10424.166666666666
+1990,professional and related occupations,20814.25
+1990,sales and related occupations,13735.916666666666
+1990,service occupations,18272.833333333332
+1990,transportation and material moving occupations,8313.166666666666
+1991,construction and extraction occupations,6987.25
+1991,"farming, fishing, and forestry occupations",1090.0
+1991,"installation, maintenance, and repair occupations",4185.666666666667
+1991,"management, business, and financial operations occupations",15447.083333333334
+1991,office and administrative support occupations,18905.5
+1991,production occupations,10081.666666666666
+1991,professional and related occupations,20955.083333333332
+1991,sales and related occupations,13525.083333333334
+1991,service occupations,18488.0
+1991,transportation and material moving occupations,8062.5
+1992,construction and extraction occupations,6961.166666666667
+1992,"farming, fishing, and forestry occupations",1091.0833333333333
+1992,"installation, maintenance, and repair occupations",4188.75
+1992,"management, business, and financial operations occupations",15335.083333333334
+1992,office and administrative support occupations,19142.666666666668
+1992,production occupations,10006.0
+1992,professional and related occupations,21646.666666666668
+1992,sales and related occupations,13522.416666666666
+1992,service occupations,18627.75
+1992,transportation and material moving occupations,8001.25
+1993,construction and extraction occupations,7077.166666666667
+1993,"farming, fishing, and forestry occupations",1056.5
+1993,"installation, maintenance, and repair occupations",4252.583333333333
+1993,"management, business, and financial operations occupations",15802.916666666666
+1993,office and administrative support occupations,19157.083333333332
+1993,production occupations,10074.75
+1993,professional and related occupations,22006.583333333332
+1993,sales and related occupations,13816.083333333334
+1993,service occupations,19041.166666666668
+1993,transportation and material moving occupations,8059.166666666667
+1994,construction and extraction occupations,7130.333333333333
+1994,"farming, fishing, and forestry occupations",1126.5
+1994,"installation, maintenance, and repair occupations",4260.916666666667
+1994,"management, business, and financial operations occupations",16581.666666666668
+1994,office and administrative support occupations,19368.166666666668
+1994,production occupations,10339.083333333334
+1994,professional and related occupations,22512.75
+1994,sales and related occupations,14292.0
+1994,service occupations,19261.75
+1994,transportation and material moving occupations,8291.666666666666
+1995,construction and extraction occupations,7185.0
+1995,"farming, fishing, and forestry occupations",1138.1666666666667
+1995,"installation, maintenance, and repair occupations",4285.25
+1995,"management, business, and financial operations occupations",17287.916666666668
+1995,office and administrative support occupations,19285.0
+1995,production occupations,10410.25
+1995,professional and related occupations,23115.416666666668
+1995,sales and related occupations,14572.5
+1995,service occupations,19343.416666666668
+1995,transportation and material moving occupations,8381.083333333334
+1996,construction and extraction occupations,7224.5
+1996,"farming, fishing, and forestry occupations",1116.8333333333333
+1996,"installation, maintenance, and repair occupations",4308.5
+1996,"management, business, and financial operations occupations",17691.25
+1996,office and administrative support occupations,19393.416666666668
+1996,production occupations,10498.083333333334
+1996,professional and related occupations,23725.75
+1996,sales and related occupations,14840.583333333334
+1996,service occupations,19577.583333333332
+1996,transportation and material moving occupations,8441.5
+1997,construction and extraction occupations,7455.666666666667
+1997,"farming, fishing, and forestry occupations",1106.6666666666667
+1997,"installation, maintenance, and repair occupations",4470.083333333333
+1997,"management, business, and financial operations occupations",18250.5
+1997,office and administrative support occupations,19538.333333333332
+1997,production occupations,10712.583333333334
+1997,professional and related occupations,24472.5
+1997,sales and related occupations,15163.583333333334
+1997,service occupations,19983.5
+1997,transportation and material moving occupations,8534.333333333334
+1998,construction and extraction occupations,7602.666666666667
+1998,"farming, fishing, and forestry occupations",1109.3333333333333
+1998,"installation, maintenance, and repair occupations",4569.333333333333
+1998,"management, business, and financial operations occupations",18776.916666666668
+1998,office and administrative support occupations,19735.0
+1998,production occupations,10730.5
+1998,professional and related occupations,25201.0
+1998,sales and related occupations,15354.166666666666
+1998,service occupations,20392.833333333332
+1998,transportation and material moving occupations,8523.5
+1999,construction and extraction occupations,7638.916666666667
+1999,"farming, fishing, and forestry occupations",1088.1666666666667
+1999,"installation, maintenance, and repair occupations",4602.5
+1999,"management, business, and financial operations occupations",19165.75
+1999,office and administrative support occupations,19822.333333333332
+1999,production occupations,10740.083333333334
+1999,professional and related occupations,26199.083333333332
+1999,sales and related occupations,15583.416666666666
+1999,service occupations,20420.833333333332
+1999,transportation and material moving occupations,8501.833333333334
+2000,construction and extraction occupations,7620.333333333333
+2000,"farming, fishing, and forestry occupations",1168.1666666666667
+2000,"installation, maintenance, and repair occupations",4818.5
+2000,"management, business, and financial operations occupations",19591.166666666668
+2000,office and administrative support occupations,20447.75
+2000,production occupations,11463.333333333334
+2000,professional and related occupations,26709.75
+2000,sales and related occupations,15721.583333333334
+2000,service occupations,20776.583333333332
+2000,transportation and material moving occupations,8574.083333333334
+2001,construction and extraction occupations,7919.75
+2001,"farming, fishing, and forestry occupations",1052.1666666666667
+2001,"installation, maintenance, and repair occupations",4715.916666666667
+2001,"management, business, and financial operations occupations",19829.916666666668
+2001,office and administrative support occupations,20097.75
+2001,production occupations,10727.0
+2001,professional and related occupations,27213.166666666668
+2001,sales and related occupations,15687.666666666666
+2001,service occupations,21182.916666666668
+2001,transportation and material moving occupations,8507.416666666666
+2002,construction and extraction occupations,7898.166666666667
+2002,"farming, fishing, and forestry occupations",1040.3333333333333
+2002,"installation, maintenance, and repair occupations",4623.416666666667
+2002,"management, business, and financial operations occupations",19822.666666666668
+2002,office and administrative support occupations,19580.0
+2002,production occupations,10080.75
+2002,professional and related occupations,27357.583333333332
+2002,sales and related occupations,15828.083333333334
+2002,service occupations,21765.916666666668
+2002,transportation and material moving occupations,8488.416666666666
+2003,construction and extraction occupations,8114.416666666667
+2003,"farming, fishing, and forestry occupations",1049.8333333333333
+2003,"installation, maintenance, and repair occupations",5041.166666666667
+2003,"management, business, and financial operations occupations",19933.5
+2003,office and administrative support occupations,19536.416666666668
+2003,production occupations,9699.583333333334
+2003,professional and related occupations,27995.333333333332
+2003,sales and related occupations,15960.083333333334
+2003,service occupations,22085.833333333332
+2003,transportation and material moving occupations,8320.0
+2004,construction and extraction occupations,8522.0
+2004,"farming, fishing, and forestry occupations",990.5833333333334
+2004,"installation, maintenance, and repair occupations",5069.416666666667
+2004,"management, business, and financial operations occupations",20234.916666666668
+2004,office and administrative support occupations,19481.0
+2004,production occupations,9462.25
+2004,professional and related occupations,28297.166666666668
+2004,sales and related occupations,15983.083333333334
+2004,service occupations,22720.166666666668
+2004,transportation and material moving occupations,8491.333333333334
+2005,construction and extraction occupations,9145.083333333334
+2005,"farming, fishing, and forestry occupations",976.4166666666666
+2005,"installation, maintenance, and repair occupations",5226.416666666667
+2005,"management, business, and financial operations occupations",20450.083333333332
+2005,office and administrative support occupations,19528.833333333332
+2005,production occupations,9377.666666666666
+2005,professional and related occupations,28795.416666666668
+2005,sales and related occupations,16433.25
+2005,service occupations,23133.0
+2005,transportation and material moving occupations,8663.75
+2006,construction and extraction occupations,9507.5
+2006,"farming, fishing, and forestry occupations",961.4166666666666
+2006,"installation, maintenance, and repair occupations",5361.583333333333
+2006,"management, business, and financial operations occupations",21232.416666666668
+2006,office and administrative support occupations,19499.75
+2006,production occupations,9378.333333333334
+2006,professional and related occupations,29187.166666666668
+2006,sales and related occupations,16641.083333333332
+2006,service occupations,23811.5
+2006,transportation and material moving occupations,8846.0
+2007,construction and extraction occupations,9534.833333333334
+2007,"farming, fishing, and forestry occupations",959.9166666666666
+2007,"installation, maintenance, and repair occupations",5245.083333333333
+2007,"management, business, and financial operations occupations",21577.416666666668
+2007,office and administrative support occupations,19513.333333333332
+2007,production occupations,9395.25
+2007,professional and related occupations,30210.5
+2007,sales and related occupations,16698.083333333332
+2007,service occupations,24136.833333333332
+2007,transportation and material moving occupations,8775.5
+2008,construction and extraction occupations,8666.5
+2008,"farming, fishing, and forestry occupations",988.5
+2008,"installation, maintenance, and repair occupations",5151.5
+2008,"management, business, and financial operations occupations",22058.916666666668
+2008,office and administrative support occupations,19249.083333333332
+2008,production occupations,8973.333333333334
+2008,professional and related occupations,30702.25
+2008,sales and related occupations,16294.75
+2008,service occupations,24451.083333333332
+2008,transportation and material moving occupations,8826.666666666666
+2009,construction and extraction occupations,7439.25
+2009,"farming, fishing, and forestry occupations",926.4166666666666
+2009,"installation, maintenance, and repair occupations",4957.0
+2009,"management, business, and financial operations occupations",21528.916666666668
+2009,office and administrative support occupations,18145.916666666668
+2009,production occupations,7653.833333333333
+2009,professional and related occupations,30689.916666666668
+2009,sales and related occupations,15641.083333333334
+2009,service occupations,24598.166666666668
+2009,transportation and material moving occupations,8297.083333333334
+2010,construction and extraction occupations,7175.25
+2010,"farming, fishing, and forestry occupations",986.5833333333334
+2010,"installation, maintenance, and repair occupations",4911.416666666667
+2010,"management, business, and financial operations occupations",20938.166666666668
+2010,office and administrative support occupations,18047.0
+2010,production occupations,7997.833333333333
+2010,professional and related occupations,30804.916666666668
+2010,sales and related occupations,15386.083333333334
+2010,service occupations,24633.833333333332
+2010,transportation and material moving occupations,8182.583333333333
+2011,construction and extraction occupations,7124.833333333333
+2011,"farming, fishing, and forestry occupations",1001.25
+2011,"installation, maintenance, and repair occupations",4882.833333333333
+2011,"management, business, and financial operations occupations",21589.5
+2011,office and administrative support occupations,17736.0
+2011,production occupations,8142.416666666667
+2011,professional and related occupations,30957.5
+2011,sales and related occupations,15330.5
+2011,service occupations,24786.75
+2011,transportation and material moving occupations,8318.083333333334
+2012,construction and extraction occupations,7004.833333333333
+2012,"farming, fishing, and forestry occupations",994.5833333333334
+2012,"installation, maintenance, and repair occupations",4821.5
+2012,"management, business, and financial operations occupations",22678.166666666668
+2012,office and administrative support occupations,17695.166666666668
+2012,production occupations,8454.75
+2012,professional and related occupations,31364.583333333332
+2012,sales and related occupations,15457.25
+2012,service occupations,25458.916666666668
+2012,transportation and material moving occupations,8539.75
+2013,construction and extraction occupations,7130.166666666667
+2013,"farming, fishing, and forestry occupations",964.1666666666666
+2013,"installation, maintenance, and repair occupations",4963.833333333333
+2013,"management, business, and financial operations occupations",22794.083333333332
+2013,office and administrative support occupations,17801.916666666668
+2013,production occupations,8275.083333333334
+2013,professional and related occupations,31917.5
+2013,sales and related occupations,15444.25
+2013,service occupations,25929.166666666668
+2013,transportation and material moving occupations,8709.166666666666
+2014,construction and extraction occupations,7636.583333333333
+2014,"farming, fishing, and forestry occupations",1021.6666666666666
+2014,"installation, maintenance, and repair occupations",4879.25
+2014,"management, business, and financial operations occupations",23170.666666666668
+2014,office and administrative support occupations,17770.916666666668
+2014,production occupations,8438.25
+2014,professional and related occupations,32879.0
+2014,sales and related occupations,15645.583333333334
+2014,service occupations,25854.0
+2014,transportation and material moving occupations,9009.916666666666
+2015,construction and extraction occupations,7651.916666666667
+2015,"farming, fishing, and forestry occupations",1072.9166666666667
+2015,"installation, maintenance, and repair occupations",5008.166666666667
+2015,"management, business, and financial operations occupations",24108.5
+2015,office and administrative support occupations,17897.333333333332
+2015,production occupations,8522.0
+2015,professional and related occupations,33851.833333333336
+2015,sales and related occupations,15700.416666666666
+2015,service occupations,25895.583333333332
+2015,transportation and material moving occupations,9124.75
+2016,construction and extraction occupations,7928.916666666667
+2016,"farming, fishing, and forestry occupations",1096.0
+2016,"installation, maintenance, and repair occupations",4879.166666666667
+2016,"management, business, and financial operations occupations",24940.666666666668
+2016,office and administrative support occupations,17690.916666666668
+2016,production occupations,8458.5
+2016,professional and related occupations,34497.833333333336
+2016,sales and related occupations,15848.166666666666
+2016,service occupations,26811.5
+2016,transportation and material moving occupations,9284.25
+2017,construction and extraction occupations,8031.0
+2017,"farming, fishing, and forestry occupations",1184.3333333333333
+2017,"installation, maintenance, and repair occupations",4977.25
+2017,"management, business, and financial operations occupations",25378.666666666668
+2017,office and administrative support occupations,17751.25
+2017,production occupations,8481.5
+2017,professional and related occupations,35522.333333333336
+2017,sales and related occupations,15814.916666666666
+2017,service occupations,26751.0
+2017,transportation and material moving occupations,9445.25
+2018,construction and extraction occupations,8338.25
+2018,"farming, fishing, and forestry occupations",1120.75
+2018,"installation, maintenance, and repair occupations",5011.916666666667
+2018,"management, business, and financial operations occupations",25849.916666666668
+2018,office and administrative support occupations,17655.0
+2018,production occupations,8620.666666666666
+2018,professional and related occupations,36585.75
+2018,sales and related occupations,15806.166666666666
+2018,service occupations,26854.416666666668
+2018,transportation and material moving occupations,9918.166666666666
+2019,construction and extraction occupations,8324.833333333334
+2019,"farming, fishing, and forestry occupations",1156.0833333333333
+2019,"installation, maintenance, and repair occupations",4862.166666666667
+2019,"management, business, and financial operations occupations",26980.75
+2019,office and administrative support occupations,17788.583333333332
+2019,production occupations,8564.833333333334
+2019,professional and related occupations,37236.916666666664
+2019,sales and related occupations,15581.916666666666
+2019,service occupations,26978.416666666668
+2019,transportation and material moving occupations,10063.166666666666
+2020,construction and extraction occupations,7709.916666666667
+2020,"farming, fishing, and forestry occupations",1045.25
+2020,"installation, maintenance, and repair occupations",4601.583333333333
+2020,"management, business, and financial operations occupations",27142.666666666668
+2020,office and administrative support occupations,15558.0
+2020,production occupations,7589.833333333333
+2020,professional and related occupations,36501.666666666664
+2020,sales and related occupations,14168.416666666666
+2020,service occupations,22853.083333333332
+2020,transportation and material moving occupations,10624.833333333334
+2021,construction and extraction occupations,8057.5
+2021,"farming, fishing, and forestry occupations",1061.0
+2021,"installation, maintenance, and repair occupations",4840.0
+2021,"management, business, and financial operations occupations",27864.083333333332
+2021,office and administrative support occupations,15797.0
+2021,production occupations,7949.833333333333
+2021,professional and related occupations,36880.5
+2021,sales and related occupations,14369.25
+2021,service occupations,24402.583333333332
+2021,transportation and material moving occupations,11359.0
+2022,construction and extraction occupations,8427.083333333334
+2022,"farming, fishing, and forestry occupations",979.6666666666666
+2022,"installation, maintenance, and repair occupations",4852.916666666667
+2022,"management, business, and financial operations occupations",29350.5
+2022,office and administrative support occupations,16096.5
+2022,production occupations,8255.916666666666
+2022,professional and related occupations,38748.75
+2022,sales and related occupations,14316.083333333334
+2022,service occupations,25437.666666666668
+2022,transportation and material moving occupations,11826.416666666666
+2023,construction and extraction occupations,8457.0
+2023,"farming, fishing, and forestry occupations",987.25
+2023,"installation, maintenance, and repair occupations",4881.416666666667
+2023,"management, business, and financial operations occupations",30544.0
+2023,office and administrative support occupations,15954.0
+2023,production occupations,8279.666666666666
+2023,professional and related occupations,39730.916666666664
+2023,sales and related occupations,14324.666666666666
+2023,service occupations,26171.166666666668
+2023,transportation and material moving occupations,11706.083333333334
+2024,construction and extraction occupations,8519.916666666666
+2024,"farming, fishing, and forestry occupations",969.8333333333334
+2024,"installation, maintenance, and repair occupations",4901.416666666667
+2024,"management, business, and financial operations occupations",30601.666666666668
+2024,office and administrative support occupations,15795.083333333334
+2024,production occupations,7943.75
+2024,professional and related occupations,40142.166666666664
+2024,sales and related occupations,14090.333333333334
+2024,service occupations,26451.666666666668
+2024,transportation and material moving occupations,11929.5
+2025,construction and extraction occupations,8489.727272727272
+2025,"farming, fishing, and forestry occupations",1000.1818181818181
+2025,"installation, maintenance, and repair occupations",5060.363636363636
+2025,"management, business, and financial operations occupations",31048.909090909092
+2025,office and administrative support occupations,16444.272727272728
+2025,production occupations,7889.454545454545
+2025,professional and related occupations,40289.27272727273
+2025,sales and related occupations,14159.272727272728
+2025,service occupations,27230.454545454544
+2025,transportation and material moving occupations,11880.90909090909
+2026,construction and extraction occupations,8026.5
+2026,"farming, fishing, and forestry occupations",990.625
+2026,"installation, maintenance, and repair occupations",4942.0
+2026,"management, business, and financial operations occupations",30859.875
+2026,office and administrative support occupations,16354.375
+2026,production occupations,7825.5
+2026,professional and related occupations,40362.75
+2026,sales and related occupations,14213.5
+2026,service occupations,26919.875
+2026,transportation and material moving occupations,12061.625

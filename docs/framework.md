@@ -630,10 +630,14 @@ year-over-year periods at all.
 ### A second instrument: CPS, 1983→2026
 
 The OEWS floor above has since been worked around, not lifted: `cps_historical_panel.py`
-adds CPS Table A-19-adjacent annual data as a second, independent employment
-instrument covering ten occupation groups from 1983 to 2026 — 43 year-over-year
-periods, more than double OEWS's 1999→2025 span. It is a separate instrument
-from OEWS, drawn as a separate series and never spliced onto it: CPS is a
+adds annual CPS occupation-group employment — the ten `LNU0203220x` series fetched
+directly from the BLS historical timeseries API, the same underlying classification
+Table A-19 also draws from, but not the Table A-19 page itself, which this project
+already uses for a different, more recent chart (see `docs/cps_data_expansion.md`) —
+as a second, independent employment instrument covering ten occupation groups from
+1983 to 2026 — 43 year-over-year periods, more than double OEWS's 1999→2025 span. It
+is a separate instrument from OEWS, drawn as a separate series and never spliced onto
+it: CPS is a
 household survey that counts the self-employed and agriculture, so its totals
 (~101M in 1983 rising to ~163M in 2025) legitimately run above OEWS's 127–130M
 for the same years. Over the years both instruments cover, they agree only

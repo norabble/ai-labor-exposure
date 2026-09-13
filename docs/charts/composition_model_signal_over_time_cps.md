@@ -5,8 +5,11 @@ by `composition_era_validation.py`.
 
 Same layout and the same four lines as
 [`composition_model_signal_over_time.md`](composition_model_signal_over_time.md),
-run against a second, independent instrument: CPS Table A-19 aggregated to ten
-occupation groups instead of BLS OEWS aggregated to 22 SOC major sectors. Each
+run against a second, independent instrument: the ten CPS `LNU0203220x`
+occupation-group employment series, fetched directly from the BLS historical
+timeseries API — not the Table A-19 page this project uses elsewhere (see
+`docs/cps_data_expansion.md`) — aggregated to ten occupation groups instead of
+BLS OEWS aggregated to 22 SOC major sectors. Each
 point is a group-level Pearson r between a model score and year-over-year CPS
 employment growth, one point per period. The panel covers
 43 year-over-year periods from 1983→2026; 41 are usable after the two COVID
@@ -29,7 +32,7 @@ instrument.
 
 ## Why n=10, not n=22, and why that is the price of admission
 
-CPS Table A-19 only ever published ten occupation groups, for the whole
+This CPS occupation-group series only ever published ten groups, for the whole
 1983→2026 span; OEWS's 22 SOC major groups do not exist before 1999 and cannot
 be reconstructed from CPS's ten. At n=10, a correlation needs to reach
 **|r| ≈ 0.63 for p < 0.05** — far more than the n=22 sector test's **|r| ≈ 0.42**.
@@ -75,6 +78,29 @@ time. Read both halves: the breaks are typically invisible in this chart, but
 they hit one small group hard apiece, and a reader tracing a single group's
 line across either break should discount a sharp move there before reading it
 as a real employment shift.
+
+## The terminal period is a partial year, disclosed rather than dropped
+
+The underlying series is not seasonally adjusted, and `fetch_annual_means`
+averages whatever months BLS has published for a year — it does not require a
+full twelve. In the cache behind this chart, 2025 carries 11 months (October
+is unpublished) and 2026 carries 8 (January–August), so `emp_growth_2025_2026`
+— one of only four CPS AI-era periods — compares two unequal, seasonally
+unbalanced month sets: an NSA series has a within-year seasonal shape, so
+averaging 8 months of one year against 11 of another is not the same
+comparison as averaging matched months of both. The panel now carries a
+`months_observed` column recording how many months back each annual mean, so
+this is visible rather than silent.
+
+The period is kept, not dropped: excluding it would discard one of only four
+CPS AI-era observations to correct a shift that changes neither sign nor
+significance. Recomputed on matched months (January–August of both 2025 and
+2026), `emp_growth_2025_2026`'s Pearson r moves from **+0.259 to +0.330** for
+`composition_net_change` and from **+0.204 to +0.346** for
+`occupation_exposure` — both shifts point the same direction (stronger, not
+weaker) and neither crosses zero or a significance threshold at n=10. Treat
+the headline numbers below as a slight understatement of this period's fit,
+not a distortion of its sign.
 
 ## The anachronism rule, and what the era result means under it
 
@@ -145,8 +171,9 @@ other three scores plotted on this chart.
 
 ## CPS counts people OEWS does not
 
-CPS Table A-19 is a household survey that counts the self-employed and
-agricultural workers; OEWS is an establishment survey of wage and salary jobs
+This CPS occupation-group series comes from a household survey that counts the
+self-employed and agricultural workers; OEWS is an establishment survey of wage
+and salary jobs
 and counts neither. Total CPS employment runs from roughly 101 million in 1983
 to roughly 163 million in 2025 — legitimately above OEWS's 127–130 million for
 the same era, because the two are counting different populations, not because

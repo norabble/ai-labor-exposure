@@ -15,13 +15,23 @@ Inputs:
   • seeds/cps_occupation_panel.csv (committed history)
 
 Outputs:
-  • data/output/cps_occupation_panel.csv — merged annual panel
-  • data/output/cps_group_trends.csv     — wide trend table with growth columns
+  • data/output/cps_occupation_panel.csv    — merged annual panel
+  • data/output/cps_group_trends.csv        — wide trend table with growth columns
+  • data/output/cps_comparability_breaks.csv — per-group, per-period growth with
+                                                the two known breaks flagged
 
 Two comparability breaks live inside these series and are disclosed rather than
 patched: January 2003 (the classification change the reconstruction bridges) and
 January 2000 (where the reconstructed segment meets published data). Data before
 1998 is uncomposited and will not sum to published totals.
+
+The series is not seasonally adjusted and an annual mean is only as complete as
+however many months BLS has published for that year — a partial terminal year
+(e.g. 2026 with only January-August available) is a seasonally unbalanced
+average, not a defect in this code. The panel's `months_observed` column
+discloses that count rather than hiding it; see
+docs/charts/composition_model_signal_over_time_cps.md for the measured size of
+that effect on the 2025-2026 period.
 """
 
 import os
@@ -29,15 +39,28 @@ import warnings
 
 import pandas as pd
 
+import composition_displacement_validation
 from analyze_bls import attach_growth_columns
-from historical_displacement import fetch_annual_means
+from historical_displacement import (
+    REGISTERED_MAX_YEARS,
+    UNREGISTERED_MAX_YEARS,
+    _api_key,
+    fetch_annual_means,
+    fetch_bls_series,
+)
 
 SEED_PATH = "seeds/cps_occupation_panel.csv"
 PANEL_OUTPUT_PATH = "data/output/cps_occupation_panel.csv"
 TRENDS_OUTPUT_PATH = "data/output/cps_group_trends.csv"
+COMPARABILITY_BREAKS_OUTPUT_PATH = "data/output/cps_comparability_breaks.csv"
 AGREEMENT_OUTPUT_PATH = "data/output/cps_oews_agreement.csv"
 SECTOR_TRENDS_INPUT_PATH = "data/output/bls_sector_trends.csv"
 OCCUPATION_TRENDS_INPUT_PATH = "data/output/bls_trends.csv"
+
+# BLS's own annual-average periods; fetch_annual_means excludes them from the
+# mean for the same reason they are excluded here from the month count — folding
+# them in would double-count a period already summarised by the other twelve.
+ANNUAL_AVERAGE_PERIODS = ("M13", "Q05")
 
 # Leaf occupation groups only. The aggregate rows (LNU02032201, LNU02032205,
 # LNU02032208, LNU02032212) are deliberately excluded: summing them alongside
@@ -55,25 +78,91 @@ CPS_GROUP_SERIES: dict[str, str] = {
     "transportation and material moving occupations": "LNU02032214",
 }
 
-PANEL_COLUMNS = ["year", "cps_group", "employed_thousands"]
+PANEL_COLUMNS = ["year", "cps_group", "employed_thousands", "months_observed"]
 
 
-def fetch_cps_group_employment(start_year: int = 1983, end_year: int = 2026) -> pd.DataFrame:
+def _seed_year_bounds(seed_path: str) -> tuple[int, int] | None:
+    """(earliest, latest) year already present in the committed seed, or None if absent/empty."""
+    if not os.path.exists(seed_path):
+        return None
+    seed_years = pd.read_csv(seed_path, usecols=["year"])["year"]
+    if seed_years.empty:
+        return None
+    return int(seed_years.min()), int(seed_years.max())
+
+
+def _count_observed_months(series_id: str, start_year: int, end_year: int) -> dict[int, int]:
+    """Monthly/quarterly observations behind each year's annual mean.
+
+    fetch_annual_means discloses only the mean, not how many periods went into
+    it, so this re-derives the raw frame with fetch_bls_series and counts
+    periods itself. It mirrors fetch_annual_means's own chunk boundaries (same
+    start/end/registration-based chunk size), so it lands on the exact same
+    on-disk cache fetch_annual_means already populated and adds no extra BLS
+    API request.
+    """
+    max_years = REGISTERED_MAX_YEARS if _api_key() else UNREGISTERED_MAX_YEARS
+    chunk_frames = []
+    chunk_start = start_year
+    while chunk_start <= end_year:
+        chunk_end = min(chunk_start + max_years - 1, end_year)
+        chunk_df = fetch_bls_series(series_id, chunk_start, chunk_end)
+        if chunk_df is not None:
+            chunk_frames.append(chunk_df)
+        chunk_start = chunk_end + 1
+
+    if not chunk_frames:
+        return {}
+    observation_df = pd.concat(chunk_frames, ignore_index=True).drop_duplicates(subset=["year", "period"])
+    observation_df = observation_df[~observation_df["period"].isin(ANNUAL_AVERAGE_PERIODS)]
+    return observation_df.groupby("year")["period"].count().astype(int).to_dict()
+
+
+def fetch_cps_group_employment(start_year: int = 1983, end_year: int = 2026, seed_path: str = SEED_PATH) -> pd.DataFrame:
     """Annual mean employment per occupation group, in long form.
 
     The published series are monthly and not seasonally adjusted;
     fetch_annual_means collapses them to annual means, which is what BLS's own
     annual averages are. A series that cannot be fetched is warned about and
     skipped rather than failing the whole panel.
+
+    Unregistered, the BLS API allows 25 requests/day and fetch_annual_means
+    chunks at 10 years, so a full 1983-2026 fetch of these ten series alone is
+    ~50 requests — enough to exhaust the daily quota before
+    composition_era_validation's own unemployment-rate fetch runs. When the
+    committed seed already reaches back to `start_year`, only the seed's
+    maximum year forward is refetched, which is enough to pick up any months
+    published since the seed was last updated (including new months added to
+    what was previously a partial terminal year) without re-pulling the whole
+    history. The full range is still fetched when the seed is absent or does
+    not reach back that far.
+
+    Each year's `months_observed` count comes from `_count_observed_months`,
+    which mirrors this same fetch and reads the identical on-disk cache, so it
+    adds no further requests of its own.
     """
+    seed_year_bounds = _seed_year_bounds(seed_path)
+    if seed_year_bounds is not None and seed_year_bounds[0] <= start_year:
+        fetch_start_year = max(start_year, min(seed_year_bounds[1], end_year))
+    else:
+        fetch_start_year = start_year
+
     panel_rows = []
     for cps_group, series_id in CPS_GROUP_SERIES.items():
-        annual_means = fetch_annual_means(series_id, start_year, end_year)
+        annual_means = fetch_annual_means(series_id, fetch_start_year, end_year)
         if annual_means is None:
             warnings.warn(f"CPS series {series_id} ({cps_group}) unavailable; skipping", stacklevel=2)
             continue
+        month_counts = _count_observed_months(series_id, fetch_start_year, end_year)
         for year, employed_thousands in annual_means.items():
-            panel_rows.append({"year": int(year), "cps_group": cps_group, "employed_thousands": float(employed_thousands)})
+            panel_rows.append(
+                {
+                    "year": int(year),
+                    "cps_group": cps_group,
+                    "employed_thousands": float(employed_thousands),
+                    "months_observed": month_counts.get(int(year)),
+                }
+            )
     return pd.DataFrame(panel_rows, columns=PANEL_COLUMNS)
 
 
@@ -224,22 +313,23 @@ def run_stage(
     seed_path: str = SEED_PATH,
     panel_output_path: str = PANEL_OUTPUT_PATH,
     trends_output_path: str = TRENDS_OUTPUT_PATH,
+    comparability_breaks_output_path: str = COMPARABILITY_BREAKS_OUTPUT_PATH,
     agreement_output_path: str = AGREEMENT_OUTPUT_PATH,
     stability_output_path: str = STABILITY_OUTPUT_PATH,
     sector_trends_input_path: str = SECTOR_TRENDS_INPUT_PATH,
     occupation_trends_input_path: str = OCCUPATION_TRENDS_INPUT_PATH,
 ) -> None:
-    """Build and write all four CPS-instrument outputs.
+    """Build and write all five CPS-instrument outputs.
 
     Follows the same convention as `download_cps.js` and `download_dws.py`: a
     fetch that returns nothing, or raises, is warned about and the committed
     seed is used instead — the CPS level of the composition era comparison must
     still render offline from the seed alone, never crash the pipeline.
 
-    Steps 3-4 (the OEWS agreement and composition-stability tables) each depend
+    Steps 4-5 (the OEWS agreement and composition-stability tables) each depend
     on a separate BLS output that may not exist yet on a partial run; either is
-    skipped with a warning without touching the panel or trend table already
-    written in steps 1-2.
+    skipped with a warning without touching the panel, trend, or comparability
+    tables already written in steps 1-3.
     """
     try:
         fetched_df = fetch_cps_group_employment()
@@ -263,10 +353,12 @@ def run_stage(
     os.makedirs(os.path.dirname(trends_output_path), exist_ok=True)
     trends_df.to_csv(trends_output_path, index=False)
 
+    comparability_breaks_df = measure_comparability_breaks(trends_df)
+    os.makedirs(os.path.dirname(comparability_breaks_output_path), exist_ok=True)
+    comparability_breaks_df.to_csv(comparability_breaks_output_path, index=False)
+
     if os.path.exists(sector_trends_input_path):
         try:
-            import composition_displacement_validation
-
             sector_trends_df = pd.read_csv(sector_trends_input_path, dtype={"soc_major": str})
             group_lookup = composition_displacement_validation.soc_major_to_dws_group()
             agreement_df = compare_with_oews(trends_df, sector_trends_df, group_lookup)

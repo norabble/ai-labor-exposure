@@ -650,10 +650,14 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
     is_occupation_level = level == "occupation"
     is_cps_level = level == "cps_group"
     unit_counts = period_correlation_df["n_units"].dropna()
-    if is_cps_level:
-        unit_label = "n=10 CPS occupation groups"
+    if is_cps_level and not unit_counts.empty:
+        minimum_units, maximum_units = int(unit_counts.min()), int(unit_counts.max())
+        group_range = str(minimum_units) if minimum_units == maximum_units else f"{minimum_units}-{maximum_units}"
+        unit_label = f"n={group_range} CPS occupation groups"
     elif is_occupation_level and not unit_counts.empty:
         unit_label = f"n={int(unit_counts.min())}-{int(unit_counts.max())} harmonized units"
+    elif is_cps_level:
+        unit_label = f"n={MINIMUM_CPS_GROUPS}-10 CPS occupation groups"
     else:
         unit_label = "n=22 sectors"
     ordered_periods = sorted(period_correlation_df["period"].unique(), key=lambda key: _period_sort_key(f"emp_growth_{key}"))

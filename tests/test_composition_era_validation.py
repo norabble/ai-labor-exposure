@@ -43,6 +43,7 @@ from composition_era_validation import (
     is_ai_era,
     occupation_correlation,
     period_key,
+    plot_signal_over_time,
     sector_correlation,
     summarise_eras,
     unemployment_change_by_period,
@@ -527,10 +528,24 @@ class TestCpsGroupCorrelation:
 
 
 class TestCpsLevelPlumbing:
-    def test_cps_chart_name_is_selected_for_the_cps_level(self):
-        names = {"occupation": OCCUPATION_CHART_NAME, "cps_group": CPS_CHART_NAME}
-        assert names.get("cps_group") == CPS_CHART_NAME
-        assert names.get("sector", CHART_NAME) == CHART_NAME
+    def test_cps_chart_name_is_selected_for_the_cps_level(self, tmp_path):
+        """plot_signal_over_time must actually write under CPS_CHART_NAME for level='cps_group'.
+
+        A dict rebuilt inline in the test would pass even if production used a
+        wrong key (e.g. "cps"), since the test's own dict would never disagree
+        with itself. Calling the real function and checking the file it wrote
+        catches that class of bug.
+        """
+        period_correlation_df = pd.DataFrame(
+            [
+                {"period": "2020_2021", "score": COMPOSITION_SCORE_COLUMN, "fit_r": 0.30, "fit_p": 0.20, "n_units": 10},
+                {"period": "2021_2022", "score": COMPOSITION_SCORE_COLUMN, "fit_r": 0.45, "fit_p": 0.03, "n_units": 10},
+            ]
+        )
+        plot_signal_over_time(period_correlation_df, str(tmp_path), level="cps_group")
+        assert (tmp_path / CPS_CHART_NAME).exists()
+        assert not (tmp_path / OCCUPATION_CHART_NAME).exists()
+        assert not (tmp_path / CHART_NAME).exists()
 
     def test_cps_correlation_frame_has_the_shared_shape(self):
         scored_df = TestCpsGroupCorrelation._scored_frame()

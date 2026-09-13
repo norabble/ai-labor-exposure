@@ -23,25 +23,29 @@ class TestSeriesMapping:
 
 
 class TestFetch:
-    def test_annual_means_are_assembled_into_long_form(self, monkeypatch):
+    def test_annual_means_are_assembled_into_long_form(self, tmp_path, monkeypatch):
         def fake_fetch(series_id, start_year, end_year):
             return pd.Series({1983: 100.0, 1984: 110.0}, name=series_id)
 
         monkeypatch.setattr(cps_historical_panel, "fetch_annual_means", fake_fetch)
-        panel_df = fetch_cps_group_employment(1983, 1984)
-        assert set(panel_df.columns) == {"year", "cps_group", "employed_thousands"}
+        monkeypatch.setattr(cps_historical_panel, "_count_observed_months", lambda series_id, start_year, end_year: {})
+        # No seed at this path, so the full requested range is fetched — the seed-narrowing
+        # behaviour of fetch_cps_group_employment is tested separately in TestSeedNarrowing.
+        panel_df = fetch_cps_group_employment(1983, 1984, seed_path=str(tmp_path / "absent_seed.csv"))
+        assert set(panel_df.columns) == {"year", "cps_group", "employed_thousands", "months_observed"}
         assert len(panel_df) == 20  # 10 groups x 2 years
         assert panel_df["employed_thousands"].iloc[0] == pytest.approx(100.0)
 
-    def test_a_failed_series_is_skipped_not_fatal(self, monkeypatch):
+    def test_a_failed_series_is_skipped_not_fatal(self, tmp_path, monkeypatch):
         def fake_fetch(series_id, start_year, end_year):
             if series_id == CPS_GROUP_SERIES["service occupations"]:
                 return None
             return pd.Series({1983: 100.0}, name=series_id)
 
         monkeypatch.setattr(cps_historical_panel, "fetch_annual_means", fake_fetch)
+        monkeypatch.setattr(cps_historical_panel, "_count_observed_months", lambda series_id, start_year, end_year: {})
         with pytest.warns(UserWarning):
-            panel_df = fetch_cps_group_employment(1983, 1983)
+            panel_df = fetch_cps_group_employment(1983, 1983, seed_path=str(tmp_path / "absent_seed.csv"))
         assert "service occupations" not in set(panel_df["cps_group"])
         assert len(panel_df) == 9
 
@@ -326,3 +330,101 @@ class TestRunStage:
         assert panel_output_path.exists()
         assert trends_output_path.exists()
         assert not agreement_output_path.exists()
+
+
+class TestSeedNarrowing:
+    """The BLS quota guard: a seed that already covers the span narrows the fetch."""
+
+    @staticmethod
+    def _seed(seed_path, years):
+        pd.DataFrame(
+            [{"year": year, "cps_group": "service occupations", "employed_thousands": 100.0, "months_observed": 12} for year in years]
+        ).to_csv(seed_path, index=False)
+        return str(seed_path)
+
+    def test_full_span_is_fetched_when_no_seed_exists(self, tmp_path, monkeypatch):
+        requested_start_years = []
+
+        def recording_fetch(series_id, start_year, end_year):
+            requested_start_years.append(start_year)
+            return pd.Series({end_year: 100.0})
+
+        monkeypatch.setattr(cps_historical_panel, "fetch_annual_means", recording_fetch)
+        monkeypatch.setattr(cps_historical_panel, "_count_observed_months", lambda series_id, start_year, end_year: {})
+        cps_historical_panel.fetch_cps_group_employment(1983, 2026, seed_path=str(tmp_path / "absent.csv"))
+        assert set(requested_start_years) == {1983}
+
+    def test_covering_seed_narrows_the_fetch_to_the_tail(self, tmp_path, monkeypatch):
+        """A seed reaching 1983-2026 must not trigger a 1983 refetch — that is the ~50-request path."""
+        seed_path = self._seed(tmp_path / "seed.csv", range(1983, 2027))
+        requested_start_years = []
+
+        def recording_fetch(series_id, start_year, end_year):
+            requested_start_years.append(start_year)
+            return pd.Series({end_year: 100.0})
+
+        monkeypatch.setattr(cps_historical_panel, "fetch_annual_means", recording_fetch)
+        monkeypatch.setattr(cps_historical_panel, "_count_observed_months", lambda series_id, start_year, end_year: {})
+        cps_historical_panel.fetch_cps_group_employment(1983, 2026, seed_path=seed_path)
+        assert set(requested_start_years) == {2026}
+
+    def test_seed_that_starts_too_late_still_fetches_the_full_span(self, tmp_path, monkeypatch):
+        """A seed beginning after start_year cannot supply the early history, so do not narrow."""
+        seed_path = self._seed(tmp_path / "seed.csv", range(2000, 2027))
+        requested_start_years = []
+
+        def recording_fetch(series_id, start_year, end_year):
+            requested_start_years.append(start_year)
+            return pd.Series({end_year: 100.0})
+
+        monkeypatch.setattr(cps_historical_panel, "fetch_annual_means", recording_fetch)
+        monkeypatch.setattr(cps_historical_panel, "_count_observed_months", lambda series_id, start_year, end_year: {})
+        cps_historical_panel.fetch_cps_group_employment(1983, 2026, seed_path=seed_path)
+        assert set(requested_start_years) == {1983}
+
+
+class TestMonthsObserved:
+    """A partial terminal year is disclosed, not hidden — the series is not seasonally adjusted."""
+
+    def test_month_counts_are_carried_into_the_panel(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            cps_historical_panel, "fetch_annual_means", lambda series_id, start_year, end_year: pd.Series({2025: 100.0, 2026: 90.0})
+        )
+        monkeypatch.setattr(cps_historical_panel, "_count_observed_months", lambda series_id, start_year, end_year: {2025: 11, 2026: 8})
+        panel_df = cps_historical_panel.fetch_cps_group_employment(2025, 2026, seed_path=str(tmp_path / "absent.csv"))
+        partial_year_rows = panel_df[panel_df["year"] == 2026]
+        assert (partial_year_rows["months_observed"] == 8).all()
+        assert (panel_df[panel_df["year"] == 2025]["months_observed"] == 11).all()
+
+    def test_annual_average_periods_are_excluded_from_the_count(self, monkeypatch):
+        """M13 is BLS's own annual average; counting it would overstate coverage by one."""
+        monkeypatch.setattr(
+            cps_historical_panel,
+            "fetch_bls_series",
+            lambda series_id, start_year, end_year: pd.DataFrame(
+                [{"year": 2025, "period": f"M{month:02d}", "value": 1.0} for month in range(1, 13)]
+                + [{"year": 2025, "period": "M13", "value": 1.0}]
+            ),
+        )
+        assert cps_historical_panel._count_observed_months("LNU02032204", 2025, 2025) == {2025: 12}
+
+
+class TestSeedBackwardCompatibility:
+    """The committed seed predates months_observed and must keep working."""
+
+    def test_seed_without_months_observed_still_merges(self, tmp_path):
+        seed_path = tmp_path / "seed.csv"
+        pd.DataFrame([{"year": 1983, "cps_group": "service occupations", "employed_thousands": 100.0}]).to_csv(seed_path, index=False)
+        fetched_df = pd.DataFrame([{"year": 2026, "cps_group": "service occupations", "employed_thousands": 120.0, "months_observed": 8}])
+        merged_df = merge_into_seed(fetched_df, str(seed_path))
+        assert set(merged_df["year"]) == {1983, 2026}
+
+    def test_trend_table_builds_from_a_seed_without_months_observed(self):
+        panel_df = pd.DataFrame(
+            [
+                {"year": 2022, "cps_group": "service occupations", "employed_thousands": 100.0},
+                {"year": 2023, "cps_group": "service occupations", "employed_thousands": 110.0},
+            ]
+        )
+        trends_df = cps_historical_panel.build_cps_group_trends(panel_df)
+        assert trends_df["emp_growth_2022_2023"].iloc[0] == pytest.approx(0.10)

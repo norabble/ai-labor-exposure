@@ -74,6 +74,26 @@ The spec's D1 chose IPUMS CPS microdata, with the BLS published series as a *val
 
 So this plan delivers the 1983 floor at ten groups now, and the IPUMS work becomes a **successor plan** whose only remaining job is raising sector granularity from ten groups to 22. That is a real gain — n=10 needs r≈0.63 for p<0.05 while n=22 needs r≈0.42, and the composition model's observed sector r values sit between — but it is an upgrade to a working test rather than a prerequisite for having one.
 
+### Three consequences of that deviation, also recorded
+
+Each of these follows from choosing the published series over IPUMS microdata. None
+was a silent drop, but none was written down until after execution:
+
+- **The spec's D6 — extending `D` and the DWS panel back to 1984 — is untouched by
+  this plan.** The spec ranks it *above* the employment extension in scientific
+  value, because it feeds the project's only structurally non-circular validation.
+  It belongs to the successor plan, not to this one.
+- **The spec's chart section asks for OEWS and CPS as separate lines in one axes,
+  with the 1999–2025 overlap shaded.** This plan produced a separate chart file
+  instead. That satisfies D3 (never splice) more conservatively — two instruments
+  that disagree by construction are harder to misread when they are not sharing an
+  axis — but it is not what the spec described.
+- **The spec's architecture section asks for `sector_growth_series` to gain an
+  instrument argument, with `validate_bls.py` and `synthesize_dynamic.py` looping
+  over instruments.** That design presumed the CPS side would be 22 `soc_major`
+  keys. It is ten named groups, so the looping design does not apply and the CPS
+  path lives in `composition_era_validation.py` alone.
+
 **This is a deviation from the spec and is recorded as such.** The spec's D2 (`OCC1990` spine), the allocation matrix, and validation gates 1–3 all belong to the successor plan. D3 (never splice CPS onto OEWS) and the anachronism rule bind this plan unchanged.
 
 ---

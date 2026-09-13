@@ -36,11 +36,13 @@ from composition_era_validation import (
     decompose_fit_strength,
     discover_period_columns,
     is_ai_era,
+    occupation_correlation,
     period_key,
     sector_correlation,
     summarise_eras,
     unemployment_change_by_period,
 )
+from validate_bls import build_unit_scores
 
 
 def _correlation_frame(period_r_pairs, score=COMPOSITION_SCORE_COLUMN, covid_periods=("2019_2020", "2020_2021")):
@@ -50,9 +52,9 @@ def _correlation_frame(period_r_pairs, score=COMPOSITION_SCORE_COLUMN, covid_per
             {
                 "period": period,
                 "score": score,
-                "sector_r": correlation,
-                "sector_p": 0.01 if abs(correlation) > 0.42 else 0.30,
-                "n_sectors": 22,
+                "fit_r": correlation,
+                "fit_p": 0.01 if abs(correlation) > 0.42 else 0.30,
+                "n_units": 22,
                 "era": "ai" if is_ai_era(f"emp_growth_{period}") else "pre_ai",
                 "is_covid": period in covid_periods,
             }
@@ -368,3 +370,82 @@ class TestCorrelateWithDisplacementRate:
 
         assert not result_df.empty
         assert result_df.iloc[0]["n_periods"] == len(periods)
+
+
+class TestOccupationLevelCorrelation:
+    """The occupation-level twin of the sector path, on harmonized SOC units."""
+
+    @staticmethod
+    def _membership_frame(n_units: int) -> pd.DataFrame:
+        return pd.DataFrame([{"year": "2022", "unit_id": f"u{i}", "oews_code": f"11-{1000 + i}"} for i in range(n_units)])
+
+    @staticmethod
+    def _scored_frame(n_units: int) -> pd.DataFrame:
+        return pd.DataFrame(
+            [
+                {
+                    "OCC_CODE": f"11-{1000 + i}",
+                    COMPOSITION_SCORE_COLUMN: i / n_units,
+                    "TOT_EMP_2025": 1000.0,
+                }
+                for i in range(n_units)
+            ]
+        )
+
+    @staticmethod
+    def _unit_growth_frame(n_units: int, growth_col: str, slope: float) -> pd.DataFrame:
+        return pd.DataFrame([{"unit_id": f"u{i}", growth_col: slope * i / n_units} for i in range(n_units)])
+
+    def test_perfectly_correlated_units_give_r_of_one(self):
+        n_units = 30
+        result = occupation_correlation(
+            self._scored_frame(n_units),
+            COMPOSITION_SCORE_COLUMN,
+            "emp_growth_2022_2023",
+            "TOT_EMP_2025",
+            self._unit_growth_frame(n_units, "emp_growth_2022_2023", 1.0),
+            self._membership_frame(n_units),
+        )
+        assert result is not None
+        correlation, _, n_reported = result
+        assert correlation == pytest.approx(1.0)
+        assert n_reported == n_units
+
+    def test_reported_n_counts_units_not_occupations(self):
+        """Two occupations mapping to one unit must report n=1 unit, not n=2."""
+        membership_df = pd.DataFrame(
+            [
+                {"year": "2022", "unit_id": "u0", "oews_code": "11-1000"},
+                {"year": "2022", "unit_id": "u0", "oews_code": "11-1001"},
+            ]
+        )
+        scored_df = self._scored_frame(2)
+        unit_scores = build_unit_scores(scored_df, membership_df, "TOT_EMP_2025", [COMPOSITION_SCORE_COLUMN])
+        assert len(unit_scores) == 1
+
+    def test_too_few_units_returns_none(self):
+        n_units = 3
+        result = occupation_correlation(
+            self._scored_frame(n_units),
+            COMPOSITION_SCORE_COLUMN,
+            "emp_growth_2022_2023",
+            "TOT_EMP_2025",
+            self._unit_growth_frame(n_units, "emp_growth_2022_2023", 1.0),
+            self._membership_frame(n_units),
+        )
+        assert result is None
+
+    def test_tied_scores_do_not_crash_and_yield_nan_or_none(self):
+        """31% of occupations share one composition score; ties must not raise."""
+        n_units = 30
+        scored_df = self._scored_frame(n_units)
+        scored_df[COMPOSITION_SCORE_COLUMN] = 0.5  # every unit identical
+        result = occupation_correlation(
+            scored_df,
+            COMPOSITION_SCORE_COLUMN,
+            "emp_growth_2022_2023",
+            "TOT_EMP_2025",
+            self._unit_growth_frame(n_units, "emp_growth_2022_2023", 1.0),
+            self._membership_frame(n_units),
+        )
+        assert result is None or pd.isna(result[0])

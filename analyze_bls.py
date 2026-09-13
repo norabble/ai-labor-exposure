@@ -34,7 +34,7 @@ Outputs:
     Historical columns (pre-2022, prefixed hist_ to exclude from auto-detection):
       TOT_EMP_{yyyy}, A_MEDIAN_{yyyy}     — employment and median wage per year
       hist_emp_growth_{yyyy}_{yyyy}       — YoY growth for periods before 2022
-      hist_emp_growth_pre_ai              — composite from earliest available year → 2022
+      hist_emp_growth_pre_ai_{yyyy}_2022  — composite from earliest available year → 2022
   • data/output/bls_harmonized_trends.csv
     Same column layout as bls_trends.csv, keyed by unit_id: the trend series on
     harmonized occupation units built by harmonize_soc.py, which follow BLS's
@@ -203,7 +203,7 @@ def load_bls_data(zip_path: str) -> pd.DataFrame | None:
 def attach_growth_columns(trend_df: pd.DataFrame, available_years: list[str]) -> pd.DataFrame:
     """
     Add year-over-year, composite and pre-AI growth columns to a frame that
-    already holds TOT_EMP_{yy} / A_MEDIAN_{yy} per year.
+    already holds TOT_EMP_{yyyy} / A_MEDIAN_{yyyy} per year.
 
     Pre-2022 pairs use the hist_ prefix so that validate_bls.py's auto-detection
     of emp_growth_* columns does not add them to the existing 2×2 grid charts.
@@ -235,11 +235,12 @@ def attach_growth_columns(trend_df: pd.DataFrame, available_years: list[str]) ->
 
     earliest_year = available_years[0]
     if earliest_year < COMPOSITE_ANCHOR_YEAR and f"TOT_EMP_{earliest_year}" in trend_df.columns:
-        trend_df["hist_emp_growth_pre_ai"] = (
+        pre_ai_span = f"pre_ai_{earliest_year}_{COMPOSITE_ANCHOR_YEAR}"
+        trend_df[f"hist_emp_growth_{pre_ai_span}"] = (
             trend_df[f"TOT_EMP_{COMPOSITE_ANCHOR_YEAR}"] - trend_df[f"TOT_EMP_{earliest_year}"]
         ) / trend_df[f"TOT_EMP_{earliest_year}"]
         if f"A_MEDIAN_{earliest_year}" in trend_df.columns and f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}" in trend_df.columns:
-            trend_df["hist_wage_growth_pre_ai"] = (
+            trend_df[f"hist_wage_growth_{pre_ai_span}"] = (
                 trend_df[f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}"] - trend_df[f"A_MEDIAN_{earliest_year}"]
             ) / trend_df[f"A_MEDIAN_{earliest_year}"]
 

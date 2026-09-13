@@ -382,7 +382,7 @@ class TestAttachGrowthColumns:
         result = attach_growth_columns(self._trend_frame(), ["2021", "2022", "2023"])
         assert result.iloc[0]["emp_growth_composite"] == pytest.approx(0.10)
         assert result.iloc[0]["wage_growth_composite"] == pytest.approx(0.10)
-        assert result.iloc[0]["hist_emp_growth_pre_ai"] == pytest.approx(0.10)
+        assert result.iloc[0]["hist_emp_growth_pre_ai_2021_2022"] == pytest.approx(0.10)
 
     def test_wage_growth_skipped_when_a_year_lacks_wages(self):
         result = attach_growth_columns(self._trend_frame(), ["2021", "2022", "2023"])

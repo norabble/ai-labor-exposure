@@ -140,6 +140,14 @@ def compare_with_oews(
 ) -> pd.DataFrame:
     """Per-period growth from both instruments, aggregated to the CPS groups.
 
+    The CPS side of this comparison is the growth of a group TOTAL, so the
+    faithful OEWS counterpart is the growth of the group's total employment
+    LEVEL, not an unweighted mean of its member SOC majors' growth rates — a
+    mean of rates would weight a small SOC major equally with a much larger one
+    inside the same CPS group. `bls_sector_trends.csv` carries `TOT_EMP_{yyyy}`
+    level columns alongside its growth columns, so each period's OEWS group
+    growth is derived as (summed end-year level) / (summed start-year level) - 1.
+
     Reported, never reconciled. CPS counts the self-employed and agriculture and
     OEWS does not, so the two disagree by construction; the size of the
     disagreement over the 1999-2025 overlap is what bounds confidence in the
@@ -153,10 +161,17 @@ def compare_with_oews(
     for column in cps_trends_df.columns:
         if "emp_growth_" not in column or "composite" in column or "pre_ai" in column:
             continue
-        if column not in oews_df.columns:
-            continue
         period = column.replace("hist_emp_growth_", "").replace("emp_growth_", "")
-        oews_group_growth = oews_df.groupby("cps_group")[column].mean()
+        start_year, end_year = period.split("_")
+        start_level_column = f"TOT_EMP_{start_year}"
+        end_level_column = f"TOT_EMP_{end_year}"
+        if start_level_column not in oews_df.columns or end_level_column not in oews_df.columns:
+            continue
+
+        group_levels = oews_df.groupby("cps_group")[[start_level_column, end_level_column]].sum(min_count=1)
+        valid_group_levels = group_levels[group_levels[start_level_column].notna() & (group_levels[start_level_column] != 0)]
+        oews_group_growth = valid_group_levels[end_level_column] / valid_group_levels[start_level_column] - 1
+
         for _, cps_row in cps_trends_df.iterrows():
             group = cps_row["cps_group"]
             if group not in oews_group_growth.index:

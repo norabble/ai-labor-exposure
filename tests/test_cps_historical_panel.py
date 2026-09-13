@@ -152,9 +152,10 @@ class TestInstrumentAgreement:
         from cps_historical_panel import compare_with_oews
 
         cps_trends_df = pd.DataFrame([{"cps_group": "production occupations", "emp_growth_2022_2023": 0.05}])
-        oews_trends_df = pd.DataFrame([{"soc_major": "51", "emp_growth_2022_2023": 0.03}])
+        oews_trends_df = pd.DataFrame([{"soc_major": "51", "TOT_EMP_2022": 100.0, "TOT_EMP_2023": 103.0}])
         comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations"})
         assert len(comparison_df) == 1
+        assert comparison_df["oews_growth"].iloc[0] == pytest.approx(0.03)
         assert comparison_df["difference"].iloc[0] == pytest.approx(0.02)
 
     def test_periods_absent_from_oews_are_dropped(self):
@@ -163,6 +164,35 @@ class TestInstrumentAgreement:
         cps_trends_df = pd.DataFrame(
             [{"cps_group": "production occupations", "hist_emp_growth_1983_1984": 0.05, "emp_growth_2022_2023": 0.05}]
         )
-        oews_trends_df = pd.DataFrame([{"soc_major": "51", "emp_growth_2022_2023": 0.03}])
+        oews_trends_df = pd.DataFrame([{"soc_major": "51", "TOT_EMP_2022": 100.0, "TOT_EMP_2023": 103.0}])
         comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations"})
         assert set(comparison_df["period"]) == {"2022_2023"}
+
+    def test_oews_growth_is_level_weighted_not_rate_averaged(self):
+        """A group's OEWS growth must come from summed levels, not a mean of member rates.
+
+        SOC 51 is large and shrinking (1000 -> 900, -10%); SOC 99 is small and
+        growing fast (10 -> 15, +50%). An unweighted mean of rates gives +20%.
+        The faithful, level-summed answer is (900+15)/(1000+10) - 1 ≈ -9.4% —
+        clearly on the opposite side of zero from the mean-of-rates answer, so
+        this test would fail against the old unweighted-mean implementation.
+        """
+        from cps_historical_panel import compare_with_oews
+
+        cps_trends_df = pd.DataFrame([{"cps_group": "production occupations", "emp_growth_2022_2023": 0.05}])
+        oews_trends_df = pd.DataFrame(
+            [
+                {"soc_major": "51", "TOT_EMP_2022": 1000.0, "TOT_EMP_2023": 900.0},
+                {"soc_major": "99", "TOT_EMP_2022": 10.0, "TOT_EMP_2023": 15.0},
+            ]
+        )
+        comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations", "99": "production occupations"})
+        assert comparison_df["oews_growth"].iloc[0] == pytest.approx(-0.09406, abs=1e-4)
+
+    def test_period_dropped_when_start_level_is_zero(self):
+        from cps_historical_panel import compare_with_oews
+
+        cps_trends_df = pd.DataFrame([{"cps_group": "production occupations", "emp_growth_2022_2023": 0.05}])
+        oews_trends_df = pd.DataFrame([{"soc_major": "51", "TOT_EMP_2022": 0.0, "TOT_EMP_2023": 103.0}])
+        comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations"})
+        assert len(comparison_df) == 0

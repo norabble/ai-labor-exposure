@@ -28,13 +28,13 @@ Outputs:
     2010→2018 (2018→2019) moved some occupations between major groups.
   • data/output/bls_trends.csv
     Core columns (2022-onward):
-      TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
-      emp_growth_{yy}_{yy}                — YoY growth for 2022→2023 onward
-      emp_growth_composite                 — 2022→latest
+      TOT_EMP_{yyyy}, A_MEDIAN_{yyyy}     — employment and median wage per year
+      emp_growth_{yyyy}_{yyyy}            — YoY growth for 2022→2023 onward
+      emp_growth_composite                — 2022→latest
     Historical columns (pre-2022, prefixed hist_ to exclude from auto-detection):
-      TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
-      hist_emp_growth_{yy}_{yy}            — YoY growth for periods before 2022
-      hist_emp_growth_pre_ai               — composite from earliest available year → 2022
+      TOT_EMP_{yyyy}, A_MEDIAN_{yyyy}     — employment and median wage per year
+      hist_emp_growth_{yyyy}_{yyyy}       — YoY growth for periods before 2022
+      hist_emp_growth_pre_ai              — composite from earliest available year → 2022
   • data/output/bls_harmonized_trends.csv
     Same column layout as bls_trends.csv, keyed by unit_id: the trend series on
     harmonized occupation units built by harmonize_soc.py, which follow BLS's
@@ -65,33 +65,33 @@ import zipfile
 import pandas as pd
 
 YEAR_CONFIGS = [
-    ("05", "data/raw/bls/oesm05nat.zip"),
-    ("06", "data/raw/bls/oesm06nat.zip"),
-    ("07", "data/raw/bls/oesm07nat.zip"),
-    ("08", "data/raw/bls/oesm08nat.zip"),
-    ("09", "data/raw/bls/oesm09nat.zip"),
-    ("10", "data/raw/bls/oesm10nat.zip"),
-    ("11", "data/raw/bls/oesm11nat.zip"),
-    ("12", "data/raw/bls/oesm12nat.zip"),
-    ("13", "data/raw/bls/oesm13nat.zip"),
-    ("14", "data/raw/bls/oesm14nat.zip"),
-    ("15", "data/raw/bls/oesm15nat.zip"),
-    ("16", "data/raw/bls/oesm16nat.zip"),
-    ("17", "data/raw/bls/oesm17nat.zip"),
-    ("18", "data/raw/bls/oesm18nat.zip"),
-    ("19", "data/raw/bls/oesm19nat.zip"),
-    ("20", "data/raw/bls/oesm20nat.zip"),
-    ("21", "data/raw/bls/oesm21nat.zip"),
-    ("22", "data/raw/bls/oesm22nat.zip"),
-    ("23", "data/raw/bls/oesm23nat.zip"),
-    ("24", "data/raw/bls/oesm24all.zip"),
-    ("25", "data/raw/bls/oesm25all.zip"),
+    ("2005", "data/raw/bls/oesm05nat.zip"),
+    ("2006", "data/raw/bls/oesm06nat.zip"),
+    ("2007", "data/raw/bls/oesm07nat.zip"),
+    ("2008", "data/raw/bls/oesm08nat.zip"),
+    ("2009", "data/raw/bls/oesm09nat.zip"),
+    ("2010", "data/raw/bls/oesm10nat.zip"),
+    ("2011", "data/raw/bls/oesm11nat.zip"),
+    ("2012", "data/raw/bls/oesm12nat.zip"),
+    ("2013", "data/raw/bls/oesm13nat.zip"),
+    ("2014", "data/raw/bls/oesm14nat.zip"),
+    ("2015", "data/raw/bls/oesm15nat.zip"),
+    ("2016", "data/raw/bls/oesm16nat.zip"),
+    ("2017", "data/raw/bls/oesm17nat.zip"),
+    ("2018", "data/raw/bls/oesm18nat.zip"),
+    ("2019", "data/raw/bls/oesm19nat.zip"),
+    ("2020", "data/raw/bls/oesm20nat.zip"),
+    ("2021", "data/raw/bls/oesm21nat.zip"),
+    ("2022", "data/raw/bls/oesm22nat.zip"),
+    ("2023", "data/raw/bls/oesm23nat.zip"),
+    ("2024", "data/raw/bls/oesm24all.zip"),
+    ("2025", "data/raw/bls/oesm25all.zip"),
 ]
 
 # The composite growth column is always anchored at this year, regardless of
 # which historical years are available. Do not change without updating
 # validate_bls.py and all downstream docs.
-COMPOSITE_ANCHOR_YEAR = "22"
+COMPOSITE_ANCHOR_YEAR = "2022"
 
 
 # Occupation-grouping column by file era. Checked in this order: 2019+ files
@@ -330,7 +330,7 @@ def main():
         )
         print("\n── Unit growth continuity across SOC revision boundaries (share of units moving >25% in a year) ──")
         for _, report_row in boundary_continuity_report(harmonized_trends_df).iterrows():
-            boundary_flag = "  ← SOC revision" if report_row["period"] in ("09_10", "18_19", "20_21") else ""
+            boundary_flag = "  ← SOC revision" if report_row["period"] in ("2009_2010", "2018_2019", "2020_2021") else ""
             print(
                 f"  {report_row['period']}  n={int(report_row['n_units']):4d}  "
                 f"{report_row['share_abs_growth_over_25pct']:.1%}{boundary_flag}"

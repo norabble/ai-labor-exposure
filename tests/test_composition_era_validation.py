@@ -315,6 +315,41 @@ class TestUnemploymentChangeByPeriod:
 
         assert result.empty
 
+    def test_pre_2005_period_produces_the_correct_year_to_year_change(self, monkeypatch):
+        """The OEWS series now reaches back to 1999, so the unemployment lookup must too.
+
+        Before this fix the fetch was hardcoded to start in 2005, so a period like
+        '1999_2000' had no start-year row to difference against and was silently
+        dropped from the cycle decomposition entirely (n stayed at 18 even after
+        the 2001 recession entered the historical window). This exercises the real
+        period-key split-and-difference logic against a rate Series that actually
+        carries 1999-2005, the way the real fetch would once its start year is
+        widened, rather than injecting the change value as a fixture.
+        """
+        fake_rate = pd.Series({1999: 4.2, 2000: 4.0, 2001: 4.7, 2002: 5.8, 2003: 6.0, 2004: 5.5, 2005: 5.1})
+        monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args, **kwargs: fake_rate)
+
+        result = unemployment_change_by_period(["1999_2000", "2000_2001", "2004_2005"])
+
+        assert not result.empty
+        assert result["1999_2000"] == pytest.approx(4.0 - 4.2)
+        assert result["2000_2001"] == pytest.approx(4.7 - 4.0)
+        assert result["2004_2005"] == pytest.approx(5.1 - 5.5)
+
+    def test_fetches_from_the_series_own_start_year(self, monkeypatch):
+        """The hardcoded 2005 start must be gone: the fetch should request from 1948, LNS14000000's own start."""
+        captured_args = {}
+
+        def fake_fetch_annual_means(series_id, start_year, end_year):
+            captured_args["start_year"] = start_year
+            return pd.Series({1999: 4.2, 2000: 4.0})
+
+        monkeypatch.setattr(historical_displacement, "fetch_annual_means", fake_fetch_annual_means)
+
+        unemployment_change_by_period(["1999_2000"])
+
+        assert captured_args["start_year"] == 1948
+
 
 class TestCorrelateWithDisplacementRate:
     """

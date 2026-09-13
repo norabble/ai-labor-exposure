@@ -279,6 +279,7 @@ def summarise_eras(period_correlation_df: pd.DataFrame, exclude_covid: bool = Tr
 
 
 UNEMPLOYMENT_SERIES_ID = "LNS14000000"
+UNEMPLOYMENT_SERIES_START_YEAR = 1948  # LNS14000000's own start; never needs revisiting if the series extends further back.
 
 CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition.csv"
 CYCLE_OUTPUT_COLUMNS = ["score", "term", "coefficient", "std_error", "t_statistic", "p_value", "n_periods", "r_squared"]
@@ -288,7 +289,7 @@ def unemployment_change_by_period(period_keys: list[str]) -> pd.Series | None:
     """Change in the annual mean unemployment rate across each period, e.g. '2007_2008' → +1.18."""
     from historical_displacement import fetch_annual_means
 
-    unemployment_rate = fetch_annual_means(UNEMPLOYMENT_SERIES_ID, 2005, 2026)
+    unemployment_rate = fetch_annual_means(UNEMPLOYMENT_SERIES_ID, UNEMPLOYMENT_SERIES_START_YEAR, 2026)
     if unemployment_rate is None:
         return None
 

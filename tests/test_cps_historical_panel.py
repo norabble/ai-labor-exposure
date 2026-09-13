@@ -111,3 +111,37 @@ class TestTrendTable:
         )
         trends_df = build_cps_group_trends(panel_df)
         assert trends_df["emp_growth_2022_2023"].iloc[0] == pytest.approx(0.10)
+
+
+class TestComparabilityBreaks:
+    def test_break_periods_are_flagged(self):
+        from cps_historical_panel import measure_comparability_breaks
+
+        trends_df = pd.DataFrame(
+            [
+                {
+                    "cps_group": "service occupations",
+                    "hist_emp_growth_1999_2000": 0.20,
+                    "hist_emp_growth_2001_2002": 0.01,
+                }
+            ]
+        )
+        break_df = measure_comparability_breaks(trends_df, ("1999_2000",))
+        flagged = break_df[break_df["is_break_period"]]
+        assert set(flagged["period"]) == {"1999_2000"}
+        assert flagged["emp_growth"].iloc[0] == pytest.approx(0.20)
+
+    def test_non_break_periods_are_retained_for_comparison(self):
+        from cps_historical_panel import measure_comparability_breaks
+
+        trends_df = pd.DataFrame(
+            [
+                {
+                    "cps_group": "service occupations",
+                    "hist_emp_growth_1999_2000": 0.20,
+                    "hist_emp_growth_2001_2002": 0.01,
+                }
+            ]
+        )
+        break_df = measure_comparability_breaks(trends_df, ("1999_2000",))
+        assert set(break_df["period"]) == {"1999_2000", "2001_2002"}

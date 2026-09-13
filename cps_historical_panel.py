@@ -101,3 +101,33 @@ def build_cps_group_trends(panel_df: pd.DataFrame) -> pd.DataFrame:
 
     available_years = sorted(str(int(year)) for year in panel_df["year"].unique())
     return attach_growth_columns(wide_df, available_years)
+
+
+COMPARABILITY_BREAK_PERIODS = ("1999_2000", "2002_2003")
+
+
+def measure_comparability_breaks(
+    trends_df: pd.DataFrame,
+    break_periods: tuple[str, ...] = COMPARABILITY_BREAK_PERIODS,
+) -> pd.DataFrame:
+    """Per-group growth in every period, with the known comparability breaks flagged.
+
+    The point is comparison: a break period whose growth sits inside the ordinary
+    spread is a break the data survived, and one far outside it is a break that
+    contaminates any span crossing it. Neither is patched here.
+    """
+    growth_rows = []
+    for column in trends_df.columns:
+        if "emp_growth_" not in column or "composite" in column or "pre_ai" in column:
+            continue
+        period = column.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+        for _, group_row in trends_df.iterrows():
+            growth_rows.append(
+                {
+                    "period": period,
+                    "cps_group": group_row["cps_group"],
+                    "emp_growth": group_row[column],
+                    "is_break_period": period in break_periods,
+                }
+            )
+    return pd.DataFrame(growth_rows)

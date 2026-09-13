@@ -131,3 +131,43 @@ def measure_comparability_breaks(
                 }
             )
     return pd.DataFrame(growth_rows)
+
+
+def compare_with_oews(
+    cps_trends_df: pd.DataFrame,
+    oews_sector_trends_df: pd.DataFrame,
+    soc_major_to_group: dict[str, str],
+) -> pd.DataFrame:
+    """Per-period growth from both instruments, aggregated to the CPS groups.
+
+    Reported, never reconciled. CPS counts the self-employed and agriculture and
+    OEWS does not, so the two disagree by construction; the size of the
+    disagreement over the 1999-2025 overlap is what bounds confidence in the
+    CPS-only stretch before 1999.
+    """
+    oews_df = oews_sector_trends_df.copy()
+    oews_df["cps_group"] = oews_df["soc_major"].astype(str).str.zfill(2).map(soc_major_to_group)
+    oews_df = oews_df.dropna(subset=["cps_group"])
+
+    comparison_rows = []
+    for column in cps_trends_df.columns:
+        if "emp_growth_" not in column or "composite" in column or "pre_ai" in column:
+            continue
+        if column not in oews_df.columns:
+            continue
+        period = column.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+        oews_group_growth = oews_df.groupby("cps_group")[column].mean()
+        for _, cps_row in cps_trends_df.iterrows():
+            group = cps_row["cps_group"]
+            if group not in oews_group_growth.index:
+                continue
+            comparison_rows.append(
+                {
+                    "period": period,
+                    "cps_group": group,
+                    "cps_growth": cps_row[column],
+                    "oews_growth": oews_group_growth[group],
+                    "difference": cps_row[column] - oews_group_growth[group],
+                }
+            )
+    return pd.DataFrame(comparison_rows)

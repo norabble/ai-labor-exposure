@@ -145,3 +145,24 @@ class TestComparabilityBreaks:
         )
         break_df = measure_comparability_breaks(trends_df, ("1999_2000",))
         assert set(break_df["period"]) == {"1999_2000", "2001_2002"}
+
+
+class TestInstrumentAgreement:
+    def test_matching_periods_are_paired_by_group(self):
+        from cps_historical_panel import compare_with_oews
+
+        cps_trends_df = pd.DataFrame([{"cps_group": "production occupations", "emp_growth_2022_2023": 0.05}])
+        oews_trends_df = pd.DataFrame([{"soc_major": "51", "emp_growth_2022_2023": 0.03}])
+        comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations"})
+        assert len(comparison_df) == 1
+        assert comparison_df["difference"].iloc[0] == pytest.approx(0.02)
+
+    def test_periods_absent_from_oews_are_dropped(self):
+        from cps_historical_panel import compare_with_oews
+
+        cps_trends_df = pd.DataFrame(
+            [{"cps_group": "production occupations", "hist_emp_growth_1983_1984": 0.05, "emp_growth_2022_2023": 0.05}]
+        )
+        oews_trends_df = pd.DataFrame([{"soc_major": "51", "emp_growth_2022_2023": 0.03}])
+        comparison_df = compare_with_oews(cps_trends_df, oews_trends_df, {"51": "production occupations"})
+        assert set(comparison_df["period"]) == {"2022_2023"}

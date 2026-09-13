@@ -66,3 +66,48 @@ class TestSeedMerge:
         fetched_df = pd.DataFrame([{"year": 1983, "cps_group": "service occupations", "employed_thousands": 2.0}])
         merged_df = merge_into_seed(fetched_df, str(tmp_path / "absent.csv"))
         assert len(merged_df) == 1
+
+
+class TestTrendTable:
+    @staticmethod
+    def _panel(years, groups=("service occupations", "production occupations")):
+        return pd.DataFrame(
+            [
+                {"year": year, "cps_group": group, "employed_thousands": 100.0 + index * 10}
+                for index, year in enumerate(years)
+                for group in groups
+            ]
+        )
+
+    def test_one_row_per_group(self):
+        from cps_historical_panel import build_cps_group_trends
+
+        trends_df = build_cps_group_trends(self._panel([2021, 2022, 2023]))
+        assert len(trends_df) == 2
+        assert "cps_group" in trends_df.columns
+
+    def test_employment_columns_are_four_digit_year_keyed(self):
+        from cps_historical_panel import build_cps_group_trends
+
+        trends_df = build_cps_group_trends(self._panel([2021, 2022, 2023]))
+        assert "TOT_EMP_1983" not in trends_df.columns
+        assert "TOT_EMP_2022" in trends_df.columns
+
+    def test_growth_columns_use_the_shared_naming(self):
+        from cps_historical_panel import build_cps_group_trends
+
+        trends_df = build_cps_group_trends(self._panel([2021, 2022, 2023]))
+        assert "hist_emp_growth_2021_2022" in trends_df.columns
+        assert "emp_growth_2022_2023" in trends_df.columns
+
+    def test_growth_values_are_correct(self):
+        from cps_historical_panel import build_cps_group_trends
+
+        panel_df = pd.DataFrame(
+            [
+                {"year": 2022, "cps_group": "service occupations", "employed_thousands": 100.0},
+                {"year": 2023, "cps_group": "service occupations", "employed_thousands": 110.0},
+            ]
+        )
+        trends_df = build_cps_group_trends(panel_df)
+        assert trends_df["emp_growth_2022_2023"].iloc[0] == pytest.approx(0.10)

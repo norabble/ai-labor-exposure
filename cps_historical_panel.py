@@ -29,6 +29,7 @@ import warnings
 
 import pandas as pd
 
+from analyze_bls import attach_growth_columns
 from historical_displacement import fetch_annual_means
 
 SEED_PATH = "seeds/cps_occupation_panel.csv"
@@ -85,3 +86,18 @@ def merge_into_seed(fetched_df: pd.DataFrame, seed_path: str = SEED_PATH) -> pd.
     combined_df = pd.concat([seed_df, fetched_df], ignore_index=True)
     combined_df = combined_df.drop_duplicates(subset=["year", "cps_group"], keep="last")
     return combined_df.sort_values(["year", "cps_group"]).reset_index(drop=True)
+
+
+def build_cps_group_trends(panel_df: pd.DataFrame) -> pd.DataFrame:
+    """Pivot the long panel to one row per group with TOT_EMP_{yyyy} and growth columns.
+
+    attach_growth_columns is reused rather than reimplemented so the CPS table
+    carries byte-identical growth-column names to bls_sector_trends.csv, which is
+    what lets the existing period-discovery machinery read it unchanged.
+    """
+    wide_df = panel_df.pivot(index="cps_group", columns="year", values="employed_thousands")
+    wide_df.columns = [f"TOT_EMP_{int(year)}" for year in wide_df.columns]
+    wide_df = wide_df.reset_index()
+
+    available_years = sorted(str(int(year)) for year in panel_df["year"].unique())
+    return attach_growth_columns(wide_df, available_years)

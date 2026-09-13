@@ -31,7 +31,7 @@ Outputs (saved to data/output/visualizations/):
   • cps_2026_direction.png                    — CPS employment direction by major group, since-OEWS and year-over-year windows
   • cps_rebound_model_vs_actual.png           — scatter: employment-weighted rebound-adjusted exposure vs. CPS growth, major group level
   • cps_dynamic_model_vs_actual.png           — scatter: employment-weighted dynamic net employment change vs. CPS growth, major group level
-  • model_signal_over_time.png                — sector-level Pearson r by YoY period (2005→2025) for all three models;
+  • model_signal_over_time.png                — sector-level Pearson r by YoY period (1999→2025) for all three models;
                                                 2022 boundary marked to distinguish pre-AI baseline from AI era
 """
 
@@ -335,7 +335,7 @@ def plot_model_signal_over_time(
 ) -> None:
     """
     Sector-level Pearson r between each model score and YoY employment growth,
-    plotted as a time series spanning 2015→2025. The 2022 boundary is marked to
+    plotted as a time series spanning every available period (1999→2025). The 2022 boundary is marked to
     separate pre-AI and AI-era periods. COVID-affected periods are shaded.
 
     Three model lines:
@@ -811,8 +811,9 @@ def plot_model_signal_over_time_occupation(
         "Significant periods annotated with r and p-value."
     )
     # Off units, n is whatever survived the SOC revisions; on units it is the unit count.
+    unit_span = f"{_sort_period(all_period_cols[0])[0]}→{_sort_period(all_period_cols[-1])[1]}"
     chart_title += (
-        "\n(harmonized SOC units — consistent occupation definitions 2005→2025)"
+        f"\n(harmonized SOC units — consistent occupation definitions {unit_span})"
         if use_units
         else " n varies with historical SOC survivorship."
     )

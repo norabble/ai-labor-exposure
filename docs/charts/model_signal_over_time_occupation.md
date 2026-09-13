@@ -29,7 +29,7 @@ months.
 The sector-level chart (`model_signal_over_time.png`) aggregates occupations to 22
 SOC major groups first and correlates those 22 group means. That version has low
 power (n=22) but suppresses within-group noise by averaging. This chart operates on
-harmonized occupation units (n ≈ 695 in every period), giving much higher statistical
+harmonized occupation units (n = 664-741 per period, median 739), giving much higher statistical
 power — a much smaller |r| is detectable — but also more noise from individual
 occupation volatility.
 

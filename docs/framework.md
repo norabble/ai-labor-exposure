@@ -481,15 +481,15 @@ and its time variation.
 Sector-level Pearson r against year-over-year employment growth, n = 22 sectors,
 averaged in Fisher-z space, COVID periods excluded:
 
-| Model | pre-2022 (15 periods) | AI era (3 periods) | difference | Welch p |
+| Model | pre-2022 (21 periods) | AI era (3 periods) | difference | Welch p |
 |---|---:|---:|---:|---:|
-| Demand composition only | +0.202 | +0.348 | +0.146 | 0.050 |
-| Dynamic, AI penetration | +0.218 | +0.455 | +0.237 | 0.033 |
-| Rebound-adjusted | −0.067 | −0.274 | −0.207 | 0.172 |
-| Observed AI coverage | +0.053 | −0.212 | −0.265 | 0.113 |
+| Demand composition only | +0.206 | +0.348 | +0.142 | 0.010 |
+| Dynamic, AI penetration | +0.199 | +0.455 | +0.256 | 0.033 |
+| Rebound-adjusted | −0.029 | −0.274 | −0.245 | 0.132 |
+| Observed AI coverage | +0.076 | −0.212 | −0.288 | 0.100 |
 
 The composition-only model has a pre-AI signal, and pre-2022 it is
-indistinguishable from the full AI model (+0.202 against +0.218) — unsurprising,
+indistinguishable from the full AI model (+0.206 against +0.199) — unsurprising,
 since AI penetration is anachronistic in that era and can add nothing. Its
 strongest periods are 2006→07, 2007→08 and 2008→09 (+0.61, +0.66, +0.54, all
 individually significant), which is the financial crisis.
@@ -499,35 +499,36 @@ pre-AI signal could mean the taxonomy describes a general mechanism, or it could
 mean it is picking up cyclical sorting, since Bounded and clerical work is shed
 in downturns and rehired in recoveries. `decompose_fit_strength` separates them
 by regressing Fisher-z fit strength on the change in unemployment plus an AI-era
-indicator (n = 18 periods, COVID excluded):
+indicator (n = 24 periods, COVID excluded):
 
 | Term | Composition only | Dynamic, AI penetration |
 |---|---|---|
-| intercept (signal at zero cyclical movement) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
-| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
-| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
-| R² | 0.498 | 0.494 |
+| intercept (signal at zero cyclical movement) | **+0.224, p < 0.0001** | +0.208, p < 0.0001 |
+| change in unemployment | **+0.137, p = 0.0020** | +0.057, p = 0.062 |
+| AI era | +0.112, p = 0.349 | **+0.272, p = 0.0052** |
+| R² | 0.403 | 0.417 |
 
 Three findings follow.
 
-**The taxonomy has a general, non-cyclical baseline.** The intercept is +0.238
-(p = 0.0004) — a real sector-level signal at zero cyclical movement, from a
+**The taxonomy has a general, non-cyclical baseline.** The intercept is +0.224
+(p < 0.0001) — a real sector-level signal at zero cyclical movement, from a
 predictor containing no technology data at all. This is the direct evidence that
 the Bounded/Unbounded/Adversarial framework applies before AI.
 
 **Its strength is strongly cyclical.** Each percentage point of rising
-unemployment adds +0.160 to composition-only fit strength (p = 0.0024). This
+unemployment adds +0.137 to composition-only fit strength (p = 0.0020). This
 confirms, as a measurement, the hypothesis recorded under
 [Future investigation: the business cycle](#future-investigation-the-business-cycle):
 the composition fits sector growth best when unemployment is rising. The
 mechanism is plausible — labor-saving reorganisation is implemented under
 pressure, and recoveries return Bounded jobs the model assumes do not come back
-— but the cyclical term is twice the size of the AI model's, so composition
+— but the cyclical term is roughly twice the size of the AI model's, whose own
+cyclical term no longer clears significance (+0.057, p = 0.062), so composition
 alone is the more cycle-dependent measure.
 
 **AI penetration adds a real, separable increment.** Composition-only shows no
-AI-era premium once the cycle is controlled (+0.093, p = 0.476), while the
-AI-penetration model does (+0.238, p = 0.021). So the AI-era signal is not
+AI-era premium once the cycle is controlled (+0.112, p = 0.349), while the
+AI-penetration model does (+0.272, p = 0.0052). So the AI-era signal is not
 merely the general mechanism running in a particular decade: penetration data
 carries information beyond composition, specifically after 2022.
 
@@ -599,7 +600,10 @@ correlations, which are invariant to `D`.
 
 ### Future investigation: the business cycle
 
-Not pursued; recorded so the observation is not lost. Pairing each 2005→2025
+Recorded so the observation is not lost; the first half of it is now measured by
+`decompose_fit_strength` (see [Result: the signal is general, cyclical, and AI
+adds to it](#result-the-signal-is-general-cyclical-and-ai-adds-to-it) above), and
+the within-sector premium below remains untested. Pairing each 1999→2025
 period with the change in national unemployment suggests the demand-type
 composition fits sector growth best when unemployment is *rising* and worst in
 recoveries (2010→13, 2020→22), when cyclical rehiring returns Bounded jobs the
@@ -608,10 +612,17 @@ counter-cyclical (large in downturns, near zero in recoveries) while the
 Adversarial premium is roughly steady through the cycle and persists in
 recoveries. A plausible mechanism is that Adversarial spending — sales, legal,
 security — is defensive within the firm and needs no capital investment,
-whereas labor-saving adoption does. This rests on three rising-unemployment
-periods and 2025 task labels applied backwards, so it is a hypothesis only.
-The crosswalk harmonization now in `harmonize_soc.py` covers exactly this kind
-of code churn for 2005→2025 at occupation level; testing the hypothesis back to
-1960 would need the same treatment applied to the pre-2000 SOC classifications,
-plus per-year task reclassification against the occupational definitions of
-that era.
+whereas labor-saving adoption does. This now rests on nine rising-unemployment
+periods — the 2001 recession contributes 2000→01, 2001→02 and 2002→03, tripling
+the cyclical identification the earlier 2005-start series allowed — but still on
+2025 task labels applied backwards, so it remains a hypothesis.
+The crosswalk harmonization in `harmonize_soc.py` covers exactly this kind
+of code churn for 1999→2025 at occupation level. 1999 is a hard floor for OEWS:
+the 1997 and 1998 files use the pre-SOC five-digit OES coding system, and before
+1997 the survey was industry-based with no wage data. Reaching further back means
+switching instrument to the CPS — see
+`docs/superpowers/specs/2026-09-13-deep-history-extension-design.md`, which works
+the question through to a 1983 floor and records why 1960 is not defensible:
+per-year task reclassification against the occupational definitions of that era
+would still be required, and the decennial-only data before 1962 cannot support
+year-over-year periods at all.

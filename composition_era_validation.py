@@ -4,7 +4,7 @@ composition_era_validation.py
 The headline test of the demand composition model: is the Bounded/Unbounded/
 Adversarial signal era-invariant, or does it only appear after AI?
 
-Runs the sector-level validation for every year-over-year period 2005→2025 for
+Runs the sector-level validation for every year-over-year period 1999→2025 for
 four scores side by side, then compares the pre-2022 and AI-era means:
 
   composition_net_change   demand composition only — no technology data at all
@@ -41,12 +41,12 @@ Two caveats that bound every number here
 ─────────────────────────────────────────
 **The demand-type labels are from 2025 O*NET task statements, applied
 backwards.** docs/framework.md already flags this. Occupational task content
-genuinely changed over 2005-2025, so the further back a period sits, the more
+genuinely changed over 1999-2025, so the further back a period sits, the more
 anachronistic its labels. Reaching further back buys statistical power at the
 cost of construct validity.
 
 **The era test is badly under-powered on the AI side.** There are only three
-AI-era YoY periods against sixteen pre-AI ones, and the periods are
+AI-era YoY periods against twenty-one pre-AI ones, and the periods are
 autocorrelated, so the Welch test on Fisher-z transformed correlations reported
 here should be read as a descriptive comparison rather than an inferential
 result. A non-significant difference is the expected outcome either way and is

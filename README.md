@@ -186,13 +186,13 @@ net_employment_change = K × absorption_capacity − gross_displacement
 
 Because `K = D·κ` with `κ` a pure composition constant, the whole score vector scales with `D` and **`D` cancels out of every cross-sectional correlation**. That is what keeps the test non-circular: a single economy-wide scalar cannot manufacture a pattern across 22 sectors or 770 occupations, so `D` sets the amplitude and the taxonomy sets the shape.
 
-Regressing each model's per-period sector-level fit strength on the change in unemployment plus an AI-era indicator (n = 18 periods, COVID excluded) gives:
+Regressing each model's per-period sector-level fit strength on the change in unemployment plus an AI-era indicator (n = 24 periods, COVID excluded) gives:
 
 | Term | Composition only | Dynamic, AI penetration |
 |---|---|---|
-| general baseline (intercept) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
-| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
-| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
+| general baseline (intercept) | **+0.224, p < 0.0001** | +0.208, p < 0.0001 |
+| change in unemployment | **+0.137, p = 0.0020** | +0.057, p = 0.062 |
+| AI era | +0.112, p = 0.349 | **+0.272, p = 0.0052** |
 
 The taxonomy has a real sector-level signal before AI, from a predictor carrying no technology data at all; its strength is strongly cyclical; and AI penetration adds a separable increment that composition alone does not. See [docs/framework.md](docs/framework.md) § Demand Composition Model.
 

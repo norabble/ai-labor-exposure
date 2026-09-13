@@ -35,15 +35,17 @@ pre-AI signal is consistent both with the taxonomy describing a general mechanis
 and with it picking up cyclical sorting, since Bounded and clerical work is shed
 in downturns and rehired in recoveries. `composition_cycle_decomposition.csv`
 separates the two — the signal survives at zero cyclical movement (intercept
-+0.238, p = 0.0004) but gains +0.160 per percentage point of rising unemployment
-(p = 0.0024).
++0.224, p < 0.0001) but gains +0.137 per percentage point of rising unemployment
+(p = 0.0020).
 
 **The AI-penetration line pulls ahead only after 2022.** Pre-2022 the two
-redistribution lines track each other closely (Fisher-z means +0.218 against
-+0.202), which is expected — penetration is anachronistic in that era and can add
-nothing. After 2022 the orange line rises above the purple one (+0.53 and +0.48
-against +0.34 and +0.37), and the cycle decomposition confirms the gap is an
-AI-era effect rather than a cyclical one (+0.238, p = 0.021).
+redistribution lines track each other closely (Fisher-z means +0.199 for the AI
+model against +0.206 for composition-only — statistically indistinguishable, and
+composition is nominally the higher of the two), which is expected: penetration is
+anachronistic in that era and can add nothing. After 2022 the orange line rises
+above the purple one (+0.53 and +0.48 against +0.34 and +0.37), and the cycle
+decomposition confirms the gap is an AI-era effect rather than a cyclical one
+(+0.272, p = 0.0052).
 
 ## Reading cautions
 

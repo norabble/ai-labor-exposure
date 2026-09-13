@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import historical_displacement
 from composition_era_validation import (
     AI_ERA_FIRST_PERIOD,
     COMPOSITION_SCORE_COLUMN,
@@ -31,12 +32,14 @@ from composition_era_validation import (
     OUTPUT_COLUMNS,
     _period_sort_key,
     build_period_correlations,
+    correlate_with_displacement_rate,
     decompose_fit_strength,
     discover_period_columns,
     is_ai_era,
     period_key,
     sector_correlation,
     summarise_eras,
+    unemployment_change_by_period,
 )
 
 
@@ -279,3 +282,54 @@ class TestFourDigitPeriods:
             "emp_growth_2022_2023",
             "emp_growth_composite",
         ]
+
+    def test_span_carrying_pre_ai_key_does_not_raise_and_sorts_with_composite(self):
+        """A span-carrying pre_ai key (e.g. 'pre_ai_2005_2022') must not raise on int('pre', ...)."""
+        assert _period_sort_key("hist_emp_growth_pre_ai_2005_2022") == _period_sort_key("emp_growth_composite")
+
+
+class TestUnemploymentChangeByPeriod:
+    """
+    unemployment_change_by_period must map a four-digit period key straight onto
+    the rate series' own four-digit year index — no century offset. Before the
+    fix, "2007_2008" was looked up as 2000 + 2007 = 4007, which is never in the
+    index, so the returned Series was silently empty.
+    """
+
+    def test_four_digit_period_key_maps_to_the_matching_years(self, monkeypatch):
+        fake_rate = pd.Series({2007: 4.6, 2008: 5.8, 2022: 3.6, 2023: 3.9})
+        monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args, **kwargs: fake_rate)
+
+        result = unemployment_change_by_period(["2007_2008", "2022_2023"])
+
+        assert not result.empty
+        assert result["2007_2008"] == pytest.approx(5.8 - 4.6)
+        assert result["2022_2023"] == pytest.approx(3.9 - 3.6)
+
+    def test_returns_empty_when_no_period_falls_on_a_known_year(self, monkeypatch):
+        """A guard against the fix regressing: an out-of-range key still yields nothing, not a crash."""
+        fake_rate = pd.Series({2007: 4.6, 2008: 5.8})
+        monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args, **kwargs: fake_rate)
+
+        result = unemployment_change_by_period(["1950_1951"])
+
+        assert result.empty
+
+
+class TestCorrelateWithDisplacementRate:
+    """
+    correlate_with_displacement_rate keys the displacement lookup on the raw
+    end-year of the period ("2007_2008" -> 2008), not 2000 + end-year. Before
+    the fix every lookup missed and the result was always the empty frame.
+    """
+
+    def test_four_digit_periods_produce_a_non_empty_correlation(self, monkeypatch):
+        periods = ["2007_2008", "2008_2009", "2009_2010", "2010_2011", "2011_2012"]
+        correlation_df = _correlation_frame(list(zip(periods, [0.1, 0.3, 0.2, 0.4, 0.5])))
+        fake_displacement_rate = pd.Series({2008: 0.010, 2009: 0.020, 2010: 0.015, 2011: 0.025, 2012: 0.030})
+        monkeypatch.setattr(historical_displacement, "productivity_displacement_rate", lambda *args, **kwargs: fake_displacement_rate)
+
+        result_df = correlate_with_displacement_rate(correlation_df)
+
+        assert not result_df.empty
+        assert result_df.iloc[0]["n_periods"] == len(periods)

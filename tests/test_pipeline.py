@@ -30,7 +30,7 @@ from synthesize_impacts import (
     derive_exposure_tier,
     rollup_to_occupation,
 )
-from validate_bls import build_unit_scores
+from validate_bls import _sort_period, build_unit_scores
 
 
 def _task_df(rows):
@@ -648,3 +648,31 @@ class TestBuildUnitScores:
         assert unit_scores_df.loc["U-15-1252", "net_employment_change"] == pytest.approx(0.15)
         assert unit_scores_df.loc["U-11-9013", "occupation_exposure"] == pytest.approx(0.02)
         assert "U-99-0000" not in unit_scores_df.index
+
+
+class TestSortPeriod:
+    """
+    _sort_period is the near-duplicate of composition_era_validation's
+    _period_sort_key used to chronologically order growth columns for the
+    signal-over-time charts. With four-digit years the old (99, 0) sentinel
+    sorted composite/pre_ai FIRST rather than last (99 < 1983), and exact
+    equality against "pre_ai" raised on a span-carrying key like
+    'pre_ai_2005_2022'.
+    """
+
+    def test_composite_and_pre_ai_sort_last_among_four_digit_periods(self):
+        columns = [
+            "emp_growth_composite",
+            "emp_growth_2022_2023",
+            "hist_emp_growth_1999_2000",
+            "hist_emp_growth_1983_1984",
+        ]
+        assert sorted(columns, key=_sort_period) == [
+            "hist_emp_growth_1983_1984",
+            "hist_emp_growth_1999_2000",
+            "emp_growth_2022_2023",
+            "emp_growth_composite",
+        ]
+
+    def test_span_carrying_pre_ai_key_does_not_raise_and_sorts_with_composite(self):
+        assert _sort_period("hist_emp_growth_pre_ai_2005_2022") == _sort_period("emp_growth_composite")

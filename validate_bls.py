@@ -79,6 +79,21 @@ def _label(period: str) -> str:
     return f"{parts[0]}→{parts[1]}"
 
 
+def _sort_period(col_name: str) -> tuple[int, int]:
+    """Sort key for a growth column name, with composite and any pre_ai-prefixed key sorted last.
+
+    The sentinel (9999, 9999) must stay out of the range of real years so a
+    twentieth-century period (e.g. '1983_1984') never collides with it, and
+    `.startswith("pre_ai")` rather than exact equality so a span-carrying key
+    like 'pre_ai_2005_2022' is tolerated instead of raising on int('pre').
+    """
+    key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+    if key == "composite" or key.startswith("pre_ai"):
+        return (9999, 9999)
+    parts = key.split("_")
+    return (int(parts[0]), int(parts[1]))
+
+
 def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool, score_col: str = "occupation_exposure") -> pd.DataFrame:
     """Drop NaN/inf and remove extreme outliers for a single growth column."""
     clean_df = merged_df.replace([float("inf"), -float("inf")], pd.NA).dropna(subset=[growth_col, score_col])
@@ -346,13 +361,6 @@ def plot_model_signal_over_time(
     latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
 
     # Collect all YoY growth columns in chronological order
-    def _sort_period(col_name: str) -> tuple[int, int]:
-        key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
-        if key == "composite" or key == "pre_ai":
-            return (99, 0)
-        parts = key.split("_")
-        return (int(parts[0]), int(parts[1]))
-
     hist_yoy = sorted(
         [c for c in merged_validation_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
         key=_sort_period,
@@ -656,13 +664,6 @@ def plot_model_signal_over_time_occupation(
     """
 
     # Collect all YoY growth columns in chronological order
-    def _sort_period(col_name: str) -> tuple[int, int]:
-        key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
-        if key in ("composite", "pre_ai"):
-            return (99, 0)
-        parts = key.split("_")
-        return (int(parts[0]), int(parts[1]))
-
     hist_yoy = sorted(
         [c for c in merged_validation_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
         key=_sort_period,

@@ -294,7 +294,7 @@ def unemployment_change_by_period(period_keys: list[str]) -> pd.Series | None:
 
     change_by_period = {}
     for key in period_keys:
-        start_year, end_year = (2000 + int(part) for part in key.split("_"))
+        start_year, end_year = (int(part) for part in key.split("_"))
         if start_year in unemployment_rate.index and end_year in unemployment_rate.index:
             change_by_period[key] = unemployment_rate[end_year] - unemployment_rate[start_year]
     return pd.Series(change_by_period, name="unemployment_change")
@@ -410,9 +410,7 @@ def correlate_with_displacement_rate(period_correlation_df: pd.DataFrame, exclud
     correlation_rows = []
     for score_col in comparison_df["score"].unique():
         score_df = comparison_df[comparison_df["score"] == score_col].copy()
-        score_df["displacement_rate"] = score_df["period"].map(
-            lambda key: displacement_rate.get(2000 + int(key.split("_")[1]), float("nan"))
-        )
+        score_df["displacement_rate"] = score_df["period"].map(lambda key: displacement_rate.get(int(key.split("_")[1]), float("nan")))
         score_df = score_df.dropna(subset=["displacement_rate", "sector_r"])
         if len(score_df) < 5:
             continue

@@ -72,11 +72,11 @@ from synthesize_impacts import attach_dominant_demand
 
 
 def _label(period: str) -> str:
-    """Convert a period key like '22_23' or 'composite' to a readable label."""
+    """Convert a period key like '2022_2023' or 'composite' to a readable label."""
     if period == "composite":
-        return "Composite (2022→latest)"
+        return "Composite"
     parts = period.split("_")
-    return f"20{parts[0]}→20{parts[1]}"
+    return f"{parts[0]}→{parts[1]}"
 
 
 def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool, score_col: str = "occupation_exposure") -> pd.DataFrame:
@@ -434,7 +434,7 @@ def plot_model_signal_over_time(
     for col in all_period_cols:
         key = col.replace("hist_emp_growth_", "").replace("emp_growth_", "")
         parts = key.split("_")
-        period_labels.append(f"20{parts[0]}→\n20{parts[1]}")
+        period_labels.append(f"{parts[0]}→\n{parts[1]}")
 
     r_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
     p_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
@@ -495,7 +495,7 @@ def plot_model_signal_over_time(
     x = list(range(len(all_period_cols)))
 
     # Shade COVID-affected periods (2019→20 and 2020→21)
-    covid_cols = ["hist_emp_growth_19_20", "hist_emp_growth_20_21"]
+    covid_cols = ["hist_emp_growth_2019_2020", "hist_emp_growth_2020_2021"]
     for i, col in enumerate(all_period_cols):
         if col in covid_cols:
             ax.axvspan(i - 0.4, i + 0.4, alpha=0.12, color="red", zorder=0)
@@ -731,7 +731,7 @@ def plot_model_signal_over_time_occupation(
     for col in all_period_cols:
         key = col.replace("hist_emp_growth_", "").replace("emp_growth_", "")
         parts = key.split("_")
-        period_labels.append(f"20{parts[0]}→\n20{parts[1]}")
+        period_labels.append(f"{parts[0]}→\n{parts[1]}")
 
     r_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
     p_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
@@ -754,7 +754,7 @@ def plot_model_signal_over_time_occupation(
 
     x = list(range(len(all_period_cols)))
 
-    covid_cols = ["hist_emp_growth_19_20", "hist_emp_growth_20_21"]
+    covid_cols = ["hist_emp_growth_2019_2020", "hist_emp_growth_2020_2021"]
     for i, col in enumerate(all_period_cols):
         if col in covid_cols:
             ax.axvspan(i - 0.4, i + 0.4, alpha=0.12, color="red", zorder=0)
@@ -1108,13 +1108,13 @@ def build_unit_scores(
     unit_membership_df: pd.DataFrame,
     employment_col: str,
     score_cols: list[str],
-    anchor_year: str = "22",
+    anchor_year: str = "2022",
 ) -> pd.DataFrame:
     """
     Employment-weighted mean of each model score over a unit's anchor-year OEWS codes.
 
     merged_validation_df is keyed on the 2022 OEWS code set, so a unit's score is
-    the weighted mean over its year-22 members that were scored. Weights are
+    the weighted mean over its 2022 members that were scored. Weights are
     renormalised over members with a non-missing score, and units with no scored
     member are omitted.
     """
@@ -1175,7 +1175,7 @@ def main():
     emp_growth_cols = [c for c in merged_validation_df.columns if c.startswith("emp_growth_")]
     wage_growth_cols = [c for c in merged_validation_df.columns if c.startswith("wage_growth_")]
 
-    # Extract period keys (e.g. "22_23", "23_24", "composite"), sorted with composite last
+    # Extract period keys (e.g. "2022_2023", "2023_2024", "composite"), sorted with composite last
     def _sort_key(col: str) -> tuple:
         period = col.split("growth_", 1)[1]
         return (1, period) if period == "composite" else (0, period)
@@ -1959,8 +1959,8 @@ def main():
 
     # ── Employment trajectories for top-risk occupations ─────────────────────
     top_risk_df = aggregated_exposure_df.nlargest(10, "occupation_exposure")[["OCC_CODE", "Title", "occupation_exposure"]]
-    trajectory_emp_cols = [c for c in ["TOT_EMP_22", "TOT_EMP_23", "TOT_EMP_24", "TOT_EMP_25"] if c in bls_trends_df.columns]
-    trajectory_years = [int("20" + c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
+    trajectory_emp_cols = [c for c in ["TOT_EMP_2022", "TOT_EMP_2023", "TOT_EMP_2024", "TOT_EMP_2025"] if c in bls_trends_df.columns]
+    trajectory_years = [int(c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
     trajectory_df = top_risk_df.merge(bls_trends_df[["OCC_CODE"] + trajectory_emp_cols], on="OCC_CODE", how="inner")
 
     fig, ax_traj = plt.subplots(figsize=(14, 9))

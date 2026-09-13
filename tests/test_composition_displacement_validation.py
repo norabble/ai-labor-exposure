@@ -60,8 +60,8 @@ def _scored_frame():
     rows = []
     for group_name, soc_majors in DWS_TO_SOC_MAJOR.items():
         soc_major = soc_majors[0]
-        rows.append({"OCC_CODE": f"{soc_major}-1001", "gross_displacement": 0.02, "TOT_EMP_25": 1_000_000.0})
-        rows.append({"OCC_CODE": f"{soc_major}-1002", "gross_displacement": 0.01, "TOT_EMP_25": 500_000.0})
+        rows.append({"OCC_CODE": f"{soc_major}-1001", "gross_displacement": 0.02, "TOT_EMP_2025": 1_000_000.0})
+        rows.append({"OCC_CODE": f"{soc_major}-1002", "gross_displacement": 0.01, "TOT_EMP_2025": 500_000.0})
     return pd.DataFrame(rows)
 
 
@@ -120,23 +120,23 @@ class TestObservedDisplacementByGroup:
 class TestPredictedDisplacementByGroup:
     def test_rates_become_worker_counts_before_summing(self):
         """0.02 × 1,000,000 + 0.01 × 500,000 = 25,000 — not the mean of the two rates."""
-        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_25").set_index("dws_group")
+        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_2025").set_index("dws_group")
 
         assert predicted_df.loc["production occupations", "predicted_displaced_workers"] == pytest.approx(25_000.0)
         assert predicted_df.loc["production occupations", "group_employment"] == pytest.approx(1_500_000.0)
 
     def test_every_group_is_represented(self):
-        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_25")
+        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_2025")
 
         assert set(predicted_df["dws_group"]) == set(DWS_TO_SOC_MAJOR)
 
     def test_occupations_outside_the_mapping_are_dropped(self):
         scored_df = pd.concat(
-            [_scored_frame(), pd.DataFrame([{"OCC_CODE": "55-1001", "gross_displacement": 9.0, "TOT_EMP_25": 1e9}])],
+            [_scored_frame(), pd.DataFrame([{"OCC_CODE": "55-1001", "gross_displacement": 9.0, "TOT_EMP_2025": 1e9}])],
             ignore_index=True,
         )
 
-        predicted_df = predicted_displacement_by_group(scored_df, "gross_displacement", "TOT_EMP_25")
+        predicted_df = predicted_displacement_by_group(scored_df, "gross_displacement", "TOT_EMP_2025")
 
         assert predicted_df["predicted_displaced_workers"].max() < 1e8
 

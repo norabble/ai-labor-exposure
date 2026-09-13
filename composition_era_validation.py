@@ -92,13 +92,13 @@ SCORE_CONFIGS: list[tuple[str, str, str, str]] = [
     ("observed_exposure", "Observed AI coverage (−r = correct)", "seagreen", "^"),
 ]
 
-# Periods whose later year is <= 22 carry the hist_ prefix; see analyze_bls.py.
-AI_ERA_FIRST_PERIOD = "22_23"
+# Periods whose later year is <= 2022 carry the hist_ prefix; see analyze_bls.py.
+AI_ERA_FIRST_PERIOD = "2022_2023"
 
 MINIMUM_SECTORS = 5
 MINIMUM_OCCUPATIONS = 10
 
-COVID_PERIODS = ("19_20", "20_21")
+COVID_PERIODS = ("2019_2020", "2020_2021")
 
 OUTPUT_COLUMNS = [
     "score",
@@ -115,14 +115,14 @@ OUTPUT_COLUMNS = [
 
 
 def period_key(growth_column: str) -> str:
-    """Strip the prefix from a growth column, leaving e.g. '18_19'."""
+    """Strip the prefix from a growth column, leaving e.g. '2018_2019'."""
     return growth_column.replace("hist_emp_growth_", "").replace("emp_growth_", "")
 
 
 def _period_sort_key(growth_column: str) -> tuple[int, int]:
     key = period_key(growth_column)
-    if key in ("composite", "pre_ai"):
-        return (99, 0)
+    if key == "composite" or key.startswith("pre_ai"):
+        return (9999, 9999)
     start_year, end_year = key.split("_")
     return (int(start_year), int(end_year))
 
@@ -285,7 +285,7 @@ CYCLE_OUTPUT_COLUMNS = ["score", "term", "coefficient", "std_error", "t_statisti
 
 
 def unemployment_change_by_period(period_keys: list[str]) -> pd.Series | None:
-    """Change in the annual mean unemployment rate across each period, e.g. '07_08' → +1.18."""
+    """Change in the annual mean unemployment rate across each period, e.g. '2007_2008' → +1.18."""
     from historical_displacement import fetch_annual_means
 
     unemployment_rate = fetch_annual_means(UNEMPLOYMENT_SERIES_ID, 2005, 2026)
@@ -503,7 +503,7 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) 
         )
 
     axis.set_xticks(list(period_positions.values()))
-    axis.set_xticklabels([f"20{p.split('_')[0]}→\n20{p.split('_')[1]}" for p in ordered_periods], fontsize=8)
+    axis.set_xticklabels([f"{p.split('_')[0]}→\n{p.split('_')[1]}" for p in ordered_periods], fontsize=8)
     axis.set_ylabel("Sector-level Pearson r vs. employment growth")
     axis.set_title(
         "Is the demand-type signal era-invariant?\n"

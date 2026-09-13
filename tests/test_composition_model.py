@@ -39,7 +39,7 @@ from synthesize_composition import (
 from synthesize_dynamic import AI_DISPLACEMENT_COMPONENTS, compute_dynamic_equilibrium
 from synthesize_impacts import ADVERSARIAL_REBOUND, BOUNDED_REBOUND
 
-EMPLOYMENT_COLUMN = "TOT_EMP_25"
+EMPLOYMENT_COLUMN = "TOT_EMP_2025"
 
 DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
 DYNAMIC_REPORT_PRESENT = os.path.exists(DYNAMIC_REPORT_PATH)

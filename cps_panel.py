@@ -272,13 +272,13 @@ def oews_reference_month(bls_trends_columns: list[str]) -> str:
     """
     Derive the OEWS reference month from the latest TOT_EMP_* column.
 
-    OEWS estimates always carry a May reference month, so TOT_EMP_25 means May 2025.
+    OEWS estimates always carry a May reference month, so TOT_EMP_2025 means May 2025.
     """
     employment_columns = sorted(column for column in bls_trends_columns if column.startswith("TOT_EMP_"))
     if not employment_columns:
         raise ValueError("No TOT_EMP_* column found; cannot determine the OEWS reference month.")
-    latest_year_suffix = employment_columns[-1].removeprefix("TOT_EMP_")
-    return f"20{latest_year_suffix}-05"
+    latest_year_key = employment_columns[-1].removeprefix("TOT_EMP_")
+    return f"{latest_year_key}-05"
 
 
 def resolve_comparison_windows(panel_df: pd.DataFrame, oews_reference: str) -> CpsComparisonWindows:

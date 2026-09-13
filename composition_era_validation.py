@@ -332,6 +332,12 @@ CPS_GROUP_TRENDS_PATH = "data/output/cps_group_trends.csv"
 # Ten groups total; require most of them present before a correlation means anything.
 MINIMUM_CPS_GROUPS = 8
 
+# CPS-level twin of every sector/occupation output. Written to separate files rather
+# than adding a `level` column, so the sector outputs stay byte-identical.
+CPS_OUTPUT_PATH = "data/output/composition_model_era_comparison_cps.csv"
+CPS_CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition_cps.csv"
+CPS_CHART_NAME = "composition_model_signal_over_time_cps.png"
+
 
 def cps_group_correlation(
     scored_df: pd.DataFrame,
@@ -636,17 +642,20 @@ def print_cycle_decomposition(cycle_decomposition_df: pd.DataFrame) -> None:
 def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, level: str = "sector") -> None:
     """Fit strength by period for every model, with the AI boundary and COVID marked.
 
-    level selects which of the two passes is being drawn — "sector" (n=22 major
-    groups) or "occupation" (harmonized SOC units). The two charts are deliberately
-    identical in layout so they read as a pair.
+    level selects which of the three passes is being drawn — "sector" (n=22 major
+    groups), "occupation" (harmonized SOC units), or "cps_group" (ten CPS
+    occupation groups). The charts are deliberately identical in layout so they
+    read as a set.
     """
     is_occupation_level = level == "occupation"
+    is_cps_level = level == "cps_group"
     unit_counts = period_correlation_df["n_units"].dropna()
-    unit_label = (
-        f"n={int(unit_counts.min())}-{int(unit_counts.max())} harmonized units"
-        if is_occupation_level and not unit_counts.empty
-        else "n=22 sectors"
-    )
+    if is_cps_level:
+        unit_label = "n=10 CPS occupation groups"
+    elif is_occupation_level and not unit_counts.empty:
+        unit_label = f"n={int(unit_counts.min())}-{int(unit_counts.max())} harmonized units"
+    else:
+        unit_label = "n=22 sectors"
     ordered_periods = sorted(period_correlation_df["period"].unique(), key=lambda key: _period_sort_key(f"emp_growth_{key}"))
     if len(ordered_periods) < 2:
         return
@@ -696,10 +705,11 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
 
     axis.set_xticks(list(period_positions.values()))
     axis.set_xticklabels([f"{p.split('_')[0]}→\n{p.split('_')[1]}" for p in ordered_periods], fontsize=8)
-    axis.set_ylabel(f"{'Occupation' if is_occupation_level else 'Sector'}-level Pearson r vs. employment growth")
+    level_word = {"occupation": "Occupation", "cps_group": "CPS group"}.get(level, "Sector")
+    axis.set_ylabel(f"{level_word}-level Pearson r vs. employment growth")
     axis.set_title(
         "Is the demand-type signal era-invariant?\n"
-        f"{'Occupation' if is_occupation_level else 'Sector'}-level correlation by year-over-year period, "
+        f"{level_word}-level correlation by year-over-year period, "
         f"{unit_label}. Ringed markers are p < 0.05.",
         fontsize=11,
     )
@@ -722,7 +732,7 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    chart_name = OCCUPATION_CHART_NAME if is_occupation_level else CHART_NAME
+    chart_name = {"occupation": OCCUPATION_CHART_NAME, "cps_group": CPS_CHART_NAME}.get(level, CHART_NAME)
     figure.savefig(os.path.join(output_dir, chart_name), dpi=150, bbox_inches="tight")
     plt.close(figure)
     print(f"  Saved {os.path.join(output_dir, chart_name)}")
@@ -817,6 +827,16 @@ def run(output_dir: str = "data/output/visualizations") -> pd.DataFrame | None:
                 OCCUPATION_OUTPUT_PATH,
                 OCCUPATION_CYCLE_OUTPUT_PATH,
             )
+
+    if os.path.exists(CPS_GROUP_TRENDS_PATH):
+        cps_trends_df = pd.read_csv(CPS_GROUP_TRENDS_PATH)
+        cps_correlation_df = build_cps_period_correlations(scored_df, employment_col, cps_trends_df, score_columns)
+        if cps_correlation_df.empty:
+            print("  ⚠ No CPS-level period correlations could be computed.")
+        else:
+            _summarise_one_level(cps_correlation_df, output_dir, "cps_group", CPS_OUTPUT_PATH, CPS_CYCLE_OUTPUT_PATH)
+    else:
+        warnings.warn(f"{CPS_GROUP_TRENDS_PATH} absent; CPS level skipped", stacklevel=2)
 
     return era_summary_df
 

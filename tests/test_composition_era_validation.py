@@ -26,11 +26,15 @@ import pytest
 import historical_displacement
 from composition_era_validation import (
     AI_ERA_FIRST_PERIOD,
+    CHART_NAME,
     COMPOSITION_SCORE_COLUMN,
     COVID_PERIODS,
+    CPS_CHART_NAME,
     CYCLE_OUTPUT_COLUMNS,
+    OCCUPATION_CHART_NAME,
     OUTPUT_COLUMNS,
     _period_sort_key,
+    build_cps_period_correlations,
     build_period_correlations,
     correlate_with_displacement_rate,
     cps_group_correlation,
@@ -520,3 +524,16 @@ class TestCpsGroupCorrelation:
             self._cps_trends("emp_growth_2022_2023", 0.01),
         )
         assert result[2] == 10  # not 44 occupations
+
+
+class TestCpsLevelPlumbing:
+    def test_cps_chart_name_is_selected_for_the_cps_level(self):
+        names = {"occupation": OCCUPATION_CHART_NAME, "cps_group": CPS_CHART_NAME}
+        assert names.get("cps_group") == CPS_CHART_NAME
+        assert names.get("sector", CHART_NAME) == CHART_NAME
+
+    def test_cps_correlation_frame_has_the_shared_shape(self):
+        scored_df = TestCpsGroupCorrelation._scored_frame()
+        cps_trends_df = TestCpsGroupCorrelation._cps_trends("emp_growth_2022_2023", 0.01)
+        frame = build_cps_period_correlations(scored_df, "TOT_EMP_2025", cps_trends_df, [COMPOSITION_SCORE_COLUMN])
+        assert set(frame.columns) == {"period", "score", "fit_r", "fit_p", "n_units", "era", "is_covid"}

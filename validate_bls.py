@@ -656,7 +656,7 @@ def plot_model_signal_over_time_occupation(
 ) -> None:
     """
     Occupation-level Pearson r between each model score and YoY employment growth,
-    plotted as a time series spanning 2005→2025. Unlike the sector-level version,
+    plotted as a time series spanning 1999→2025. Unlike the sector-level version,
     no sector aggregation step is applied — each occupation, or each harmonized
     SOC unit, is one data point. n counts harmonized units when
     bls_harmonized_trends.csv is present, else surviving 2022 codes. Significant

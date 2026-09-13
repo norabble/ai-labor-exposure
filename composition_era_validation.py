@@ -394,15 +394,20 @@ def correlate_with_displacement_rate(period_correlation_df: pd.DataFrame, exclud
     sorting. The DWS cannot answer this — BLS publishes no archive of prior
     releases, so the panel holds a single survey whose one rate is repeated across
     2023-2025, giving no time variation at all. Smoothed productivity growth is
-    the only displacement estimate with annual coverage back to 2005, so it is
+    the only displacement estimate with annual coverage back to 1999, so it is
     what this test uses.
 
-    This is a weak test by construction: roughly 18 usable periods, autocorrelated,
+    This is a weak test by construction: roughly 24 usable periods, autocorrelated,
     against a smoothed regressor. It is reported as a hypothesis check.
     """
     from historical_displacement import productivity_displacement_rate
 
-    displacement_rate = productivity_displacement_rate()
+    # PRS85006092 begins in 1947, so fetching from 1997 costs nothing and gives the
+    # earliest period this test uses (1999_2000, which maps to displacement year 2000)
+    # a full centered 3-year window instead of an edge-truncated one. Matches the
+    # unemployment lookup's own widening (LNS14000000, see UNEMPLOYMENT_SERIES_START_YEAR
+    # above) so both business-cycle covariates see the same 1999-2025 span.
+    displacement_rate = productivity_displacement_rate(start_year=1997)
     if displacement_rate is None:
         return pd.DataFrame(columns=["score", "pearson_r", "pearson_p", "n_periods"])
 

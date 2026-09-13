@@ -31,7 +31,7 @@ Administrative Support leaves r = +0.34 (p = 0.13), so quote the leave-one-out
 range (+0.34 to +0.59) beside the headline. Raw "AI can do this task" coverage
 shows no comparable sector signal (Eloundou r = +0.02, n.s.), confirming that the
 demand-type stratification is doing work. **Caveat:** extending the historical
-baseline back to 2005 reveals that the dynamic model's sector signal was already
+baseline back to 1999 reveals that the dynamic model's sector signal was already
 present pre-2022 (r = +0.40 to +0.50 in 2006→09, +0.37 in 2017→18) — sectors
 with Unbounded and Adversarial demand have long grown faster, under earlier
 waves of automation as well. The AI-era values sit inside that pre-AI range, not

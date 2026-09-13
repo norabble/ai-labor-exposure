@@ -158,7 +158,7 @@ Administrative Support leaves r = +0.344 (p = 0.126).
 
 ### Confound: pre-existing sector composition
 
-Extending the historical BLS baseline back to 2005 (see `model_signal_over_time.md`)
+Extending the historical BLS baseline back to 1999 (see `model_signal_over_time.md`)
 reveals that the dynamic model's sector-level r was already elevated **before AI**:
 +0.40 to +0.50 in 2006→09 and +0.37 in 2017→18, well before meaningful AI
 adoption. Sectors with Unbounded and Adversarial demand — Computer and

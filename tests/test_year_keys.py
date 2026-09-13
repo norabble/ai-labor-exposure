@@ -35,8 +35,10 @@ class TestCenturyBoundary:
         reason=(
             "attach_growth_columns pairs available_years[i] with available_years[i+1] "
             "positionally (zip(available_years[:-1], available_years[1:])) and never sorts. "
-            "Its only caller, analyze_bls_data, sorts year keys with sorted() before passing "
-            "them in, so this is a real precondition on the function, not a defensive check "
+            "Its three callers — analyze_bls.py's main() (twice, for the detailed-occupation "
+            "and sector trend frames) and harmonize_soc.build_harmonized_trends (invoked from "
+            "analyze_bls.py's main()) — all sort year keys with sorted() before passing them "
+            "in, so this is a real precondition on the function, not a defensive check "
             "inside it. Given out-of-order input it silently emits wrong pairings, e.g. "
             "hist_emp_growth_2022_1999 (years reversed) instead of hist_emp_growth_2000_2022, "
             "and emp_growth_2000_2023 (skips 2022) instead of emp_growth_2022_2023. This is a "

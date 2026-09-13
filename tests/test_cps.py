@@ -142,7 +142,7 @@ class TestOewsReferenceMonth:
 
     def test_raises_without_employment_columns(self):
         with pytest.raises(ValueError):
-            oews_reference_month(["OCC_CODE", "A_MEDIAN_25"])
+            oews_reference_month(["OCC_CODE", "A_MEDIAN_2025"])
 
 
 class TestResolveComparisonWindows:

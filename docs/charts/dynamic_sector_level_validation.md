@@ -116,7 +116,7 @@ curve, and the only one that loses significance.** See `framework.md`
 
 ## Confound: pre-existing sector composition
 
-Extending the BLS baseline to 2005 (see `model_signal_over_time.md`) reveals that the dynamic model's sector-level r was already +0.40 to +0.50 in 2006→09 and +0.37 in 2017→18, well before meaningful AI adoption. Sectors with Unbounded and Adversarial demand — Computer and Mathematical, Healthcare, Life Sciences, Legal, Management — have grown faster than Bounded sectors as part of a long-running secular shift in the economy. The model, which assigns positive `net_employment_change` to those sectors, therefore captures a pre-existing structural tendency.
+Extending the BLS baseline to 1999 (see `model_signal_over_time.md`) reveals that the dynamic model's sector-level r was already +0.40 to +0.50 in 2006→09 and +0.37 in 2017→18, well before meaningful AI adoption. Sectors with Unbounded and Adversarial demand — Computer and Mathematical, Healthcare, Life Sciences, Legal, Management — have grown faster than Bounded sectors as part of a long-running secular shift in the economy. The model, which assigns positive `net_employment_change` to those sectors, therefore captures a pre-existing structural tendency.
 
 The AI-era values (+0.53 in 2023→24, +0.48 in 2024→25) sit inside that pre-AI range rather than above it. That is the expected shape for a general theory of labor-saving disruption — earlier waves of automation should leave the same signature — but it means three post-AI years cannot distinguish AI accelerating the pattern from AI continuing it. The AI-specific claim rests on acceleration and needs more post-2022 data.
 

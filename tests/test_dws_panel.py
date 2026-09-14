@@ -248,3 +248,21 @@ class TestAgainstDownloadedRelease:
         # Ten occupation groups, three reasons, one all-tenures total.
         assert len(release_panel_df) == 14
         assert release_panel_df["survey_year"].nunique() == 1
+
+
+class TestArchiveUrls:
+    def test_nine_archived_surveys_are_listed(self):
+        from download_dws import ARCHIVE_RELEASE_URLS
+
+        assert sorted(ARCHIVE_RELEASE_URLS) == [2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022, 2024]
+
+    def test_urls_use_the_verified_release_dates(self):
+        from download_dws import ARCHIVE_RELEASE_URLS
+
+        assert ARCHIVE_RELEASE_URLS[2022].endswith("disp_08262022.htm")
+        assert ARCHIVE_RELEASE_URLS[2008].endswith("disp_08202008.htm")
+
+    def test_every_url_is_under_the_archive_path(self):
+        from download_dws import ARCHIVE_RELEASE_URLS
+
+        assert all("/news.release/archives/" in url for url in ARCHIVE_RELEASE_URLS.values())

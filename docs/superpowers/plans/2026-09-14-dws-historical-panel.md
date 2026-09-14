@@ -19,7 +19,7 @@
 - Tests: `.venv/bin/python -m pytest tests/ -q`. Currently **304 passed, 6 skipped, 1 xfailed**.
 - Run Python through `.venv/bin/python`, not `uv run`.
 - **Never modify** `data/raw/`, `seeds/classified_all_tasks.csv`, `seeds/cps_a19_panel.csv`, `seeds/cps_occupation_panel.csv`, `seeds/soc_crosswalks/`.
-- **Existing outputs must not change** except where a task explicitly says so. Task 7 verifies this.
+- **Existing outputs must not change** except where a task explicitly says so. Task 11 verifies this.
 - Tests must not hit the network. Archive HTML is committed as a fixture or monkeypatched.
 - `download_dws.py` must warn and `exit 0` under CI when a fetch fails, so the pipeline still renders from the seed alone — the existing convention.
 - Every new pipeline output gets a `CLAUDE.md` Outputs Reference row in the commit that creates it.
@@ -59,6 +59,53 @@ Other verified facts:
 - `historical_displacement.py` defaults to `start_year=2005` in four places: lines ~205 (`productivity_displacement_rate`), ~231 (`employment_by_year`), ~297 (`economy_displacement_rate`), ~325 (`build_displacement_rate_table`).
 - `PRS85006092` (labor productivity) begins in **1947**, so the productivity-based `D` extends backwards for free.
 
+### The *Monthly Labor Review* series — verified 2026-09-14
+
+The BLS MLR subject index (`https://www.bls.gov/opub/mlr/subject/d.htm`, 200) is the authoritative list of displaced-worker articles. Four matter here; the first three were fetched and parsed during planning:
+
+| Article | URL | Covers | Status |
+|---|---|---|---|
+| Worker displacement in the mid-1990's (07/1999) | `https://www.bls.gov/opub/mlr/1999/07/art2full.pdf` | Table 2: 1981-82 … 1995-96 | 200, 18 pages, **82,578 characters of real extractable text** |
+| Worker displacement in a strong labor market (06/2001) | `https://www.bls.gov/opub/mlr/2001/06/art2full.pdf` | Table 2 extended through 1997-98 | 200 |
+| Worker displacement in 1999-2000 (06/2004) | `https://www.bls.gov/opub/mlr/2004/06/art4full.pdf` | 1999-2000 | 200, 95,298 bytes |
+| Characteristics of displaced workers 2007-2009 (09/2011) | visual essay | 2007-2009 | not needed — the 2008 and 2010 archives already cover it |
+
+**These are real text PDFs, not scans.** `pdfplumber` extracts them directly; no OCR is required. Verified by extracting the 1999 article in full.
+
+**Table 2 is the table to parse.** Its exact title in the 1999 article is *"Displacement rates of long-tenured workers, by industry, class of worker, and occupation of lost job, 1981–96"*, and its header row is:
+
+```
+Characteristic 1981–82 1983–84 1985–86 1987–88 1989–90 1991–92¹ 1993–94¹ 1995–96¹
+```
+
+Note the superscript footnote markers glued to some period labels, and that row labels are padded with runs of dots (`Executive, administrative, and managerial.....................`) and sometimes **wrap across two lines**. Both must be handled.
+
+**The occupation block's exact row labels**, verbatim from the 1999 article — the hierarchy is the 1980-census scheme, and indentation is lost in extraction so nesting must be inferred from these known labels rather than from whitespace:
+
+```
+White-collar occupations²
+  Managerial and professional specialty
+    Executive, administrative, and managerial
+    Professional specialty
+  Technical, sales, and administrative support
+    Technicians and related support
+    Sales occupations
+    Administrative support, including clerical
+Service occupations
+  Protective services
+  Other service occupations
+Blue-collar occupations³
+  Precision production, craft, and repair
+    Mechanics and repairers
+    Construction trades
+    Other precision production occupations
+  Operators, fabricators, and laborers
+    Machine operators, assemblers, and inspectors
+    ...
+```
+
+Only the **leaf** rows are used. Aggregate rows (`White-collar occupations`, `Blue-collar occupations`, `Managerial and professional specialty`, `Technical, sales, and administrative support`, `Precision production, craft, and repair`, `Operators, fabricators, and laborers`) are sums of their own children and would double-count — exactly the leaf-versus-aggregate trap the CPS panel work already hit.
+
 ### The documentation this plan corrects
 
 `CLAUDE.md` currently states, as a verified finding:
@@ -73,10 +120,22 @@ The first half is true; **the claim about archives is false.** The original chec
 
 **Delivers:** the DWS panel back to **2008** — nine archived surveys plus the current one, ten in total. `composition_displacement_validation.py` goes from a single n=10 cross-section to ten of them, which is the point: `CLAUDE.md` calls that file *"the only validation in the project that compares a modeled quantity against a direct measurement of that same quantity"*, and it currently rests on one survey reporting a null (Pearson +0.220, Spearman +0.600).
 
-**Does not deliver the spec's stated 1984 floor for the DWS path.** Archives before 2008 were not found. The spec's D6 asks for 1984; this plan reaches 2008 by the DWS route. Two consequences, both recorded rather than hidden:
+**Also delivers the pre-2008 history, from the *Monthly Labor Review* article series** (Tasks 7-10). That data is different in kind and is kept distinguishable rather than blended: it is published as displacement **rates in percent**, not counts in thousands, and on the **1980-census occupational taxonomy**, not the ten modern groups. Both differences are carried explicitly in the panel and handled by an auditable crosswalk.
 
-- The **productivity-based `D`** does reach back arbitrarily far (`PRS85006092` starts 1947), so `D`'s time variation is extended fully by Task 5. It is the DWS-based `D` and the occupation panel that stop at 2008.
-- Pre-2008 DWS recovery would need a different source — the *Monthly Labor Review* articles, verified reachable during planning (`https://www.bls.gov/opub/mlr/1999/07/art2full.pdf` and `.../2001/06/art2full.pdf` both return 200) and carrying a published time series from the 1981-82 period onward. Those are PDFs needing a parser this repo does not have, and they would leave a gap between roughly 1997 and 2007. **Out of scope here; recorded as a named follow-on.**
+**Combined coverage after this plan:**
+
+| Source | Survey periods | Basis |
+|---|---|---|
+| MLR 1999 article | 1981-82 … 1995-96 (8 periods) | rates, 1980-census taxonomy |
+| MLR 2001 article | 1997-98 (1 period) | rates, 1980-census taxonomy |
+| MLR 2004 article | 1999-2000 (1 period) | rates, 1980-census taxonomy |
+| **gap** | **2001-02 and 2003-04** | **unrecoverable — see below** |
+| News-release archives | 2005-07 … 2021-23 (9 surveys) | counts, modern ten groups |
+| Current release | 2023-25 | counts, modern ten groups |
+
+**The one remaining gap is the 2002 and 2004 surveys**, covering roughly 2001-2004. Archives for those years do not exist — probed every day of July, August, September and December for 2000, 2002, 2004 and 2006, all 404 — and the MLR series skips them: the subject index at `https://www.bls.gov/opub/mlr/subject/d.htm` lists no displacement article between June 2004 (covering 1999-2000) and September 2011 (a visual essay covering 2007-2009, a period the archives already supply). That gap is a property of what BLS published, not a shortcut taken here.
+
+The **productivity-based `D`** reaches back arbitrarily far regardless (`PRS85006092` starts 1947), so `D`'s time variation is extended fully by Task 5.
 
 A further caveat that bounds any pre-1994 extension: the DWS recall window is **five years before 1994 and three years after**, and `dws_displacement_rate` hardcodes a `/3` annualisation. Every survey this plan recovers (2008–2026) is on the 3-year window, so the hardcode stays correct — but Task 4 makes it explicit rather than incidental, so a future pre-1994 extension cannot silently inherit it.
 
@@ -94,7 +153,11 @@ A further caveat that bounds any pre-1994 extension: the DWS recall window is **
 | `tests/test_dws_panel.py` | Modify | Archive parsing |
 | `tests/test_historical_displacement.py` | Modify | Widened ranges, recall window |
 | `tests/test_composition_displacement_validation.py` | Modify | Per-survey panel |
-| `docs/charts/dws_observed_vs_predicted_displacement.md`, `CLAUDE.md`, `docs/framework.md` | Modify | Results, outputs rows, and the archive correction |
+| `mlr_displacement.py` | Create | Parse MLR article PDFs; crosswalk the 1980-census taxonomy |
+| `seeds/mlr_occupation_crosswalk.csv` | Create | Committed 1980-census → ten-group crosswalk, with confidence flags |
+| `tests/test_mlr_displacement.py` | Create | PDF parsing and crosswalk coverage |
+| `pyproject.toml`, `uv.lock` | Modify | Add `pdfplumber`; CI runs `uv sync --locked` so the lock must travel with it |
+| `docs/charts/dws_observed_vs_predicted_displacement.md`, `CLAUDE.md`, `docs/framework.md` | Modify | Results, outputs rows, the archive correction, and the MLR caveats |
 
 ---
 
@@ -670,7 +733,9 @@ EOF
 
 ---
 
-### Task 6: Documentation, including the archive correction
+### Task 6: Documentation for the archive path, including the archive correction
+
+This task covers the archive work only. The MLR path's documentation lands in Task 10 Step 6, because its results do not exist until then.
 
 **Files:**
 - Modify: `CLAUDE.md`, `docs/framework.md`, `docs/charts/dws_observed_vs_predicted_displacement.md`
@@ -708,7 +773,455 @@ EOF
 
 ---
 
-### Task 7: Prove nothing else changed
+### Task 7: Add the PDF parser and fetch the MLR articles
+
+**Files:**
+- Modify: `pyproject.toml`, `uv.lock`, `download_dws.py`
+- Test: `tests/test_dws_panel.py`
+
+**Interfaces:**
+- Produces: `MLR_ARTICLE_URLS: dict[str, str]` — article key → URL; `download_mlr_articles(request_headers, output_dir="data/raw/dws/mlr") -> list[str]`
+
+- [ ] **Step 1: Add the dependency**
+
+```bash
+UV_CACHE_DIR="${TMPDIR:-/tmp/claude-1000}/uv-cache" uv add pdfplumber
+```
+
+`pdfplumber` (verified working at 0.11.10) is chosen over `pypdf` because it preserves the visual row structure these numeric tables depend on. **CI runs `uv sync --locked`**, so `uv.lock` must be regenerated and committed in this same commit or CI fails at install rather than at test time.
+
+- [ ] **Step 2: Write the failing test**
+
+```python
+class TestMlrArticleUrls:
+    def test_three_articles_cover_the_pre_2008_window(self):
+        from download_dws import MLR_ARTICLE_URLS
+
+        assert set(MLR_ARTICLE_URLS) == {"mid_1990s_1999", "strong_labor_market_2001", "displacement_1999_2000_2004"}
+
+    def test_urls_point_at_the_verified_pdfs(self):
+        from download_dws import MLR_ARTICLE_URLS
+
+        assert MLR_ARTICLE_URLS["mid_1990s_1999"].endswith("/opub/mlr/1999/07/art2full.pdf")
+        assert MLR_ARTICLE_URLS["displacement_1999_2000_2004"].endswith("/opub/mlr/2004/06/art4full.pdf")
+```
+
+- [ ] **Step 3: Run to verify failure**
+
+Run: `.venv/bin/python -m pytest tests/test_dws_panel.py::TestMlrArticleUrls -v`
+Expected: FAIL with `ImportError: cannot import name 'MLR_ARTICLE_URLS'`.
+
+- [ ] **Step 4: Implement**
+
+```python
+MLR_DIR = "data/raw/dws/mlr"
+
+# The Monthly Labor Review displaced-worker series, from the BLS subject index at
+# https://www.bls.gov/opub/mlr/subject/d.htm. These carry the pre-2008 history the
+# news-release archives do not reach. All three verified reachable 2026-09-14.
+MLR_ARTICLE_URLS: dict[str, str] = {
+    "mid_1990s_1999": "https://www.bls.gov/opub/mlr/1999/07/art2full.pdf",
+    "strong_labor_market_2001": "https://www.bls.gov/opub/mlr/2001/06/art2full.pdf",
+    "displacement_1999_2000_2004": "https://www.bls.gov/opub/mlr/2004/06/art4full.pdf",
+}
+
+
+def download_mlr_articles(request_headers: dict[str, str], output_dir: str = MLR_DIR) -> list[str]:
+    """Fetch the MLR displaced-worker articles, skipping any already on disk.
+
+    Warns and skips on failure rather than raising, matching how every other
+    download in this module degrades so the pipeline still renders from the seed.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    written_paths = []
+    for article_key, url in sorted(MLR_ARTICLE_URLS.items()):
+        destination = os.path.join(output_dir, f"{article_key}.pdf")
+        if os.path.exists(destination):
+            written_paths.append(destination)
+            continue
+        try:
+            response = requests.get(url, headers=request_headers, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+        except requests.RequestException as request_error:
+            warnings.warn(f"Could not fetch MLR article {article_key}: {request_error}", stacklevel=2)
+            continue
+        with open(destination, "wb") as article_file:
+            article_file.write(response.content)
+        written_paths.append(destination)
+    return written_paths
+```
+
+Call it from `main()` beside the archive download.
+
+- [ ] **Step 5: Run the tests and the real fetch**
+
+```bash
+.venv/bin/python -m pytest tests/test_dws_panel.py -v
+.venv/bin/python download_dws.py
+ls -la data/raw/dws/mlr/
+```
+
+Expected: three PDFs, roughly 95 KB, 123 KB and 95 KB.
+
+- [ ] **Step 6: Lint and commit**
+
+```bash
+.venv/bin/ruff check download_dws.py tests/test_dws_panel.py
+.venv/bin/ruff format download_dws.py tests/test_dws_panel.py
+git add pyproject.toml uv.lock download_dws.py tests/test_dws_panel.py
+PATH="$PWD/.venv/bin:$PATH" git commit -m "$(cat <<'EOF'
+Fetch the Monthly Labor Review displaced-worker articles
+
+Adds pdfplumber and pulls the three MLR articles carrying the pre-2008
+history the news-release archives do not reach. They are real text PDFs,
+not scans, so no OCR is needed.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XmW2c1TmZUtMwrc9wXueCi
+EOF
+)"
+```
+
+---
+
+### Task 8: Parse MLR Table 2 into per-period occupation rates
+
+**Files:**
+- Create: `mlr_displacement.py`
+- Test: `tests/test_mlr_displacement.py`
+
+A new module rather than more weight in `dws_panel.py`: the MLR path has a different input format (PDF), a different unit (rates), and a different taxonomy, and those three differences deserve their own file with one clear responsibility.
+
+**Interfaces:**
+- Produces:
+  - `MLR_OCCUPATION_LEAVES: tuple[str, ...]` — the leaf row labels to keep
+  - `parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame` — columns `period_label, period_start_year, period_end_year, mlr_occupation, displacement_rate_percent`
+
+- [ ] **Step 1: Write the failing test**
+
+Tests must not hit the network, and a PDF fixture is large — parse the already-downloaded article from `data/raw/dws/mlr/` and skip when absent, following `tests/test_harmonize_soc.py`'s `RAW_BLS_PRESENT` pattern:
+
+```python
+"""Tests for mlr_displacement.py — parsing displacement rates out of the MLR article PDFs."""
+
+import os
+
+import pandas as pd
+import pytest
+
+from mlr_displacement import MLR_OCCUPATION_LEAVES, parse_displacement_rate_table
+
+ARTICLE_PATH = "data/raw/dws/mlr/mid_1990s_1999.pdf"
+ARTICLE_PRESENT = os.path.exists(ARTICLE_PATH)
+
+
+class TestLeafSelection:
+    def test_aggregate_rows_are_not_leaves(self):
+        """Aggregates are sums of their own children; including them double-counts."""
+        for aggregate in (
+            "White-collar occupations",
+            "Blue-collar occupations",
+            "Managerial and professional specialty",
+            "Technical, sales, and administrative support",
+            "Precision production, craft, and repair",
+            "Operators, fabricators, and laborers",
+        ):
+            assert aggregate not in MLR_OCCUPATION_LEAVES
+
+    def test_known_leaves_are_present(self):
+        for leaf in ("Executive, administrative, and managerial", "Sales occupations", "Construction trades"):
+            assert leaf in MLR_OCCUPATION_LEAVES
+
+
+@pytest.mark.skipif(not ARTICLE_PRESENT, reason="MLR article not downloaded; run download_dws.py")
+class TestRateTableParsing:
+    def test_eight_periods_are_recovered(self):
+        rate_df = parse_displacement_rate_table(ARTICLE_PATH)
+        assert sorted(rate_df["period_label"].unique()) == [
+            "1981-82",
+            "1983-84",
+            "1985-86",
+            "1987-88",
+            "1989-90",
+            "1991-92",
+            "1993-94",
+            "1995-96",
+        ]
+
+    def test_period_years_are_parsed_as_four_digit_integers(self):
+        rate_df = parse_displacement_rate_table(ARTICLE_PATH)
+        first = rate_df[rate_df["period_label"] == "1995-96"].iloc[0]
+        assert first["period_start_year"] == 1995
+        assert first["period_end_year"] == 1996
+
+    def test_a_known_published_value_is_recovered_exactly(self):
+        """Sales occupations, 1981-82, is published as 3.7 percent."""
+        rate_df = parse_displacement_rate_table(ARTICLE_PATH)
+        row = rate_df[(rate_df.mlr_occupation == "Sales occupations") & (rate_df.period_label == "1981-82")]
+        assert row["displacement_rate_percent"].iloc[0] == pytest.approx(3.7)
+
+    def test_leading_decimal_values_are_parsed(self):
+        """BLS prints values below one without a leading zero, e.g. Protective services 1985-86 is '.5'."""
+        rate_df = parse_displacement_rate_table(ARTICLE_PATH)
+        row = rate_df[(rate_df.mlr_occupation == "Protective services") & (rate_df.period_label == "1985-86")]
+        assert row["displacement_rate_percent"].iloc[0] == pytest.approx(0.5)
+
+    def test_every_leaf_appears_in_every_period(self):
+        rate_df = parse_displacement_rate_table(ARTICLE_PATH)
+        counts = rate_df.groupby("mlr_occupation")["period_label"].nunique()
+        assert (counts == 8).all()
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `.venv/bin/python -m pytest tests/test_mlr_displacement.py -v`
+Expected: FAIL with `ModuleNotFoundError: No module named 'mlr_displacement'`.
+
+- [ ] **Step 3: Implement**
+
+Create `mlr_displacement.py` with a module docstring naming its purpose, inputs and outputs. The parser must handle four things the verification exposed:
+
+1. **Dot leaders.** Row labels are padded with runs of `.` before the numbers — strip with `re.sub(r"\.{2,}", " ", line)`.
+2. **Wrapped labels.** Some labels break across two lines, with the numbers on the second (`Executive, administrative, and\nmanagerial..... 2.5 2.4 ...`). Join a line carrying no numbers to the line that follows it.
+3. **Superscript footnote markers** glued to labels and period headers (`White-collar occupations²`, `1991–92¹`) — strip non-ASCII digit superscripts and trailing digits that are not part of a year.
+4. **Leading-decimal values.** BLS prints values below one as `.5`, not `0.5`; `float(".5")` works, but a regex requiring a leading digit would miss them. Match numbers as `r"\.?\d+(?:\.\d+)?"`.
+
+Select rows by exact membership in `MLR_OCCUPATION_LEAVES` rather than by position or indentation — extraction discards leading whitespace, so nesting cannot be inferred from the text.
+
+Parse `1981–82` (en dash) into `period_start_year=1981, period_end_year=1982`, normalising the label to an ASCII hyphen. Two-digit end years are in the same century as the start year for every period here.
+
+- [ ] **Step 4: Run to verify passing**
+
+Run: `.venv/bin/python -m pytest tests/test_mlr_displacement.py -v`
+Expected: PASS.
+
+- [ ] **Step 5: Parse all three articles and report coverage**
+
+```bash
+.venv/bin/python -c "
+from mlr_displacement import parse_displacement_rate_table
+import glob
+for path in sorted(glob.glob('data/raw/dws/mlr/*.pdf')):
+    try:
+        rate_df = parse_displacement_rate_table(path)
+        print(path, '->', sorted(rate_df.period_label.unique()))
+    except Exception as parse_error:
+        print(path, '-> FAILED:', parse_error)
+"
+```
+
+Expected: the 1999 article yields eight periods, the 2001 article yields its own set including `1997-98`, and the 2004 article yields `1999-2000`. **The later two articles have their own layouts and may need per-article handling** — if one fails, report exactly how rather than loosening the parser until it silently produces wrong numbers.
+
+- [ ] **Step 6: Lint and commit**
+
+```bash
+.venv/bin/ruff check mlr_displacement.py tests/test_mlr_displacement.py
+.venv/bin/ruff format mlr_displacement.py tests/test_mlr_displacement.py
+git add mlr_displacement.py tests/test_mlr_displacement.py
+PATH="$PWD/.venv/bin:$PATH" git commit -m "$(cat <<'EOF'
+Parse displacement rates out of the MLR article tables
+
+Replace this line with the per-article period coverage from Step 5.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XmW2c1TmZUtMwrc9wXueCi
+EOF
+)"
+```
+
+---
+
+### Task 9: Crosswalk the 1980-census taxonomy to the ten modern groups
+
+**Files:**
+- Modify: `mlr_displacement.py`
+- Create: `seeds/mlr_occupation_crosswalk.csv`
+- Test: `tests/test_mlr_displacement.py`
+
+**Interfaces:**
+- Produces: `MLR_TO_DWS_GROUP: dict[str, str]`; `load_mlr_crosswalk(path="seeds/mlr_occupation_crosswalk.csv") -> pd.DataFrame`
+
+The 1980-census sub-major groups map onto the ten modern DWS groups more cleanly than the major groups do — which is why the parser keeps leaves rather than aggregates.
+
+- [ ] **Step 1: Write the crosswalk seed**
+
+Create `seeds/mlr_occupation_crosswalk.csv` with columns `mlr_occupation, dws_group, mapping_confidence, note`. The mapping, derived from the 1980-census-to-SOC correspondence:
+
+| `mlr_occupation` | `dws_group` | confidence |
+|---|---|---|
+| Executive, administrative, and managerial | management, business, and financial operations occupations | high |
+| Professional specialty | professional and related occupations | high |
+| Technicians and related support | professional and related occupations | high |
+| Sales occupations | sales and related occupations | high |
+| Administrative support, including clerical | office and administrative support occupations | high |
+| Protective services | service occupations | high |
+| Other service occupations | service occupations | high |
+| Mechanics and repairers | installation, maintenance, and repair occupations | high |
+| Construction trades | construction and extraction occupations | high |
+| Other precision production occupations | production occupations | medium |
+| Machine operators, assemblers, and inspectors | production occupations | high |
+| Transportation and material moving occupations | transportation and material moving occupations | high |
+| Handlers, equipment cleaners, helpers, and laborers | transportation and material moving occupations | **low** |
+| Farming, forestry, and fishing | farming, fishing, and forestry occupations | high |
+
+Confirm the last four labels against the actual parsed output before committing — the verification captured the block only as far as machine operators. If a label differs, use what the PDF says and record the discrepancy.
+
+The **low-confidence** row is the honest one: handlers, cleaners, helpers and labourers split across production and transportation/material moving in the modern scheme, and this assigns them wholly to one. Task 10 must expose that so a reader can see it.
+
+- [ ] **Step 2: Write the failing test**
+
+```python
+class TestCrosswalk:
+    def test_every_leaf_has_a_mapping(self):
+        from mlr_displacement import MLR_OCCUPATION_LEAVES, MLR_TO_DWS_GROUP
+
+        assert set(MLR_OCCUPATION_LEAVES) <= set(MLR_TO_DWS_GROUP)
+
+    def test_every_target_is_a_real_dws_group(self):
+        from dws_panel import DWS_TO_SOC_MAJOR
+        from mlr_displacement import MLR_TO_DWS_GROUP
+
+        assert set(MLR_TO_DWS_GROUP.values()) <= set(DWS_TO_SOC_MAJOR)
+
+    def test_all_ten_modern_groups_are_reachable(self):
+        from dws_panel import DWS_TO_SOC_MAJOR
+        from mlr_displacement import MLR_TO_DWS_GROUP
+
+        assert set(MLR_TO_DWS_GROUP.values()) == set(DWS_TO_SOC_MAJOR)
+
+    def test_low_confidence_mappings_are_flagged(self):
+        from mlr_displacement import load_mlr_crosswalk
+
+        crosswalk_df = load_mlr_crosswalk()
+        assert (crosswalk_df["mapping_confidence"] == "low").any()
+```
+
+- [ ] **Step 3: Run to verify failure, then implement**
+
+Run: `.venv/bin/python -m pytest tests/test_mlr_displacement.py::TestCrosswalk -v`
+Expected: FAIL with `ImportError: cannot import name 'MLR_TO_DWS_GROUP'`.
+
+Load the seed into `MLR_TO_DWS_GROUP` at module level, following how `harmonize_soc.py` reads its committed crosswalks from `seeds/`.
+
+- [ ] **Step 4: Run to verify passing**
+
+Run: `.venv/bin/python -m pytest tests/test_mlr_displacement.py -v`
+Expected: PASS. `test_all_ten_modern_groups_are_reachable` failing means a modern group has no 1980-census source — report which, rather than inventing a mapping to satisfy the test.
+
+- [ ] **Step 5: Commit**
+
+```bash
+.venv/bin/ruff check mlr_displacement.py tests/test_mlr_displacement.py
+.venv/bin/ruff format mlr_displacement.py tests/test_mlr_displacement.py
+git add mlr_displacement.py tests/test_mlr_displacement.py seeds/mlr_occupation_crosswalk.csv
+PATH="$PWD/.venv/bin:$PATH" git commit -m "$(cat <<'EOF'
+Crosswalk the 1980-census occupational taxonomy to the ten DWS groups
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XmW2c1TmZUtMwrc9wXueCi
+EOF
+)"
+```
+
+---
+
+### Task 10: Fold the MLR rates into the panel, kept distinguishable
+
+**Files:**
+- Modify: `dws_panel.py`, `seeds/dws_displacement_panel.csv`
+- Test: `tests/test_dws_panel.py`
+
+MLR rows are rates on a crosswalked taxonomy; archive rows are counts on the native one. Blending them silently would be the worst outcome of this whole plan.
+
+**Interfaces:**
+- Produces: a `measurement_basis` column on the panel — `count_thousands` or `rate_percent`; and `source` — `news_release`, `news_release_archive`, or `mlr_article`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+class TestMeasurementBasis:
+    def test_existing_rows_are_labelled_as_counts(self):
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        modern = panel_df[panel_df["survey_year"] >= 2008]
+        assert (modern["measurement_basis"] == "count_thousands").all()
+
+    def test_mlr_rows_are_labelled_as_rates(self):
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        historical = panel_df[panel_df["survey_year"] < 2008]
+        assert not historical.empty
+        assert (historical["measurement_basis"] == "rate_percent").all()
+
+    def test_rates_and_counts_are_never_summed_together(self):
+        """A single survey year must not mix bases — that is the blend this column exists to prevent."""
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        per_year = panel_df.groupby("survey_year")["measurement_basis"].nunique()
+        assert (per_year == 1).all()
+```
+
+- [ ] **Step 2: Run to verify failure, then implement**
+
+Add `measurement_basis` and `source` to `PANEL_COLUMNS`, default existing rows to `count_thousands` / `news_release_archive` (or `news_release` for the current survey), and write MLR rows with `rate_percent` / `mlr_article`.
+
+Store the MLR rate in `displacement_rate_percent`, a **new column** — do not put a percentage into `displaced_thousands`, which every existing consumer reads as a count. `load_dws_panel` and `dws_displacement_rate` must filter to `measurement_basis == "count_thousands"` so nothing downstream changes behaviour.
+
+- [ ] **Step 3: Rebuild the seed with both sources**
+
+```bash
+.venv/bin/python -c "
+import glob
+import pandas as pd
+from dws_panel import SEED_PANEL_PATH, mlr_rows_for_panel
+from mlr_displacement import parse_displacement_rate_table
+frames = [pd.read_csv(SEED_PANEL_PATH)]
+for path in sorted(glob.glob('data/raw/dws/mlr/*.pdf')):
+    frames.append(mlr_rows_for_panel(parse_displacement_rate_table(path)))
+panel_df = pd.concat(frames, ignore_index=True).drop_duplicates(
+    subset=['survey_year','source_table','group_name','reason'], keep='last')
+panel_df = panel_df.sort_values(['survey_year','source_table','group_name']).reset_index(drop=True)
+panel_df.to_csv(SEED_PANEL_PATH, index=False)
+print(panel_df.groupby(['measurement_basis']).survey_year.nunique().to_string())
+print('survey years:', sorted(panel_df.survey_year.unique()))
+"
+```
+
+Expected: `count_thousands` covering ten survey years (2008-2026) and `rate_percent` covering the MLR periods. Report the full year list — that is this plan's headline deliverable.
+
+- [ ] **Step 4: Confirm nothing downstream moved**
+
+```bash
+MPLCONFIGDIR=/tmp/claude-1000/mpl .venv/bin/python main.py composition > /tmp/claude-1000/mlr.log 2>&1; echo "exit: $?"
+```
+
+`historical_displacement_rate.csv` and the displacement validation must be unchanged by the MLR rows, because those consumers filter to counts. A change means the filter is missing — report it as a Critical finding.
+
+- [ ] **Step 5: Document the MLR path**
+
+Add to `CLAUDE.md`: an Outputs Reference note that `dws_displacement_panel.csv` now carries two measurement bases, a `seeds/mlr_occupation_crosswalk.csv` entry under the committed-reference-data convention alongside `seeds/soc_crosswalks/`, and the `pdfplumber` dependency in the setup notes.
+
+Add to `docs/framework.md`, in the subsection Task 6 created: that pre-2008 displacement history comes from the MLR article series as **rates on the 1980-census taxonomy**, crosswalked to the ten modern groups; that one crosswalk row (handlers, equipment cleaners, helpers and labourers) is flagged low-confidence because it splits across two modern groups; and that the 2002 and 2004 surveys are genuinely absent because BLS published neither an archive nor an MLR article for them.
+
+State the combined coverage plainly: 1981-82 through 2023-25, with a hole at 2001-04.
+
+- [ ] **Step 6: Lint and commit**
+
+```bash
+.venv/bin/ruff check dws_panel.py tests/test_dws_panel.py
+.venv/bin/ruff format dws_panel.py tests/test_dws_panel.py
+git add dws_panel.py tests/test_dws_panel.py seeds/dws_displacement_panel.csv CLAUDE.md docs/framework.md
+PATH="$PWD/.venv/bin:$PATH" git commit -m "$(cat <<'EOF'
+Carry the MLR rate history beside the archive counts, not blended
+
+Replace this line with the survey-year coverage by measurement basis.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XmW2c1TmZUtMwrc9wXueCi
+EOF
+)"
+```
+
+---
+
+### Task 11: Prove nothing else changed
 
 **Files:** none — verification only, no commit.
 
@@ -760,7 +1273,8 @@ Summarise: surveys in the panel before and after, per-survey correlation range, 
 
 ## Out of scope for this plan
 
-- **Pre-2008 DWS recovery.** Needs the *Monthly Labor Review* articles — verified reachable (`.../mlr/1999/07/art2full.pdf`, `.../mlr/2001/06/art2full.pdf`, both 200) but PDFs requiring a parser this repo lacks, and leaving a gap between roughly 1997 and 2007. A named follow-on, not a silent omission.
+- **The 2002 and 2004 surveys**, covering roughly 2001-2004. Not a choice: BLS published no news-release archive for those years (probed exhaustively) and no MLR article covers them. The panel will carry a genuine hole there.
+- **Converting MLR rates into counts or shares.** Doing so needs employment by occupation group per period; the CPS panel from the previous plan supplies that for the ten modern groups from 1983, but the MLR rates are on the 1980-census taxonomy and the earliest period (1981-82) predates the CPS panel entirely. The rates are carried as rates, flagged as such, and left for a later plan to convert if it wants to.
 - **The IPUMS 22-group CPS upgrade** — the successor to the CPS historical panel plan, unrelated to displacement.
 - Occupation taxonomy reconciliation for pre-1994 surveys, which used the 1980/1990 census occupational classification rather than the ten groups `DWS_TO_SOC_MAJOR` maps.
 - Wages, monthly resolution, DOT-1991 era-appropriate labels.

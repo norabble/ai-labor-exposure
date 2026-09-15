@@ -570,6 +570,43 @@ def decompose_fit_strength(
 
 DISPLACEMENT_RATE_TRACKING_SOURCES = ("productivity", "dws_long_tenured", "mlr_long_tenured")
 
+TRACKING_OUTPUT_COLUMNS = [
+    "score",
+    "pearson_r",
+    "pearson_p",
+    "n_periods",
+    "n_distinct_displacement_values",
+    "displacement_vs_year_r",
+    "displacement_vs_year_p",
+]
+
+
+def displacement_rate_time_trend(displacement_rate: pd.Series) -> tuple[int, float, float]:
+    """Measure, rather than assert, how much of a displacement-rate source is just calendar time.
+
+    Returns `(n_distinct_values, year_trend_r, year_trend_p)`: how many distinct
+    annual values the series actually carries (a DWS or MLR source repeats one
+    survey-window or article-period average across every year it covers, so a
+    21-year series can carry far fewer independent readings than its length
+    suggests — the effective sample size `correlate_with_displacement_rate`'s own
+    p-values assume is overstated by roughly that ratio), and the Pearson
+    correlation of the series against its own calendar year (a source that is
+    largely monotonic in time is not distinguishable, by this test alone, from "fit
+    strength changed over time" for any other reason — including the AI-era
+    boundary, which is itself a fixed point in calendar time). `year_trend_r`/`_p`
+    are `nan` when fewer than 3 points are available, since a two-point
+    correlation is undefined in any informative sense.
+
+    This is the same measure-and-disclose treatment `cps_historical_panel.py`'s
+    `measure_comparability_breaks` already gives the CPS series' two classification
+    breaks: quantified and attached to the output, not just described in prose.
+    """
+    n_distinct_values = int(displacement_rate.nunique())
+    if len(displacement_rate) < 3:
+        return n_distinct_values, float("nan"), float("nan")
+    year_trend_r, year_trend_p = stats.pearsonr(displacement_rate.index.values.astype(float), displacement_rate.values)
+    return n_distinct_values, float(year_trend_r), float(year_trend_p)
+
 
 def correlate_with_displacement_rate(
     period_correlation_df: pd.DataFrame, exclude_covid: bool = True, source: str = "productivity"
@@ -588,12 +625,24 @@ def correlate_with_displacement_rate(
     never combined into one series (see historical_displacement.mlr_displacement_rate);
     each is tested separately, one call per source.
 
-    This is a weak test by construction: even the widest-coverage source gives only
-    roughly two dozen usable periods, autocorrelated, against a source whose own
-    within-period value never changes for the DWS/MLR sources (each period's D is a
-    survey-window or article-period average repeated across the years it covers). It
-    is reported as a hypothesis check; a null result is expected and uninformative,
-    not disconfirming, per this project's asymmetric reading rule.
+    This is a weak test by construction, and not only for the "few autocorrelated
+    periods" reason stated below: for the DWS/MLR sources, the regressor itself
+    repeats one survey-window or article-period average across every year the
+    window covers, so the number of *periods* this function reports is not the
+    number of *independent* displacement readings — `displacement_rate_time_trend`
+    measures that gap directly (`n_distinct_displacement_values` in the output) so
+    a reader does not have to take "roughly two dozen usable periods" at face
+    value. The same helper also reports `displacement_vs_year_r`/`_p`: the
+    correlation of the source against calendar year alone. Where that is large,
+    a fit-strength correlation against the source cannot be distinguished from a
+    fit-strength trend against time itself — see docs/framework.md § Demand
+    Composition Model for what this means for `dws_long_tenured` specifically,
+    where the confound is large enough to make the test's own significant result
+    uninformative about displacement rather than merely weak evidence for it.
+
+    It is reported as a hypothesis check; a null result is expected and
+    uninformative, not disconfirming, per this project's asymmetric reading rule —
+    and, as the above makes explicit, so is a positive result confounded with time.
     """
     from historical_displacement import economy_displacement_rate
 
@@ -606,7 +655,9 @@ def correlate_with_displacement_rate(
     # sources ignore whichever part of this start year predates their own coverage.
     displacement_rate = economy_displacement_rate(source, start_year=1997)
     if displacement_rate is None or displacement_rate.empty:
-        return pd.DataFrame(columns=["score", "pearson_r", "pearson_p", "n_periods"])
+        return pd.DataFrame(columns=TRACKING_OUTPUT_COLUMNS)
+
+    n_distinct_displacement_values, displacement_vs_year_r, displacement_vs_year_p = displacement_rate_time_trend(displacement_rate)
 
     comparison_df = period_correlation_df[~period_correlation_df["is_covid"]] if exclude_covid else period_correlation_df
 
@@ -619,10 +670,18 @@ def correlate_with_displacement_rate(
             continue
         correlation, p_value = stats.pearsonr(np.arctanh(score_df["fit_r"]), score_df["displacement_rate"])
         correlation_rows.append(
-            {"score": score_col, "pearson_r": float(correlation), "pearson_p": float(p_value), "n_periods": len(score_df)}
+            {
+                "score": score_col,
+                "pearson_r": float(correlation),
+                "pearson_p": float(p_value),
+                "n_periods": len(score_df),
+                "n_distinct_displacement_values": n_distinct_displacement_values,
+                "displacement_vs_year_r": displacement_vs_year_r,
+                "displacement_vs_year_p": displacement_vs_year_p,
+            }
         )
 
-    return pd.DataFrame(correlation_rows, columns=["score", "pearson_r", "pearson_p", "n_periods"])
+    return pd.DataFrame(correlation_rows, columns=TRACKING_OUTPUT_COLUMNS)
 
 
 def print_displacement_rate_tracking(tracking_df: pd.DataFrame, source: str) -> None:
@@ -632,19 +691,33 @@ def print_displacement_rate_tracking(tracking_df: pd.DataFrame, source: str) -> 
     either because the source itself is entirely unavailable, or because fewer than
     5 usable periods overlap it — so an absent source is visibly accounted for
     rather than silently missing from the output.
+
+    Prints the source's own time-trend diagnostic (`displacement_rate_time_trend`,
+    carried on every row as `n_distinct_displacement_values` /
+    `displacement_vs_year_r` / `_p`) right beside the correlation it qualifies,
+    rather than leaving a reader to take the reported `n_periods` at face value or
+    to rediscover separately that a source is highly correlated with calendar year.
     """
     print(f"\n── Does fit strength track the economy-wide displacement rate? ({source}) ──")
     if tracking_df.empty:
         print(f"  Skipped: {source} has fewer than 5 usable periods overlapping this level's data.")
         return
+    diagnostic_row = tracking_df.iloc[0]
+    print(
+        f"  D itself: {int(diagnostic_row['n_distinct_displacement_values'])} distinct annual values "
+        f"(effective n is that, not the period count below); D vs. calendar year "
+        f"r={diagnostic_row['displacement_vs_year_r']:+.3f} (p={diagnostic_row['displacement_vs_year_p']:.4f})"
+    )
     for _, tracking_row in tracking_df.iterrows():
         print(
             f"  {tracking_row['score']:<26} Pearson {tracking_row['pearson_r']:+.3f} "
             f"(p={tracking_row['pearson_p']:.3f}, n={int(tracking_row['n_periods'])})"
         )
     print(
-        "  Hypothesis check only, few and autocorrelated periods: a null result here is uninformative, "
-        "not disconfirming (see docs/framework.md § Demand Composition Model)."
+        "  Hypothesis check only, few and autocorrelated periods, with the regressor itself repeating across "
+        "each survey/article window: a null result here is uninformative, not disconfirming, and a positive "
+        "result confounded with the calendar-year trend above is equally uninformative about displacement "
+        "specifically (see docs/framework.md § Demand Composition Model)."
     )
 
 

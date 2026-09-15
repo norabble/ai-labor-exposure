@@ -572,23 +572,57 @@ hardcoded to one:
 | Source | Coverage | `composition_net_change` fit strength |
 |---|---|---|
 | `productivity` | 1947–2025 (smoothed) | +0.298, p = 0.158, n = 24 |
-| `dws_long_tenured` | 2005–2025 (annual, from the ten-survey DWS panel) | **+0.629, p = 0.004, n = 19** |
+| `dws_long_tenured` | 2005–2025 (annual, from the ten-survey DWS panel) | +0.629, p = 0.004, n = 19 |
 | `mlr_long_tenured` | 1981–2000 (MLR articles' economy-wide rate) | skipped — only 1 usable period overlaps the sector-level series, which starts in 1999 |
 
 `dws_long_tenured` is significant at the sector level, and in the same direction
 for every model score tested (`net_employment_change` +0.226 p = 0.353,
-`occupation_exposure` +0.656 p = 0.002, `observed_exposure` +0.696 p = 0.001) —
-the strongest version of this hypothesis check the project has run. `mlr_long_tenured`
-cannot be tested at this level at all: it ends in 2000, a year before the
-sector-level YoY series begins (1999→2000 is the first period, mapping to
-displacement year 2000, so only one period overlaps — below the 5-period floor
-`correlate_with_displacement_rate` requires before reporting a source). This is a
-weak test by construction regardless — roughly twenty autocorrelated periods
-against a regressor whose own value repeats across a survey window — so even the
-significant `dws_long_tenured` reading is reported as a hypothesis check, not a
-confirmed result, per this project's asymmetric reading rule: a null would be
-uninformative, and a positive reading here is suggestive rather than confirmatory
-for the same reason. `mlr_long_tenured`'s skip is a genuine coverage gap, not
+`occupation_exposure` +0.656 p = 0.002, `observed_exposure` +0.696 p = 0.001).
+That agreement across all four scores does not strengthen the finding — it
+undermines it. `observed_exposure` is raw Anthropic AI task coverage: it carries
+no demand-composition content at all, and it produces the *strongest* correlation
+of the four (+0.696, ahead of the composition score's own +0.629). If displacement
+sorting by demand type were driving this, the composition score should lead a
+measure that has no demand-type information in it, not trail it. Four unrelated
+scores moving together points to a shared confound in the test, not to
+displacement driving demand-type sorting — and `displacement_rate_time_trend`
+(`composition_era_validation.py`, printed by `correlate_with_displacement_rate`
+for every source) measures two confounds large enough to be that shared cause:
+
+- **The regressor has only 10 distinct values across the 21 years it spans.**
+  `dws_long_tenured` repeats each survey's rate across its whole 2-3-year window,
+  so the reported `n = 19` periods carry roughly 10 independent readings, not 19 —
+  the p-values above are correspondingly overstated, by a factor in that
+  neighbourhood, versus what an actual n = 19 would justify.
+- **`dws_long_tenured` is itself substantially a declining time trend.** Correlated
+  against calendar year alone: r = −0.684 (p = 0.0006) over 2005–2025, r = −0.772
+  (p = 0.0002) restricted to 2008–2025. A source this collinear with time cannot be
+  distinguished, by this test alone, from any other quantity that also moved over
+  2005–2025 — including each score's own fit strength, whatever drives it.
+- **The AI era sits in the low part of D's range, adjacent to its minimum.** From
+  `composition_model_era_comparison.csv`, `occupation_exposure`'s mean sector-level
+  fit strength goes −0.029 (pre-2022) to −0.274 (AI era) and `observed_exposure`'s
+  goes +0.076 to −0.212 — both flip negative in the AI era. `dws_long_tenured`'s
+  value for every AI-era period (2023–2025, one repeated survey window) is 0.69%,
+  the 4th-lowest of the source's 10 distinct values; the series' true minimum,
+  0.56%, falls in 2021–2022, the last pre-AI period immediately before it. D is
+  low precisely where these two scores' fit strength is also low (both negative),
+  so a positive D-tracking correlation for `occupation_exposure` and
+  `observed_exposure` substantially re-expresses the AI-era sign flip documented
+  elsewhere in this section, rather than being independent evidence that
+  displacement drives sorting strength.
+
+Put together: the correlation is real as computed, but between the collinearity
+with calendar year and the effective n of roughly 10, this test cannot currently
+distinguish "fit strength tracks displacement" from "fit strength changed over
+2005–2025 for some other reason, and displacement happens to have moved over the
+same span." It is reported, with these confounds attached, as a hypothesis check
+that the data on hand cannot settle — not as evidence for or against the
+displacement mechanism specifically. `mlr_long_tenured` cannot be tested at the
+sector level at all: it ends in 2000, a year before the sector-level YoY series
+begins (1999→2000 is the first period, mapping to displacement year 2000, so only
+one period overlaps — below the 5-period floor `correlate_with_displacement_rate`
+requires before reporting a source). That skip is a genuine coverage gap, not
 evidence either way.
 
 ### Limitations

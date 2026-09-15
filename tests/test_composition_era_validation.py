@@ -40,6 +40,7 @@ from composition_era_validation import (
     cps_group_correlation,
     decompose_fit_strength,
     discover_period_columns,
+    displacement_rate_time_trend,
     is_ai_era,
     occupation_correlation,
     period_key,
@@ -360,6 +361,70 @@ class TestUnemploymentChangeByPeriod:
         assert captured_args["start_year"] == 1948
 
 
+class TestDisplacementRateTimeTrend:
+    """The confound diagnostic: how many independent readings a source really carries, and
+    how much of it is just calendar time."""
+
+    def test_distinct_value_count_ignores_repeated_survey_window_values(self):
+        displacement_rate = pd.Series({2005: 0.01, 2006: 0.01, 2007: 0.02, 2008: 0.02, 2009: 0.015})
+
+        n_distinct_values, _, _ = displacement_rate_time_trend(displacement_rate)
+
+        assert n_distinct_values == 3
+
+    def test_year_trend_is_nan_below_three_points(self):
+        displacement_rate = pd.Series({2020: 0.01, 2021: 0.02})
+
+        _, year_trend_r, year_trend_p = displacement_rate_time_trend(displacement_rate)
+
+        assert np.isnan(year_trend_r)
+        assert np.isnan(year_trend_p)
+
+    def test_a_perfectly_declining_series_gives_r_of_minus_one(self):
+        displacement_rate = pd.Series({2020: 0.03, 2021: 0.02, 2022: 0.01})
+
+        _, year_trend_r, year_trend_p = displacement_rate_time_trend(displacement_rate)
+
+        assert year_trend_r == pytest.approx(-1.0)
+        assert year_trend_p < 0.05
+
+    def test_matches_the_real_dws_long_tenured_series_reported_in_the_coordinator_review(self):
+        """Regression check against the live pipeline output: 10 distinct values across
+        21 years (2005-2025), and a strong negative correlation with calendar year — the
+        confound the AI-era-D-minimum finding in docs/framework.md rests on."""
+        displacement_rate = pd.Series(
+            {
+                2005: 0.008848425419758504,
+                2006: 0.008848425419758504,
+                2007: 0.01688823852474123,
+                2008: 0.01688823852474123,
+                2009: 0.015307117466583973,
+                2010: 0.015307117466583973,
+                2011: 0.010461399052676006,
+                2012: 0.010461399052676006,
+                2013: 0.007557217088373526,
+                2014: 0.007557217088373526,
+                2015: 0.006786927750146161,
+                2016: 0.006786927750146161,
+                2017: 0.005945218418827273,
+                2018: 0.005945218418827273,
+                2019: 0.008018639600501951,
+                2020: 0.008018639600501951,
+                2021: 0.005605539566169941,
+                2022: 0.005605539566169941,
+                2023: 0.006948740328963536,
+                2024: 0.006948740328963536,
+                2025: 0.006948740328963536,
+            }
+        )
+
+        n_distinct_values, year_trend_r, year_trend_p = displacement_rate_time_trend(displacement_rate)
+
+        assert n_distinct_values == 10
+        assert year_trend_r == pytest.approx(-0.684, abs=0.001)
+        assert year_trend_p == pytest.approx(0.0006, abs=0.0001)
+
+
 class TestCorrelateWithDisplacementRate:
     """
     correlate_with_displacement_rate keys the displacement lookup on the raw
@@ -377,6 +442,24 @@ class TestCorrelateWithDisplacementRate:
 
         assert not result_df.empty
         assert result_df.iloc[0]["n_periods"] == len(periods)
+
+    def test_reports_the_distinct_value_count_and_the_year_trend_beside_the_correlation(self, monkeypatch):
+        """The regressor for a DWS/MLR-style source repeats one window average across every
+        year it covers, so the reported n_periods overstates the independent information in
+        it; this diagnostic must be measured and attached, not left implicit."""
+        periods = ["2007_2008", "2008_2009", "2009_2010", "2010_2011", "2011_2012"]
+        correlation_df = _correlation_frame(list(zip(periods, [0.1, 0.3, 0.2, 0.4, 0.5])))
+        # A perfectly monotonic-in-time, two-distinct-value regressor: an unambiguous fixture
+        # to check the diagnostic's arithmetic against by hand.
+        fake_displacement_rate = pd.Series({2008: 0.010, 2009: 0.010, 2010: 0.010, 2011: 0.030, 2012: 0.030})
+        monkeypatch.setattr(historical_displacement, "economy_displacement_rate", lambda *args, **kwargs: fake_displacement_rate)
+
+        result_df = correlate_with_displacement_rate(correlation_df, source="dws_long_tenured")
+
+        assert not result_df.empty
+        assert result_df.iloc[0]["n_distinct_displacement_values"] == 2
+        assert result_df.iloc[0]["displacement_vs_year_r"] > 0.85  # strongly rising with year by construction
+        assert result_df.iloc[0]["displacement_vs_year_p"] < 0.1
 
     def test_source_parameter_selects_the_named_displacement_rate(self, monkeypatch):
         """Default is productivity; passing source="dws_long_tenured" (or any other named
@@ -420,7 +503,19 @@ class TestPrintDisplacementRateTracking:
         assert "Skipped" in captured_output
 
     def test_prints_each_score_row_for_a_non_empty_tracking_frame(self, capsys):
-        tracking_df = pd.DataFrame([{"score": COMPOSITION_SCORE_COLUMN, "pearson_r": 0.42, "pearson_p": 0.03, "n_periods": 8}])
+        tracking_df = pd.DataFrame(
+            [
+                {
+                    "score": COMPOSITION_SCORE_COLUMN,
+                    "pearson_r": 0.42,
+                    "pearson_p": 0.03,
+                    "n_periods": 8,
+                    "n_distinct_displacement_values": 5,
+                    "displacement_vs_year_r": -0.68,
+                    "displacement_vs_year_p": 0.0006,
+                }
+            ]
+        )
 
         print_displacement_rate_tracking(tracking_df, "productivity")
 
@@ -428,6 +523,8 @@ class TestPrintDisplacementRateTracking:
         assert "productivity" in captured_output
         assert COMPOSITION_SCORE_COLUMN in captured_output
         assert "+0.420" in captured_output
+        assert "5 distinct" in captured_output
+        assert "-0.680" in captured_output
 
 
 class TestOccupationLevelCorrelation:

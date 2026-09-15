@@ -200,24 +200,46 @@ def _find_table_page_text(article_pdf_path: str) -> str:
     raise ValueError(f"No page containing a Table 2 caption found in {article_pdf_path}")
 
 
-def _locate_periods_and_data_lines(article_pdf_path: str) -> tuple[list[tuple[str, int, int]], list[str]]:
-    """Find Table 2's period header on the caption page and return the periods plus the lines after it.
+def _locate_periods_and_data_lines_from_text(
+    page_text: str, source_label: str = "<extracted text>"
+) -> tuple[list[tuple[str, int, int]], list[str]]:
+    """Find Table 2's period header in an already-extracted page's text and return the periods plus the lines after it.
+
+    This is the PDF-independent half of `_locate_periods_and_data_lines`: it does
+    the actual fragile parsing (locating the header row, decoding period labels,
+    handling dot leaders and wrapped labels via `_iter_table_rows`) without ever
+    calling `pdfplumber`. Split out specifically so that parsing can be exercised
+    in tests against a committed plain-text fixture of a real extracted page
+    (`tests/fixtures/mlr_table2_1999_article.txt`) — this parser's zero CI
+    coverage was a Minor finding in the 2026-09-15 final review, since all
+    real-PDF tests `skipif` on files CI never downloads.
 
     Shared by `parse_displacement_rate_table` (the leaf occupation rows) and
     `parse_total_displacement_rate` (the economy-wide total row): both tables are
     the same page, the same header, and the same row-continuation format, so both
-    parse from this one pass rather than each re-finding the page and the header.
+    parse from this one pass rather than each re-finding the header.
     """
-    page_text = _find_table_page_text(article_pdf_path)
     lines = page_text.splitlines()
 
     header_line_index = next((index for index, line in enumerate(lines) if line.strip().startswith("Characteristic")), None)
     if header_line_index is None:
-        raise ValueError(f"No 'Characteristic ...' header row found in the Table 2 page of {article_pdf_path}")
+        raise ValueError(f"No 'Characteristic ...' header row found in the Table 2 page of {source_label}")
     periods = _parse_period_header(lines[header_line_index])
     if len(periods) == 0:
-        raise ValueError(f"Parsed zero periods from the header row of {article_pdf_path}")
+        raise ValueError(f"Parsed zero periods from the header row of {source_label}")
     return periods, lines[header_line_index + 1 :]
+
+
+def _locate_periods_and_data_lines(article_pdf_path: str) -> tuple[list[tuple[str, int, int]], list[str]]:
+    """Find Table 2's period header on the caption page of a PDF and return the periods plus the lines after it.
+
+    A thin wrapper around `_locate_periods_and_data_lines_from_text`: this
+    function's own job is only the PDF-specific page lookup (`_find_table_page_text`,
+    which requires `pdfplumber` and a real PDF file); the parsing itself is the
+    pure function above.
+    """
+    page_text = _find_table_page_text(article_pdf_path)
+    return _locate_periods_and_data_lines_from_text(page_text, source_label=article_pdf_path)
 
 
 def _iter_table_rows(data_lines: list[str], period_count: int) -> list[tuple[str, list[str]]]:
@@ -248,17 +270,24 @@ def _iter_table_rows(data_lines: list[str], period_count: int) -> list[tuple[str
     return rows
 
 
-def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
-    """Parse Table 2's leaf occupation rows out of an MLR displaced-worker article PDF.
+_RATE_TABLE_COLUMNS = [
+    "period_label",
+    "period_start_year",
+    "period_end_year",
+    "mlr_occupation",
+    "displacement_rate_percent",
+]
 
-    Returns a long-form DataFrame with one row per (occupation, period) pair, columns
-    `period_label, period_start_year, period_end_year, mlr_occupation,
-    displacement_rate_percent`, restricted to the occupations in `MLR_OCCUPATION_LEAVES`
-    (matched by normalised label, so a row survives inter-article wording drift) and always
-    emitted under that tuple's canonical spelling.
+
+def _rate_records_from_periods_and_lines(periods: list[tuple[str, int, int]], data_lines: list[str]) -> list[dict[str, str | int | float]]:
+    """Match each data line's occupation label against MLR_OCCUPATION_LEAVES and expand it into one record per period.
+
+    The pure row-selection half of `parse_displacement_rate_table`, taking already-located
+    periods and data lines rather than a PDF path — shared with
+    `parse_displacement_rate_table`'s text-fixture-backed tests
+    (tests/test_mlr_displacement.py), so those tests exercise this exact leaf-matching and
+    canonicalisation logic rather than a re-implementation of it.
     """
-    periods, data_lines = _locate_periods_and_data_lines(article_pdf_path)
-
     records = []
     for occupation_label, value_tokens in _iter_table_rows(data_lines, len(periods)):
         canonical_occupation_label = _LEAF_KEY_TO_CANONICAL_LABEL.get(_normalize_occupation_key(occupation_label))
@@ -276,17 +305,21 @@ def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
                     "displacement_rate_percent": displacement_rate_percent,
                 }
             )
+    return records
 
-    return pd.DataFrame(
-        records,
-        columns=[
-            "period_label",
-            "period_start_year",
-            "period_end_year",
-            "mlr_occupation",
-            "displacement_rate_percent",
-        ],
-    )
+
+def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
+    """Parse Table 2's leaf occupation rows out of an MLR displaced-worker article PDF.
+
+    Returns a long-form DataFrame with one row per (occupation, period) pair, columns
+    `period_label, period_start_year, period_end_year, mlr_occupation,
+    displacement_rate_percent`, restricted to the occupations in `MLR_OCCUPATION_LEAVES`
+    (matched by normalised label, so a row survives inter-article wording drift) and always
+    emitted under that tuple's canonical spelling.
+    """
+    periods, data_lines = _locate_periods_and_data_lines(article_pdf_path)
+    records = _rate_records_from_periods_and_lines(periods, data_lines)
+    return pd.DataFrame(records, columns=_RATE_TABLE_COLUMNS)
 
 
 # Table 2's economy-wide row, immediately under the header and above the White-collar /

@@ -1,0 +1,65 @@
+Worker Displacement
+of losing their jobs in nearly a decade and the second lowest dustry was 2.5 percent, slightly lower than the rate recorded
+since the early 1980s. The job loss rate for construction workers during 1993–94 (2.8 percent). In the 1998 survey, workers in
+during 1995–96 (3.4 percent) was the lowest measured since the wholesale and retail trade had the highest displacement rate in
+inception of the Displaced Worker Survey. (See table 2.) the service-producing sector (4.3 percent). For much of the 1980s,
+Within the service-producing sector, workers in the services the probability of a government worker losing a job was much
+industry, which includes business, health, and educational serv- lower than that of a worker employed in private industry. In 1991–
+ices, continued to have the lowest probability of losing their 92, however, the displacement rate for government workers rose
+jobs. During 1995–96, the displacement rate for the services in- to more than 1 percent, and the rate even edged up to 1.4 percent
+Table 2. Displacement rates of long-tenured workers, by industry, class of worker, and occupation of lost job, 1981–96
+[In percent]
+Characteristic 1981–82 1983–84 1985–86 1987–88 1989–90 1991–92¹ 1993–94¹ 1995–96¹
+Total, 20 years and older............. 3.9 3.1 3.1 2.4 3.1 3.9 3.3 2.9
+Industry and class of worker
+Nonagricultural private wage and
+salary workers................................... 5.3 4.2 4.3 3.2 4.1 5.1 4.4 3.8
+Mining................................................. 13.6 9.2 17.8 6.1 10.0 7.4 7.2 4.5
+Construction....................................... 7.6 5.5 7.0 4.2 5.9 8.4 4.3 3.4
+Manufacturing..................................... 8.2 6.5 5.2 3.9 5.0 7.1 5.8 5.1
+Durable goods................................... 9.3 7.0 5.8 4.0 5.1 8.4 6.3 4.6
+Nondurable goods............................. 6.4 5.6 4.1 3.7 4.9 5.2 5.1 5.8
+Transportation and public utilities....... 4.1 3.8 3.1 1.8 3.6 4.4 4.3 3.8
+Wholesale and retail trade.................. 3.7 3.1 4.3 3.6 3.9 4.7 4.6 4.3
+Finance, insurance, and real estate... 1.4 1.3 3.5 2.8 3.5 5.5 4.7 3.5
+Services............................................. 2.3 2.1 2.3 1.7 2.1 2.9 2.8 2.5
+Agricultural wage and salary workers....... 5.4 9.7 4.1 2.5 3.2 3.8 3.4 2.2
+Government workers............................. 1.2 .6 .4 .4 .4 1.1 1.3 1.4
+Occupation
+White-collar occupations²...................... 2.6 2.1 2.6 2.1 2.7 3.7 3.3 2.9
+Managerial and professional specialty. 2.1 1.8 2.1 1.8 2.3 3.6 2.9 2.3
+Executive, administrative, and
+managerial..................................... 2.5 2.4 2.8 2.5 3.4 4.8 3.5 2.7
+Professional specialty...................... 1.7 1.2 1.4 1.1 1.3 2.4 2.4 2.0
+Technical, sales, and administrative
+support.......................................... 3.0 2.4 3.1 2.5 3.1 3.7 3.7 3.6
+Technicians and related support....... 3.3 2.9 3.0 2.2 3.2 3.7 3.4 3.6
+Sales occupations............................ 3.7 2.8 3.2 2.7 2.9 3.6 3.4 3.8
+Administrative support, including
+clerical......................................... 2.5 2.0 3.1 2.4 3.2 3.8 3.9 3.5
+Service occupations............................. 2.0 1.8 1.9 1.5 1.6 2.1 1.8 2.1
+Protective services............................ 1.3 1.9 .5 .6 1.2 .8 .6 2.0
+Other service occupations................. 2.1 1.7 2.2 1.6 1.7 2.3 2.1 2.2
+Blue-collar occupations3....................... 7.3 5.7 4.7 3.3 4.5 5.3 4.2 3.5
+Precision production, craft, and repair 6.2 4.5 3.9 2.7 4.2 5.1 3.4 3.1
+Mechanics and repairers.................. 4.8 3.8 2.1 2.1 3.4 3.7 3.3 3.1
+Construction trades.......................... 5.3 4.0 4.1 2.4 4.2 5.5 2.2 2.4
+Other precision production
+occupations................................... 8.5 5.6 5.5 3.7 5.1 6.4 4.7 3.8
+Operators, fabricators, and laborers.. 8.2 6.7 5.5 3.8 4.8 5.5 5.0 3.8
+Machine operators, assemblers,
+and inspectors.............................. 9.6 8.1 5.9 4.5 6.2 6.7 5.5 4.9
+Transportation and material-moving
+occupations................................... 5.7 3.7 4.8 3.1 3.6 4.1 4.1 2.1
+Handlers, equipment cleaners,
+helpers, and laborers.................... 8.0 7.6 5.2 3.0 3.0 4.9 5.4 3.9
+Farming, forestry, and fishing............... .9 2.1 1.6 .8 1.5 1.4 .8 1.4
+¹Beginning with the 1991–92 period, data are not directly comparable with data NOTE: Displacement rates are calculated by dividing the number of
+from earlier periods, due to differences in estimation methodology. displaced workers in a specified worker group by a tenure-adjusted, 2-
+²White-collar occupations are made up of those occupations in the “managerial year average estimate of employment for the same worker group. Em-
+and professional specialty” and those occupations in the “technical, sales, and ployment estimates for each year were adjusted, using job-tenure data
+administrative support” categories. from the January 1983, 1987, and 1991 and February 1996 and 1998
+3Blue-collar occupations are defined as the sum of those occupations in the CPS supplements, to include only those workers with 3 or more years of
+“precision production, craft, and repair” and those occupations in the “operators, tenure. A 2-year average was then computed using the adjusted em-
+fabricators, and laborers” categories. ployment estimates.
+18 Monthly Labor Review July 1999

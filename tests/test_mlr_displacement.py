@@ -4,17 +4,23 @@ import os
 import subprocess
 import sys
 
+import pandas as pd
 import pytest
 
 from mlr_displacement import (
     MLR_OCCUPATION_LEAVES,
+    _iter_table_rows,
+    _locate_periods_and_data_lines_from_text,
     _normalize_occupation_key,
+    _rate_records_from_periods_and_lines,
     parse_displacement_rate_table,
     parse_total_displacement_rate,
 )
 
 ARTICLE_PATH = "data/raw/dws/mlr/mid_1990s_1999.pdf"
 ARTICLE_PRESENT = os.path.exists(ARTICLE_PATH)
+
+TABLE2_TEXT_FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "mlr_table2_1999_article.txt")
 
 ARTICLE_PATH_2001 = "data/raw/dws/mlr/strong_labor_market_2001.pdf"
 ARTICLE_PRESENT_2001 = os.path.exists(ARTICLE_PATH_2001)
@@ -58,6 +64,98 @@ class TestOccupationKeyNormalization:
         assert _normalize_occupation_key("Transportation and material-moving occupations") == _normalize_occupation_key(
             "Transportation and material moving occupations"
         )
+
+
+class TestRateTableParsingFromCommittedTextFixture:
+    """Exercises the real, fragile parsing logic — _locate_periods_and_data_lines_from_text,
+    _iter_table_rows, and _rate_records_from_periods_and_lines, the same functions
+    parse_displacement_rate_table and parse_total_displacement_rate call after finding the
+    PDF page — against a committed plain-text fixture of the real extracted Table 2 page
+    from the 1999 MLR article (tests/fixtures/mlr_table2_1999_article.txt, copied verbatim
+    from pdfplumber's own extract_text() output for data/raw/dws/mlr/mid_1990s_1999.pdf, not
+    hand-written), rather than a synthetic string.
+
+    Runs unconditionally, unlike every other test in this file, which `skipif`s on a
+    gitignored PDF that CI never downloads (`uv sync --locked` plus `pytest tests/`, with
+    no `data/` at all) — closing the zero-CI-coverage gap the 2026-09-15 final review found
+    in this parser (Important finding I5). The real extract also carries the actual
+    extraction fragility this parser exists to handle, which a hand-built fixture might
+    accidentally sanitize away: dot leaders, wrapped labels ("Executive, administrative,
+    and" / "managerial......"), and a footnote superscript glued onto a label
+    ("White-collar occupations²"). Keep the real-PDF tests below as they are, additionally.
+    """
+
+    @staticmethod
+    def _fixture_text():
+        with open(TABLE2_TEXT_FIXTURE_PATH, encoding="utf-8") as fixture_file:
+            return fixture_file.read()
+
+    def test_eight_periods_are_recovered(self):
+        periods, _ = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        assert [period_label for period_label, _, _ in periods] == [
+            "1981-82",
+            "1983-84",
+            "1985-86",
+            "1987-88",
+            "1989-90",
+            "1991-92",
+            "1993-94",
+            "1995-96",
+        ]
+
+    def test_wrapped_labels_are_reassembled(self):
+        """'Executive, administrative, and' wraps onto its own line ahead of the line
+        carrying 'managerial......' and its values."""
+        periods, data_lines = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        rows = dict(_iter_table_rows(data_lines, len(periods)))
+        assert "Executive, administrative, and managerial" in rows
+
+    def test_footnote_superscript_glued_onto_a_label_does_not_corrupt_it(self):
+        """'White-collar occupations²......' must not leave the superscript glued to the
+        label. The preceding standalone "Occupation" section header carries forward and
+        prepends (the same pending-label-fragment behaviour that reassembles a wrapped
+        label), so the recovered key is "Occupation White-collar occupations", not the
+        bare label alone -- what matters here is that no key anywhere contains the raw
+        superscript glyph."""
+        periods, data_lines = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        rows = dict(_iter_table_rows(data_lines, len(periods)))
+        assert "Occupation White-collar occupations" in rows
+        assert not any("²" in label for label in rows)
+
+    def test_the_total_row_is_recovered_at_the_known_published_value(self):
+        periods, data_lines = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        rows = dict(_iter_table_rows(data_lines, len(periods)))
+        assert rows["Total, 20 years and older"][0] == "3.9"
+
+    def test_parse_displacement_rate_table_recovers_a_known_published_value(self):
+        """Sales occupations, 1981-82, is published as 3.7 percent -- runs the actual
+        production leaf-matching and canonicalisation logic
+        (_rate_records_from_periods_and_lines), the same code
+        parse_displacement_rate_table calls on a real PDF path."""
+        periods, data_lines = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        records = _rate_records_from_periods_and_lines(periods, data_lines)
+        rate_df = pd.DataFrame(records)
+
+        row = rate_df[(rate_df.mlr_occupation == "Sales occupations") & (rate_df.period_label == "1981-82")]
+        assert row["displacement_rate_percent"].iloc[0] == pytest.approx(3.7)
+
+    def test_parse_displacement_rate_table_recovers_a_leading_decimal_value(self):
+        """Protective services, 1985-86, is printed as '.5' with no leading zero."""
+        periods, data_lines = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        records = _rate_records_from_periods_and_lines(periods, data_lines)
+        rate_df = pd.DataFrame(records)
+
+        row = rate_df[(rate_df.mlr_occupation == "Protective services") & (rate_df.period_label == "1985-86")]
+        assert row["displacement_rate_percent"].iloc[0] == pytest.approx(0.5)
+
+    def test_parse_displacement_rate_table_recovers_every_leaf(self):
+        periods, data_lines = _locate_periods_and_data_lines_from_text(self._fixture_text())
+        records = _rate_records_from_periods_and_lines(periods, data_lines)
+        rate_df = pd.DataFrame(records)
+
+        assert set(rate_df["mlr_occupation"].unique()) == set(MLR_OCCUPATION_LEAVES)
+        counts = rate_df.groupby("mlr_occupation")["period_label"].nunique()
+        assert (counts == 8).all()
 
 
 @pytest.mark.skipif(not ARTICLE_PRESENT, reason="MLR article not downloaded; run download_dws.py")

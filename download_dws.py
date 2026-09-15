@@ -24,14 +24,20 @@ are listed in ARCHIVE_RELEASE_URLS. Unlike the current release, which splits its
 tables across three URLs, each archive carries all of its tables inline in one
 page, so one file per survey year is the whole payload.
 
+Also fetched here: the three Monthly Labor Review displaced-worker articles that
+carry the pre-2008 history the news-release archives do not reach (see
+MLR_ARTICLE_URLS). These are PDFs, not HTML; a later step parses them.
+
 Inputs:
   • https://www.bls.gov/news.release/disp.t{02,05,08}.htm
   • https://www.bls.gov/news.release/archives/disp_<MMDDYYYY>.htm (nine surveys)
+  • https://www.bls.gov/opub/mlr/<year>/<month>/art<n>full.pdf (three MLR articles)
   • BLS_CONTACT_EMAIL (environment, via .env) — see below
 
 Outputs:
   • data/raw/dws/disp_t{02,05,08}.html
   • data/raw/dws/archives/disp_<year>.html
+  • data/raw/dws/mlr/<article_key>.pdf
 
 The current release is a rolling page carrying only the latest biennial survey,
 so history accumulates in seeds/dws_displacement_panel.csv. See dws_panel.py for
@@ -166,6 +172,43 @@ def download_archived_releases(request_headers: dict[str, str], output_dir: str 
     return written_paths
 
 
+MLR_DIR = "data/raw/dws/mlr"
+
+# The Monthly Labor Review displaced-worker series, from the BLS subject index at
+# https://www.bls.gov/opub/mlr/subject/d.htm. These carry the pre-2008 history the
+# news-release archives do not reach. All three verified reachable 2026-09-14.
+MLR_ARTICLE_URLS: dict[str, str] = {
+    "mid_1990s_1999": "https://www.bls.gov/opub/mlr/1999/07/art2full.pdf",
+    "strong_labor_market_2001": "https://www.bls.gov/opub/mlr/2001/06/art2full.pdf",
+    "displacement_1999_2000_2004": "https://www.bls.gov/opub/mlr/2004/06/art4full.pdf",
+}
+
+
+def download_mlr_articles(request_headers: dict[str, str], output_dir: str = MLR_DIR) -> list[str]:
+    """Fetch the MLR displaced-worker articles, skipping any already on disk.
+
+    Warns and skips on failure rather than raising, matching how every other
+    download in this module degrades so the pipeline still renders from the seed.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    written_paths = []
+    for article_key, url in sorted(MLR_ARTICLE_URLS.items()):
+        destination = os.path.join(output_dir, f"{article_key}.pdf")
+        if os.path.exists(destination):
+            written_paths.append(destination)
+            continue
+        try:
+            response = requests.get(url, headers=request_headers, timeout=REQUEST_TIMEOUT_SECONDS)
+            response.raise_for_status()
+        except requests.RequestException as request_error:
+            warnings.warn(f"Could not fetch MLR article {article_key}: {request_error}", stacklevel=2)
+            continue
+        with open(destination, "wb") as article_file:
+            article_file.write(response.content)
+        written_paths.append(destination)
+    return written_paths
+
+
 def main() -> None:
     """Download all three DWS release tables, failing soft under CI."""
     os.makedirs(RAW_RELEASE_DIR, exist_ok=True)
@@ -192,6 +235,14 @@ def main() -> None:
         for caught_warning in caught_warnings:
             print(f"  ⚠ {caught_warning.message}")
     print(f"  ✓ {len(archived_paths)} of {len(ARCHIVE_RELEASE_URLS)} archived releases available")
+
+    print("Downloading Monthly Labor Review displaced-worker articles...")
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        warnings.simplefilter("always")
+        mlr_article_paths = download_mlr_articles(request_headers)
+        for caught_warning in caught_warnings:
+            print(f"  ⚠ {caught_warning.message}")
+    print(f"  ✓ {len(mlr_article_paths)} of {len(MLR_ARTICLE_URLS)} MLR articles available")
 
 
 if __name__ == "__main__":

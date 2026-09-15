@@ -279,6 +279,19 @@ class TestArchiveUrls:
         assert all("/news.release/archives/" in url for url in ARCHIVE_RELEASE_URLS.values())
 
 
+class TestMlrArticleUrls:
+    def test_three_articles_cover_the_pre_2008_window(self):
+        from download_dws import MLR_ARTICLE_URLS
+
+        assert set(MLR_ARTICLE_URLS) == {"mid_1990s_1999", "strong_labor_market_2001", "displacement_1999_2000_2004"}
+
+    def test_urls_point_at_the_verified_pdfs(self):
+        from download_dws import MLR_ARTICLE_URLS
+
+        assert MLR_ARTICLE_URLS["mid_1990s_1999"].endswith("/opub/mlr/1999/07/art2full.pdf")
+        assert MLR_ARTICLE_URLS["displacement_1999_2000_2004"].endswith("/opub/mlr/2004/06/art4full.pdf")
+
+
 class TestArchiveParsing:
     """Parsing the four archived releases that render their tables as HTML."""
 

@@ -310,6 +310,22 @@ class TestArchiveParsing:
         assert panel_df["period_end_year"].iloc[0] == 2021
         assert panel_df["period_years"].iloc[0] == 3
 
+    def test_the_window_is_not_derived_from_the_survey_year_by_a_fixed_offset(self):
+        """Every real archive has window == survey_year-3..survey_year-1, so no real
+        fixture can tell a correct parser from one applying a fixed offset. This
+        states a window matching no offset from any survey year.
+        """
+        from dws_panel import _parse_archived_period
+
+        release_html = "<html><body><p>Workers displaced between January 2010 and December 2014.</p></body></html>"
+        assert _parse_archived_period(release_html) == (2010, 2014)
+
+    def test_an_unreadable_window_raises_rather_than_guessing(self):
+        from dws_panel import _parse_archived_period
+
+        with pytest.raises(ValueError):
+            _parse_archived_period("<html><body><p>No window stated here.</p></body></html>")
+
     def test_counts_are_positive_and_suppressed_values_are_not_zero(self):
         panel_df = parse_archived_release(self._fixture_html(), 2022)
         present = panel_df["displaced_thousands"].dropna()

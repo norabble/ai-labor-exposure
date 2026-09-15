@@ -202,6 +202,7 @@ class TestMergePanel:
             "period_years": 3,
             "source_table": "table_5_occupation",
             "group_name": group_name,
+            "mlr_occupation": "",
             "soc_majors": "43",
             "displaced_thousands": displaced_thousands,
             "reason": "all",
@@ -470,3 +471,22 @@ class TestArchiveTextParsing:
 
         assert (present_counts > 0).all()
         assert len(present_counts) == 9
+
+
+class TestMeasurementBasis:
+    def test_existing_rows_are_labelled_as_counts(self):
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        modern = panel_df[panel_df["survey_year"] >= 2008]
+        assert (modern["measurement_basis"] == "count_thousands").all()
+
+    def test_mlr_rows_are_labelled_as_rates(self):
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        historical = panel_df[panel_df["survey_year"] < 2008]
+        assert not historical.empty
+        assert (historical["measurement_basis"] == "rate_percent").all()
+
+    def test_rates_and_counts_are_never_summed_together(self):
+        """A single survey year must not mix bases — that is the blend this column exists to prevent."""
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        per_year = panel_df.groupby("survey_year")["measurement_basis"].nunique()
+        assert (per_year == 1).all()

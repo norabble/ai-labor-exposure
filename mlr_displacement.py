@@ -7,10 +7,17 @@ periods. This module locates that table inside an already-downloaded article PDF
 occupation rows into a long-form DataFrame, extending displacement-rate history back before
 the Displaced Worker Supplement panel's 2008 archive coverage begins.
 
-Inputs: an MLR article PDF path, read with `pdfplumber`.
-Outputs: `parse_displacement_rate_table` returns a DataFrame with columns
-`period_label, period_start_year, period_end_year, mlr_occupation, displacement_rate_percent`,
-restricted to the leaf occupation rows named in `MLR_OCCUPATION_LEAVES`.
+Inputs:
+  • an MLR article PDF path, read with `pdfplumber`
+  • seeds/mlr_occupation_crosswalk.csv  (committed reference data, read by `load_mlr_crosswalk`)
+
+Outputs:
+  • `parse_displacement_rate_table` returns a DataFrame with columns
+    `period_label, period_start_year, period_end_year, mlr_occupation, displacement_rate_percent`,
+    restricted to the leaf occupation rows named in `MLR_OCCUPATION_LEAVES`.
+  • `load_mlr_crosswalk` / `MLR_TO_DWS_GROUP` — the 1980-census-to-modern-DWS-group
+    crosswalk, consumed by `dws_panel.mlr_rows_for_panel` to fold these rates into
+    the DWS displacement panel.
 """
 
 import re
@@ -103,7 +110,7 @@ def load_mlr_crosswalk(path: str = MLR_CROSSWALK_PATH) -> pd.DataFrame:
     missing_columns = [column for column in MLR_CROSSWALK_COLUMNS if column not in crosswalk_df.columns]
     if missing_columns:
         raise ValueError(f"{path} lacks columns {missing_columns}")
-    return crosswalk_df
+    return crosswalk_df[MLR_CROSSWALK_COLUMNS]
 
 
 # Built from the seed at import time, mirroring how DWS_TO_SOC_MAJOR is a plain module-level

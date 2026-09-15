@@ -593,20 +593,30 @@ is really a claim about its composition class. Relaxing this — plausibly by
 weighting with a Routine Task Intensity index built from the O\*NET data already
 on disk — is the first thing to try next.
 
-**The DWS panel reaches 2008, not the spec's 1984 floor.** An earlier note here
-claimed BLS published no archive of prior Displaced Worker Supplement releases,
-so the panel held only the single January 2026 survey; that claim was wrong —
-see the correction in `CLAUDE.md` under `seeds/dws_displacement_panel.csv` — and
-the panel now holds ten biennial surveys, 2008–2026. This bounds the amplitude
-and time-variation work more generously than one survey did, though the
-cross-sectional correlations remain invariant to `D` either way. The archive
-itself is the hard floor: no BLS news-release archive exists for 2000–2006, so
-2008 is as far back as this route goes. The productivity-based `D` already
-spans further, 1984–2025. Recovering DWS coverage between 1984 and 2008 would
-need the Displaced Worker Supplement results BLS published in *Monthly Labor
-Review* articles rather than news releases — verified reachable as PDFs, though
-they leave a gap of their own between roughly 1997 and 2007 — and is a named
-follow-on, not yet attempted.
+**The DWS panel reaches 2008 as counts, not the spec's 1984 floor — extended back
+to 1981-82 as rates.** An earlier note here claimed BLS published no archive of
+prior Displaced Worker Supplement releases, so the panel held only the single
+January 2026 survey; that claim was wrong — see the correction in `CLAUDE.md`
+under `seeds/dws_displacement_panel.csv` — and the panel now holds ten biennial
+surveys, 2008–2026, as counts. The archive itself is the hard floor for that
+route: no BLS news-release archive exists for 2000–2006, so 2008 is as far back
+as counted releases go. Pre-2008 history instead comes from the Displaced Worker
+Supplement results BLS published in *Monthly Labor Review* articles rather than
+news releases — as displacement *rates* on the 1980-census occupational
+taxonomy, not counts, crosswalked to the ten modern DWS groups
+(`seeds/mlr_occupation_crosswalk.csv`, `mlr_displacement.py`). One crosswalk row
+(`Handlers, equipment cleaners, helpers, and laborers`) is flagged low-confidence
+because it genuinely splits across the modern production and
+transportation/material-moving groups; the crosswalk sends the whole 1980-census
+bucket to one side as a judgement call, not a fact. Combined coverage is 1981-82
+through 2023-25, with a hole at 2001-04: BLS published neither a news-release
+archive nor an MLR article for the 2002 or 2004 surveys. Because rates cannot be
+summed with counts, the two bases are kept distinguishable in the panel
+(`measurement_basis`, `source` columns) rather than blended, and every consumer
+that aggregates `displaced_thousands` filters to counts only — so this extension
+adds history without changing any existing correlation. The productivity-based
+`D` already spans further still, 1984–2025, and the cross-sectional correlations
+remain invariant to `D` either way.
 
 ### Future investigation: the business cycle
 

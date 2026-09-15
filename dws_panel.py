@@ -15,12 +15,19 @@ this project cares about: it is technological and organisational displacement
 with the cyclical and demand-shock reasons already separated out, which no
 employment or unemployment series achieves without statistical purging.
 
-Like CPS Table A-19, the release is a rolling web page — BLS replaces it in place
-with each new survey and publishes no archive of prior releases (checked
-2026-09-12: /news.release/archives/disp_*.htm, /bls/news-release/disp.htm and
-/data/archived.htm all 404, and web.archive.org is unreachable from CI). History
-therefore exists only in the committed seed panel, which accumulates forward one
-survey at a time, exactly as seeds/cps_a19_panel.csv does.
+Like CPS Table A-19, the current release is a rolling web page — BLS replaces it
+in place with each new survey, carrying only the latest survey at any time. Nine
+archives of prior releases do exist, at
+https://www.bls.gov/news.release/archives/disp_<MMDDYYYY>.htm for survey years
+2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022, and 2024 (verified 2026-09-14; an
+earlier note here claiming no archive existed was wrong — it probed the wrong
+release dates). Surveys 2000-2006 genuinely have no archive. History before 2008
+therefore comes from the Monthly Labor Review displaced-worker article series
+instead (see mlr_displacement.py), as displacement *rates* rather than counts.
+Even with the archive, the rolling current-release page is still replaced in
+place each cycle, so history overall exists only in the committed seed panel,
+which accumulates forward one survey at a time, exactly as seeds/cps_a19_panel.csv
+does.
 
 Three tables are parsed:
   • Table 2 — long-tenured displaced workers by reason for job loss
@@ -32,9 +39,25 @@ Inputs:
   • data/raw/dws/disp_t02.html        (optional — latest release, from download_dws.py)
   • data/raw/dws/disp_t05.html
   • data/raw/dws/disp_t08.html
+  • mlr_displacement.parse_displacement_rate_table output  (via mlr_rows_for_panel,
+    consumed by the seed-rebuild script described in the project's implementation
+    plan, not by load_dws_panel itself)
 
 Outputs:
   • data/output/dws_displacement_panel.csv  (seed panel merged with the latest release)
+
+The panel carries two measurement bases, distinguished by the `measurement_basis`
+column (`count_thousands` or `rate_percent`) and the `source` column
+(`news_release`, `news_release_archive`, or `mlr_article`): counted DWS releases
+for survey years 2008 onward, and rates read off the pre-2008 Monthly Labor
+Review article series (see mlr_displacement.py) for 1983 through 2001. The two
+bases are never blended — a rate and a count cannot be summed — so every
+consumer that aggregates `displaced_thousands` must filter to
+`measurement_basis == "count_thousands"` first; `mlr_rows_for_panel` is the
+function that reshapes the MLR rate table into this panel's row shape, one row
+per (period, MLR occupation leaf) rather than per (period, DWS group), because
+four DWS groups each receive two MLR leaves and rates cannot be collapsed into
+one without employment weights the MLR tables never published.
 
 Table 5 publishes ten leaf occupation groups nested under five broad ones. Only
 the leaves are kept, and together they cover all 22 SOC major groups exactly
@@ -66,9 +89,16 @@ import re
 
 import pandas as pd
 
+from mlr_displacement import MLR_TO_DWS_GROUP
+
 SEED_PANEL_PATH = "seeds/dws_displacement_panel.csv"
 RAW_RELEASE_DIR = "data/raw/dws"
 OUTPUT_PANEL_PATH = "data/output/dws_displacement_panel.csv"
+
+# The two measurement bases a panel row can carry. Rates and counts must never be
+# summed together — see mlr_rows_for_panel and the module docstring.
+COUNT_MEASUREMENT_BASIS = "count_thousands"
+RATE_MEASUREMENT_BASIS = "rate_percent"
 
 PANEL_COLUMNS = [
     "survey_year",
@@ -77,10 +107,14 @@ PANEL_COLUMNS = [
     "period_years",
     "source_table",
     "group_name",
+    "mlr_occupation",
     "soc_majors",
     "displaced_thousands",
+    "displacement_rate_percent",
     "reason",
     "tenure_class",
+    "measurement_basis",
+    "source",
 ]
 
 # Ten leaf occupation groups from Table 5, each mapped to the SOC major groups it
@@ -267,6 +301,7 @@ def parse_archived_release(archive_html: str, survey_year: int) -> pd.DataFrame:
     release_panel_df["period_start_year"] = period_start_year
     release_panel_df["period_end_year"] = period_end_year
     release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    release_panel_df["source"] = "news_release_archive"
     return release_panel_df[PANEL_COLUMNS]
 
 
@@ -313,6 +348,9 @@ def _occupation_rows(occupation_table_df: pd.DataFrame) -> pd.DataFrame:
     occupation_df["source_table"] = "table_5_occupation"
     occupation_df["reason"] = "all"
     occupation_df["tenure_class"] = "long_tenured"
+    occupation_df["mlr_occupation"] = ""
+    occupation_df["displacement_rate_percent"] = float("nan")
+    occupation_df["measurement_basis"] = COUNT_MEASUREMENT_BASIS
     return occupation_df
 
 
@@ -355,6 +393,9 @@ def _reason_rows(reason_table_df: pd.DataFrame) -> pd.DataFrame:
                 "source_table": "table_2_reason",
                 "reason": reason_label,
                 "tenure_class": "long_tenured",
+                "mlr_occupation": "",
+                "displacement_rate_percent": float("nan"),
+                "measurement_basis": COUNT_MEASUREMENT_BASIS,
             }
         )
     return pd.DataFrame(reason_rows)
@@ -514,6 +555,7 @@ def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataF
     release_panel_df["period_start_year"] = period_start_year
     release_panel_df["period_end_year"] = period_end_year
     release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    release_panel_df["source"] = "news_release_archive"
     return release_panel_df[PANEL_COLUMNS]
 
 
@@ -537,6 +579,9 @@ def parse_total_table(release_html_path: str) -> pd.DataFrame:
                 "source_table": "table_8_all_tenures",
                 "reason": "all",
                 "tenure_class": "all_tenures",
+                "mlr_occupation": "",
+                "displacement_rate_percent": float("nan"),
+                "measurement_basis": COUNT_MEASUREMENT_BASIS,
             }
         ]
     )
@@ -558,14 +603,21 @@ def build_release_panel(raw_release_dir: str = RAW_RELEASE_DIR) -> pd.DataFrame:
     release_panel_df["period_start_year"] = period_start_year
     release_panel_df["period_end_year"] = period_end_year
     release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    release_panel_df["source"] = "news_release"
     return release_panel_df[PANEL_COLUMNS]
 
 
 def merge_panel(existing_panel_df: pd.DataFrame, new_release_df: pd.DataFrame) -> pd.DataFrame:
-    """Merge a freshly parsed release into the accumulated panel, the new release winning ties."""
+    """Merge a freshly parsed release into the accumulated panel, the new release winning ties.
+
+    `mlr_occupation` is part of the dedup key alongside the original five columns
+    because four DWS groups each receive two MLR leaf rows sharing every other
+    key column (see mlr_rows_for_panel) — without it, this drop_duplicates would
+    silently collapse one of every colliding pair on every merge.
+    """
     combined_panel_df = pd.concat([existing_panel_df, new_release_df], ignore_index=True)
     combined_panel_df = combined_panel_df.drop_duplicates(
-        subset=["survey_year", "source_table", "group_name", "reason", "tenure_class"], keep="last"
+        subset=["survey_year", "source_table", "group_name", "reason", "tenure_class", "mlr_occupation"], keep="last"
     )
     return combined_panel_df.sort_values(["survey_year", "source_table", "group_name", "reason"]).reset_index(drop=True)
 
@@ -582,7 +634,9 @@ def load_dws_panel(
     """
     existing_panel_df = pd.DataFrame(columns=PANEL_COLUMNS)
     if os.path.exists(seed_path):
-        existing_panel_df = pd.read_csv(seed_path, dtype={"soc_majors": str}).fillna({"soc_majors": ""})
+        existing_panel_df = pd.read_csv(seed_path, dtype={"soc_majors": str, "mlr_occupation": str}).fillna(
+            {"soc_majors": "", "mlr_occupation": ""}
+        )
 
     release_panel_df = None
     if os.path.exists(os.path.join(raw_release_dir, "disp_t05.html")):
@@ -605,3 +659,53 @@ def load_dws_panel(
         panel_df.to_csv(output_path, index=False)
 
     return panel_df
+
+
+def mlr_rows_for_panel(rate_df: pd.DataFrame) -> pd.DataFrame:
+    """Reshape parse_displacement_rate_table output into DWS panel rows.
+
+    Emits one row per (period, MLR occupation leaf) — NOT one row per (period, DWS
+    group) — because four DWS groups each receive two MLR leaves (professional and
+    related occupations gets Professional specialty and Technicians and related
+    support; service occupations gets Protective services and Other service
+    occupations; production occupations gets Other precision production
+    occupations and Machine operators, assemblers, and inspectors; transportation
+    and material moving occupations gets Transportation and material-moving
+    occupations and Handlers, equipment cleaners, helpers, and laborers). These
+    are rates, so they cannot be summed, and averaging them would need employment
+    weights the MLR tables never published — an unweighted mean would be a
+    fabricated number baked into a committed seed. `group_name` carries the
+    crosswalked DWS group so these rows sit beside the archive rows' occupation
+    groups; the new `mlr_occupation` column preserves the native 1980-census
+    label so the colliding pairs stay visible in the data rather than silently
+    merged, leaving the weighting decision to whichever consumer eventually needs
+    one group-level number.
+
+    `survey_year` is `period_end_year + 1` — the same rule the modern archive rows
+    already follow (a 2026 survey covers 2023-2025, a 2008 survey covers
+    2005-2007), so one derivation covers the whole panel. It is a panel key, not a
+    literal fieldwork date for these pre-2008 periods: the real mid-1990s DWS
+    surveys used a recall window longer than three years, and the true period is
+    always in `period_start_year` / `period_end_year`, not in `survey_year`.
+
+    Raises ValueError if any mlr_occupation in rate_df has no entry in
+    MLR_TO_DWS_GROUP, rather than silently dropping an occupation from the panel.
+    """
+    panel_rows_df = rate_df.copy()
+
+    panel_rows_df["group_name"] = panel_rows_df["mlr_occupation"].map(MLR_TO_DWS_GROUP)
+    unmapped_occupations = sorted(panel_rows_df.loc[panel_rows_df["group_name"].isna(), "mlr_occupation"].unique())
+    if unmapped_occupations:
+        raise ValueError(f"No DWS group crosswalk entry for MLR occupations: {unmapped_occupations}")
+
+    panel_rows_df["soc_majors"] = panel_rows_df["group_name"].map(lambda dws_group: "|".join(DWS_TO_SOC_MAJOR[dws_group]))
+    panel_rows_df["survey_year"] = panel_rows_df["period_end_year"] + 1
+    panel_rows_df["period_years"] = panel_rows_df["period_end_year"] - panel_rows_df["period_start_year"] + 1
+    panel_rows_df["source_table"] = "mlr_table_2_occupation"
+    panel_rows_df["tenure_class"] = "long_tenured"
+    panel_rows_df["reason"] = "all"
+    panel_rows_df["displaced_thousands"] = float("nan")
+    panel_rows_df["measurement_basis"] = RATE_MEASUREMENT_BASIS
+    panel_rows_df["source"] = "mlr_article"
+
+    return panel_rows_df[PANEL_COLUMNS]

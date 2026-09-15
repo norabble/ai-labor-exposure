@@ -83,7 +83,7 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 
-from dws_panel import DWS_TO_SOC_MAJOR, load_dws_panel
+from dws_panel import COUNT_MEASUREMENT_BASIS, DWS_TO_SOC_MAJOR, load_dws_panel
 
 COMPOSITION_REPORT_PATH = "data/output/occupation_composition_model_report.csv"
 DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
@@ -114,12 +114,29 @@ def soc_major_to_dws_group() -> dict[str, str]:
     return {major: group_name for group_name, majors in DWS_TO_SOC_MAJOR.items() for major in majors}
 
 
+def _count_measured_rows(displacement_panel_df: pd.DataFrame) -> pd.DataFrame:
+    """Restrict the panel to counted rows before any Table 5 aggregation.
+
+    Filtering by `OCCUPATION_TABLE` already excludes the pre-2008 MLR rate rows
+    structurally, since those carry `source_table == "mlr_table_2_occupation"`,
+    never `"table_5_occupation"`. This filter is defense in depth on top of that,
+    so a future source_table added under either measurement basis cannot silently
+    mix a rate into a count sum. The column is optional here (rather than
+    required) so hand-built panel fixtures that predate it still exercise this
+    module unchanged.
+    """
+    if "measurement_basis" in displacement_panel_df.columns:
+        return displacement_panel_df[displacement_panel_df["measurement_basis"] == COUNT_MEASUREMENT_BASIS]
+    return displacement_panel_df
+
+
 def observed_displacement_by_group(displacement_panel_df: pd.DataFrame, survey_year: int | None = None) -> pd.DataFrame:
     """Measured displaced workers per DWS occupation group, from Table 5.
 
     Uses the most recent survey unless one is named. Groups whose count was
     suppressed (base under 75,000) are dropped rather than read as zero.
     """
+    displacement_panel_df = _count_measured_rows(displacement_panel_df)
     occupation_rows_df = displacement_panel_df[displacement_panel_df["source_table"] == OCCUPATION_TABLE]
     if occupation_rows_df.empty:
         return pd.DataFrame(columns=["dws_group", "soc_majors", "observed_displaced_thousands"])
@@ -268,6 +285,7 @@ def build_displacement_comparison_panel(displacement_panel_df: pd.DataFrame) -> 
         ai_employment_col = sorted(column for column in dynamic_df.columns if column.startswith("TOT_EMP_"))[-1]
         dynamic_predicted_df = predicted_displacement_by_group(dynamic_df, "gross_displacement", ai_employment_col)
 
+    displacement_panel_df = _count_measured_rows(displacement_panel_df)
     occupation_rows_df = displacement_panel_df[displacement_panel_df["source_table"] == OCCUPATION_TABLE]
     if occupation_rows_df.empty:
         return None

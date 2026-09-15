@@ -269,7 +269,16 @@ def dws_displacement_rate(
     abolished". For the long-tenured tenure class the release reports that reason
     directly; for all tenures it is applied as a share, because the release does
     not break short-tenured displacement down by reason.
+
+    Restricted to `measurement_basis == "count_thousands"` rows when that column
+    is present, so the pre-2008 MLR rate rows (see dws_panel.mlr_rows_for_panel)
+    never reach this count-based arithmetic — a rate and a count cannot be summed.
+    The column is optional here (rather than required) so hand-built panel
+    fixtures that predate it still exercise this function unchanged.
     """
+    if "measurement_basis" in displacement_panel_df.columns:
+        displacement_panel_df = displacement_panel_df[displacement_panel_df["measurement_basis"] == "count_thousands"]
+
     rate_by_year: dict[int, float] = {}
 
     for survey_year, survey_df in displacement_panel_df.groupby("survey_year"):

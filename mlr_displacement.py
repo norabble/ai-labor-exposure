@@ -20,7 +20,7 @@ Outputs:
     Table 2's economy-wide "Total, 20 years and older" row — consumed by
     `historical_displacement.mlr_displacement_rate` as a displacement-rate D source
     distinct from (never spliced onto) the DWS count-derived sources.
-  • `load_mlr_crosswalk` / `MLR_TO_DWS_GROUP` — the 1980-census-to-modern-DWS-group
+  • `load_mlr_crosswalk` / `mlr_to_dws_group` — the 1980-census-to-modern-DWS-group
     crosswalk, consumed by `dws_panel.mlr_rows_for_panel` to fold these rates into
     the DWS displacement panel.
 """
@@ -55,7 +55,14 @@ MLR_OCCUPATION_LEAVES = (
     "Farming, forestry, and fishing",
 )
 
-_TABLE_CAPTION = "Table 2"
+# Anchored on the caption itself ("Table 2. Displacement rates of long-tenured
+# workers..."), not a bare "Table 2" substring: MLR prose style lowercases its own
+# cross-references ("table 2"), so the risk of a false match today is low, but an
+# unanchored substring would still match "Table 2" inside a prose cross-reference
+# on an earlier page before ever reaching the caption page, and the failure would
+# be silent — the wrong page just happens not to carry a "Characteristic" header,
+# or worse, happens to carry unrelated numbers that get parsed as Table 2's own.
+_TABLE_CAPTION_PATTERN = re.compile(r"^\s*Table 2\.", re.MULTILINE)
 _DOT_LEADER_PATTERN = re.compile(r"\.{2,}")
 _SUPERSCRIPT_PATTERN = re.compile(r"[¹²³⁰-⁹]+")
 _NUMBER_TOKEN_PATTERN = re.compile(r"\.?\d+(?:\.\d+)?")
@@ -118,10 +125,20 @@ def load_mlr_crosswalk(path: str = MLR_CROSSWALK_PATH) -> pd.DataFrame:
     return crosswalk_df[MLR_CROSSWALK_COLUMNS]
 
 
-# Built from the seed at import time, mirroring how DWS_TO_SOC_MAJOR is a plain module-level
-# dict in dws_panel.py — callers look this up without re-reading the CSV on every use.
-_MLR_CROSSWALK_DF = load_mlr_crosswalk()
-MLR_TO_DWS_GROUP: dict[str, str] = dict(zip(_MLR_CROSSWALK_DF["mlr_occupation"], _MLR_CROSSWALK_DF["dws_group"]))
+def mlr_to_dws_group(path: str = MLR_CROSSWALK_PATH) -> dict[str, str]:
+    """Build the 1980-census-to-DWS-group lookup from the crosswalk seed, at call time.
+
+    Read fresh on every call rather than cached at import — the same choice
+    `harmonize_soc.load_aggregate_codes` makes for its own seed file. Building this
+    at import time instead (an earlier version of this module did) made `import
+    dws_panel` — and transitively `historical_displacement` and
+    `composition_displacement_validation` — raise `FileNotFoundError` from any
+    working directory other than the repo root, since the whole project otherwise
+    assumes cwd=root throughout. The crosswalk is small (14 rows), so re-reading it
+    on each call costs nothing worth caching against.
+    """
+    crosswalk_df = load_mlr_crosswalk(path)
+    return dict(zip(crosswalk_df["mlr_occupation"], crosswalk_df["dws_group"]))
 
 
 def _strip_footnote_superscripts(text: str) -> str:
@@ -178,9 +195,9 @@ def _find_table_page_text(article_pdf_path: str) -> str:
     with pdfplumber.open(article_pdf_path) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text() or ""
-            if _TABLE_CAPTION in page_text:
+            if _TABLE_CAPTION_PATTERN.search(page_text):
                 return page_text
-    raise ValueError(f"No page containing a {_TABLE_CAPTION!r} caption found in {article_pdf_path}")
+    raise ValueError(f"No page containing a Table 2 caption found in {article_pdf_path}")
 
 
 def _locate_periods_and_data_lines(article_pdf_path: str) -> tuple[list[tuple[str, int, int]], list[str]]:

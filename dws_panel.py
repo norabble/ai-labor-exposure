@@ -102,7 +102,7 @@ import re
 
 import pandas as pd
 
-from mlr_displacement import MLR_TO_DWS_GROUP
+from mlr_displacement import mlr_to_dws_group
 
 SEED_PANEL_PATH = "seeds/dws_displacement_panel.csv"
 RAW_RELEASE_DIR = "data/raw/dws"
@@ -868,11 +868,11 @@ def mlr_rows_for_panel(rate_df: pd.DataFrame) -> pd.DataFrame:
     always in `period_start_year` / `period_end_year`, not in `survey_year`.
 
     Raises ValueError if any mlr_occupation in rate_df has no entry in
-    MLR_TO_DWS_GROUP, rather than silently dropping an occupation from the panel.
+    mlr_to_dws_group(), rather than silently dropping an occupation from the panel.
     """
     panel_rows_df = rate_df.copy()
 
-    panel_rows_df["group_name"] = panel_rows_df["mlr_occupation"].map(MLR_TO_DWS_GROUP)
+    panel_rows_df["group_name"] = panel_rows_df["mlr_occupation"].map(mlr_to_dws_group())
     unmapped_occupations = sorted(panel_rows_df.loc[panel_rows_df["group_name"].isna(), "mlr_occupation"].unique())
     if unmapped_occupations:
         raise ValueError(f"No DWS group crosswalk entry for MLR occupations: {unmapped_occupations}")

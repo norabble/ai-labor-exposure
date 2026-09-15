@@ -1,6 +1,8 @@
 """Tests for mlr_displacement.py — parsing displacement rates out of the MLR article PDFs."""
 
 import os
+import subprocess
+import sys
 
 import pytest
 
@@ -217,24 +219,68 @@ class TestTotalDisplacementRateParsing:
 
 class TestCrosswalk:
     def test_every_leaf_has_a_mapping(self):
-        from mlr_displacement import MLR_OCCUPATION_LEAVES, MLR_TO_DWS_GROUP
+        from mlr_displacement import MLR_OCCUPATION_LEAVES, mlr_to_dws_group
 
-        assert set(MLR_OCCUPATION_LEAVES) <= set(MLR_TO_DWS_GROUP)
+        assert set(MLR_OCCUPATION_LEAVES) <= set(mlr_to_dws_group())
 
     def test_every_target_is_a_real_dws_group(self):
         from dws_panel import DWS_TO_SOC_MAJOR
-        from mlr_displacement import MLR_TO_DWS_GROUP
+        from mlr_displacement import mlr_to_dws_group
 
-        assert set(MLR_TO_DWS_GROUP.values()) <= set(DWS_TO_SOC_MAJOR)
+        assert set(mlr_to_dws_group().values()) <= set(DWS_TO_SOC_MAJOR)
 
     def test_all_ten_modern_groups_are_reachable(self):
         from dws_panel import DWS_TO_SOC_MAJOR
-        from mlr_displacement import MLR_TO_DWS_GROUP
+        from mlr_displacement import mlr_to_dws_group
 
-        assert set(MLR_TO_DWS_GROUP.values()) == set(DWS_TO_SOC_MAJOR)
+        assert set(mlr_to_dws_group().values()) == set(DWS_TO_SOC_MAJOR)
 
     def test_low_confidence_mappings_are_flagged(self):
         from mlr_displacement import load_mlr_crosswalk
 
         crosswalk_df = load_mlr_crosswalk()
         assert (crosswalk_df["mapping_confidence"] == "low").any()
+
+    def test_below_high_confidence_mappings_are_flagged(self):
+        """Two rows sit below `high` confidence, not just the one `low` row: the
+        handlers/equipment-cleaners/helpers/laborers row (low, a genuine split across
+        the modern production and transportation/material-moving groups) and `Other
+        precision production occupations` (medium, a judgement-call boundary). An
+        earlier version of CLAUDE.md, docs/framework.md and the chart doc mentioned
+        only the low row."""
+        from mlr_displacement import load_mlr_crosswalk
+
+        crosswalk_df = load_mlr_crosswalk()
+        below_high = crosswalk_df[crosswalk_df["mapping_confidence"] != "high"]
+
+        assert set(below_high["mapping_confidence"]) == {"low", "medium"}
+
+    def test_importing_dws_panel_does_not_require_cwd_to_be_the_repo_root(self):
+        """Regression test for the defect mlr_to_dws_group()'s docstring describes: an
+        earlier version of this module read seeds/mlr_occupation_crosswalk.csv at
+        import time with a relative path, so `import dws_panel` (which imports this
+        module) raised FileNotFoundError from any cwd other than the repo root. Runs
+        the import in a subprocess from outside the repo so a regression is caught
+        even though every other test in this suite runs from the repo root."""
+        project_root = os.path.dirname(os.path.abspath(__file__)) + "/.."
+        result = subprocess.run(
+            [sys.executable, "-c", "import dws_panel"],
+            cwd="/tmp",
+            env={**os.environ, "PYTHONPATH": os.path.abspath(project_root)},
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stderr
+
+    def test_mlr_to_dws_group_is_called_fresh_each_time_not_cached_at_import(self):
+        """mlr_to_dws_group() must be safe to call from any cwd — it is called at
+        call time, not built once at import, so `import dws_panel` (and
+        transitively historical_displacement and composition_displacement_validation)
+        cannot fail with FileNotFoundError just from importing this module."""
+        import mlr_displacement
+
+        assert "MLR_TO_DWS_GROUP" not in dir(mlr_displacement)
+        first_call = mlr_displacement.mlr_to_dws_group()
+        second_call = mlr_displacement.mlr_to_dws_group()
+        assert first_call == second_call
+        assert first_call is not second_call

@@ -19,6 +19,8 @@ Inputs:
 
 Outputs:
   • data/output/occupation_composition_model_report.csv
+  • data/output/historical_displacement_rate.csv (rebuilt by run_stage, so a
+    pipeline run refreshes D's own table rather than shipping a stale commit)
 
 The model
 ─────────
@@ -76,6 +78,7 @@ as a claim about its composition class.
 """
 
 import os
+import warnings
 
 import pandas as pd
 
@@ -222,6 +225,35 @@ def attach_composition_dominant_demand(composition_model_df: pd.DataFrame) -> pd
     return attach_dominant_demand(composition_model_df)
 
 
+def write_displacement_rate_table() -> None:
+    """Rebuild D's own table so a pipeline run does not ship a stale one.
+
+    historical_displacement.py writes this file only under its own __main__ gate,
+    so before this call no pipeline stage or Makefile target produced it and
+    `make run-pipeline` shipped whatever was last committed. The model itself does
+    not read the file — build_composition_model takes D from
+    economy_displacement_rate() directly — so a failure here must warn and let the
+    stage continue, exactly as cps_historical_panel.run_stage() does with its own
+    fetch. The file is a reporting artifact; the model is unaffected either way.
+    """
+    from historical_displacement import OUTPUT_PATH, build_displacement_rate_table
+
+    try:
+        displacement_rate_df = build_displacement_rate_table()
+    except Exception as build_error:  # a reporting artifact must never break the stage
+        warnings.warn(f"Could not rebuild the displacement rate table ({build_error})", stacklevel=2)
+        return
+
+    if displacement_rate_df.empty:
+        warnings.warn("The displacement rate table came back empty; leaving any existing file in place", stacklevel=2)
+        return
+
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    displacement_rate_df.to_csv(OUTPUT_PATH, index=False)
+    year_span = f"{int(displacement_rate_df['year'].min())}-{int(displacement_rate_df['year'].max())}"
+    print(f"  Wrote {OUTPUT_PATH} ({displacement_rate_df['source'].nunique()} sources, {year_span})")
+
+
 def run_stage() -> None:
     """The full demand composition experiment: build the model, then both validations.
 
@@ -238,6 +270,7 @@ def run_stage() -> None:
     # cps_group_trends.csv for the CPS level of the era comparison — on a fresh
     # clone or in CI that file does not exist until this stage writes it.
     cps_historical_panel.run_stage()
+    write_displacement_rate_table()
     composition_era_validation.run()
     composition_displacement_validation.run()
 

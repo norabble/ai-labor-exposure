@@ -132,18 +132,19 @@ DEFAULT_SOURCE = "dws_structural_all_tenures"
 # constraint was the DWS's 1984 floor.
 DEFAULT_START_YEAR = 1981
 
-# The DWS asked about displacement over the previous five years through the 1992
-# survey and three years from 1994 on. Every survey currently in the panel is on
-# the three-year window; this exists so a pre-1994 extension cannot inherit the
-# wrong divisor by accident.
-RECALL_WINDOW_CHANGE_YEAR = 1994
-
 OUTPUT_COLUMNS = ["year", "source", "displacement_rate", "n_observations", "is_interpolated"]
 
-
-def recall_window_years(survey_year: int) -> int:
-    """Years of displacement a given DWS survey asked about."""
-    return 3 if survey_year >= RECALL_WINDOW_CHANGE_YEAR else 5
+# A pre-1994 DWS survey asked about displacement over the previous five years
+# rather than three (see dws_panel.py's release parsers), but every survey window
+# length is read directly off the panel's own `period_years` column — computed
+# by every producer as `period_end_year - period_start_year + 1` from the parsed
+# survey window itself — so no `survey_year`-keyed lookup table is needed to
+# reconstruct it. A `recall_window_years(survey_year)` helper keyed on
+# RECALL_WINDOW_CHANGE_YEAR = 1994 previously stood in as a fallback for a
+# missing `period_years` value; it was removed (2026-09-15) because every panel
+# producer always sets `period_years`, so the fallback branch was provably
+# unreachable and had no test that exercised it as a fallback (only the
+# standalone function was tested).
 
 
 @functools.cache
@@ -284,29 +285,32 @@ def dws_displacement_rate(
     Each survey reports displacement over the three calendar years preceding it
     (five for surveys before 1994), so the resulting rate is an annual average over
     that window and is assigned to every year in it. The window length is read from
-    the panel's own `period_years` column when present; `recall_window_years` keyed
-    on `survey_year` is the fallback, so a row that never records `period_years`
-    cannot silently inherit the wrong (three-year) divisor for a pre-1994 survey.
+    the panel's own `period_years` column, which every panel producer
+    (`dws_panel.py`'s four release parsers) always sets from the parsed survey
+    window, so no fallback is needed here.
 
     When structural_only is set, the count is restricted to "position or shift
     abolished". For the long-tenured tenure class the release reports that reason
     directly; for all tenures it is applied as a share, because the release does
     not break short-tenured displacement down by reason.
 
-    Restricted to `measurement_basis == "count_thousands"` rows when that column
-    is present, so the pre-2008 MLR rate rows (see dws_panel.mlr_rows_for_panel)
-    never reach this count-based arithmetic — a rate and a count cannot be summed.
-    The column is optional here (rather than required) so hand-built panel
-    fixtures that predate it still exercise this function unchanged.
+    Restricted to `measurement_basis == "count_thousands"` rows: the pre-2008 MLR
+    rate rows (see dws_panel.mlr_rows_for_panel) must never reach this count-based
+    arithmetic — a rate and a count cannot be summed. The column is REQUIRED, not
+    optional, because a mutation test showed that treating it as optional (`if
+    "measurement_basis" in ...columns`) made this filter an unreachable no-op:
+    every real caller already carries the column, so the conditional only ever
+    existed to let a hand-built test fixture skip it — precisely the anti-pattern
+    this project rejected elsewhere as a Critical defect (weakening production
+    code to suit a fixture, rather than fixing the fixture). Callers must supply
+    `measurement_basis`; see tests/test_historical_displacement.py's `_panel` helper.
     """
-    if "measurement_basis" in displacement_panel_df.columns:
-        displacement_panel_df = displacement_panel_df[displacement_panel_df["measurement_basis"] == "count_thousands"]
+    displacement_panel_df = displacement_panel_df[displacement_panel_df["measurement_basis"] == "count_thousands"]
 
     rate_by_year: dict[int, float] = {}
 
     for survey_year, survey_df in displacement_panel_df.groupby("survey_year"):
-        period_years_value = survey_df["period_years"].iloc[0]
-        period_years = int(period_years_value) if pd.notna(period_years_value) else recall_window_years(int(survey_year))
+        period_years = int(survey_df["period_years"].iloc[0])
         period_start_year = int(survey_df["period_start_year"].iloc[0])
         period_end_year = int(survey_df["period_end_year"].iloc[0])
 

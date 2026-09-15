@@ -612,7 +612,27 @@ class TestMeasurementBasis:
         assert (historical["measurement_basis"] == "rate_percent").all()
 
     def test_rates_and_counts_are_never_summed_together(self):
-        """A single survey year must not mix bases — that is the blend this column exists to prevent."""
+        """Replaces the earlier version of this test, which only asserted that each
+        survey_year in the committed seed happens to carry one measurement_basis — a
+        property of the `period_end_year + 1` key derivation (MLR keys are odd years,
+        DWS count keys even), not of any consumer's summing behaviour; it would still
+        pass with both production filters deleted, because on the real seed the
+        separation also holds by two incidental mechanisms (MLR rows carry NaN counts
+        under `table_5_occupation`/`table_8_all_tenures`/`table_2_reason`, and use a
+        distinct `source_table`, `mlr_table_2_occupation`, that neither consumer reads).
+        A test that reuses the real seed cannot distinguish the filter mattering from
+        those incidental mechanisms already protecting it, so the actually-discriminating
+        versions of this property are synthetic and live beside each production
+        consumer: `test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_rate`
+        (tests/test_historical_displacement.py, for `dws_displacement_rate`) and
+        `test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_observed_total`
+        (tests/test_composition_displacement_validation.py, for `_count_measured_rows`).
+        Both construct a rate row that shares its consumer's own source_table and a
+        large, non-NaN `displaced_thousands`, and both were verified by deleting their
+        production filter and confirming the test then fails. What this test still
+        checks, meaningfully: the seed's own survey_year-to-measurement_basis mapping,
+        which the two synthetic tests above take as given rather than re-deriving.
+        """
         panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
         per_year = panel_df.groupby("survey_year")["measurement_basis"].nunique()
         assert (per_year == 1).all()

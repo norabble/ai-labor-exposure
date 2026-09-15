@@ -38,7 +38,12 @@ comparison is the headline.
 
 The economy-wide displacement rate D cancels here for the same reason it cancels
 from every cross-sectional correlation — it is one scalar multiplying every
-occupation's displacement, so it leaves the shares untouched.
+occupation's displacement, so it leaves the shares untouched. That cancellation
+is analytic, not bit-exact: changing D's source window reproduces every reported
+statistic at displayed precision but not at the ~1e-13 relative level, confirmed
+harmless by rerunning the unmodified pipeline twice first (byte-identical) and
+isolating the drift to D's changed magnitude rather than run-to-run
+nondeterminism.
 
 What this test cannot do
 ────────────────────────
@@ -121,13 +126,14 @@ def _count_measured_rows(displacement_panel_df: pd.DataFrame) -> pd.DataFrame:
     structurally, since those carry `source_table == "mlr_table_2_occupation"`,
     never `"table_5_occupation"`. This filter is defense in depth on top of that,
     so a future source_table added under either measurement basis cannot silently
-    mix a rate into a count sum. The column is optional here (rather than
-    required) so hand-built panel fixtures that predate it still exercise this
-    module unchanged.
+    mix a rate into a count sum. The column is REQUIRED, not optional: a mutation
+    test showed that the earlier `if "measurement_basis" in ...columns` form made
+    this filter an unreachable no-op in production, kept only for hand-built test
+    fixtures that predated the column — the same fixture-over-production-code
+    trade-off this project rejected elsewhere as a Critical defect. Callers must
+    supply `measurement_basis`; see this module's tests' `_panel` helper.
     """
-    if "measurement_basis" in displacement_panel_df.columns:
-        return displacement_panel_df[displacement_panel_df["measurement_basis"] == COUNT_MEASUREMENT_BASIS]
-    return displacement_panel_df
+    return displacement_panel_df[displacement_panel_df["measurement_basis"] == COUNT_MEASUREMENT_BASIS]
 
 
 def observed_displacement_by_group(displacement_panel_df: pd.DataFrame, survey_year: int | None = None) -> pd.DataFrame:

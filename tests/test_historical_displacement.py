@@ -49,6 +49,10 @@ def _panel(
         "period_start_year": period_start_year,
         "period_end_year": period_end_year,
         "period_years": period_years,
+        # dws_displacement_rate REQUIRES this column (see its docstring) — every real
+        # producer of a DWS panel row sets it, so a fixture that omits it is not
+        # representative of any panel the function actually receives.
+        "measurement_basis": "count_thousands",
     }
     rows = [
         {
@@ -129,25 +133,6 @@ def _total_rate_df(periods=((1984, 1985, 3.0), (1986, 1987, 3.0))):
     )
 
 
-class TestRecallWindow:
-    def test_modern_surveys_use_a_three_year_window(self):
-        from historical_displacement import recall_window_years
-
-        assert recall_window_years(2008) == 3
-        assert recall_window_years(2026) == 3
-
-    def test_pre_1994_surveys_use_a_five_year_window(self):
-        from historical_displacement import recall_window_years
-
-        assert recall_window_years(1992) == 5
-        assert recall_window_years(1984) == 5
-
-    def test_the_boundary_year_itself_is_three(self):
-        from historical_displacement import recall_window_years
-
-        assert recall_window_years(1994) == 3
-
-
 class TestWidenedRange:
     def test_default_start_year_reaches_the_mlr_series(self):
         """1981 is mlr_long_tenured's own floor, now the binding constraint on D's reach
@@ -215,6 +200,30 @@ class TestDwsDisplacementRate:
             rate_series = dws_displacement_rate(_panel(), _employment(years=range(1990, 1993)), tenure_class="all_tenures")
 
         assert rate_series.empty
+
+    def test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_rate(self):
+        """Mutation-proof: this is the property test_rates_and_counts_are_never_summed_together
+        (tests/test_dws_panel.py) claimed to cover but did not — that test only asserted
+        the committed seed happens to keep one measurement_basis per survey_year, which
+        says nothing about what dws_displacement_rate actually does if a panel ever mixes
+        bases. Here a rate-basis row shares the real row's survey_year and source_table
+        ("table_8_all_tenures", what the all_tenures path sums) with a large, non-NaN
+        displaced_thousands. If the required `measurement_basis == "count_thousands"`
+        filter in dws_displacement_rate were ever weakened back to `if "measurement_basis"
+        in ...columns` or deleted outright, this row would be summed in and the rate
+        below would come out roughly 134x too high (999,999 / 7,445) instead of matching
+        the clean panel's own rate."""
+        clean_panel = _panel()
+        contaminating_row = clean_panel.iloc[[0]].copy()
+        assert contaminating_row["source_table"].iloc[0] == "table_8_all_tenures"
+        contaminating_row["displaced_thousands"] = 999_999.0
+        contaminating_row["measurement_basis"] = "rate_percent"
+        contaminated_panel = pd.concat([clean_panel, contaminating_row], ignore_index=True)
+
+        clean_rate_series = dws_displacement_rate(clean_panel, _employment(), tenure_class="all_tenures")
+        contaminated_rate_series = dws_displacement_rate(contaminated_panel, _employment(), tenure_class="all_tenures")
+
+        assert contaminated_rate_series.loc[2024] == pytest.approx(clean_rate_series.loc[2024])
 
     def test_accumulates_multiple_surveys(self):
         two_survey_panel = pd.concat(

@@ -49,6 +49,9 @@ def _panel(survey_year=2026, counts=None):
                 "displaced_thousands": count,
                 "reason": "all",
                 "tenure_class": "long_tenured",
+                # _count_measured_rows REQUIRES this column — every real panel producer
+                # sets it, so a fixture that omits it is not representative.
+                "measurement_basis": "count_thousands",
             }
             for group_name, count in counts.items()
         ]
@@ -115,6 +118,32 @@ class TestObservedDisplacementByGroup:
         reason_only_panel = _panel().assign(source_table="table_2_reason")
 
         assert observed_displacement_by_group(reason_only_panel).empty
+
+    def test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_observed_total(self):
+        """Mutation-proof: this is the property test_rates_and_counts_are_never_summed_together
+        (tests/test_dws_panel.py) claimed to cover but did not — that test only asserted the
+        committed seed happens to keep one measurement_basis per survey_year, which says
+        nothing about what observed_displacement_by_group does if a panel ever mixes bases.
+        Here a rate-basis row shares the real row's survey_year and source_table
+        ("table_5_occupation", what this function reads) with a large, non-NaN
+        displaced_thousands — the exact shape a pre-2008 MLR row has, except stamped as a
+        rate. build_displacement_comparison normalises every group's share against the sum
+        of this column, so an uncaught rate row here would corrupt every group's share, not
+        just its own. If the required `measurement_basis == "count_thousands"` filter in
+        _count_measured_rows were ever weakened back to `if "measurement_basis" in
+        ...columns` or deleted outright, the total below would jump from ~1,000 to
+        ~1,000,999 and the assertion would fail."""
+        clean_panel = _panel()
+        contaminating_row = clean_panel.iloc[[0]].copy()
+        assert contaminating_row["source_table"].iloc[0] == "table_5_occupation"
+        contaminating_row["displaced_thousands"] = 999_999.0
+        contaminating_row["measurement_basis"] = "rate_percent"
+        contaminated_panel = pd.concat([clean_panel, contaminating_row], ignore_index=True)
+
+        clean_total = observed_displacement_by_group(clean_panel)["observed_displaced_thousands"].sum()
+        contaminated_total = observed_displacement_by_group(contaminated_panel)["observed_displaced_thousands"].sum()
+
+        assert contaminated_total == pytest.approx(clean_total)
 
 
 class TestPredictedDisplacementByGroup:
@@ -244,6 +273,9 @@ class TestDisplacementPanel:
                         "displaced_thousands": 100.0 + index * 10,
                         "tenure_class": "long_tenured",
                         "reason": None,
+                        # _count_measured_rows REQUIRES this column — every real panel
+                        # producer sets it, so a fixture that omits it is unrepresentative.
+                        "measurement_basis": "count_thousands",
                     }
                 )
         return pd.DataFrame(rows)

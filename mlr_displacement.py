@@ -15,6 +15,11 @@ Outputs:
   • `parse_displacement_rate_table` returns a DataFrame with columns
     `period_label, period_start_year, period_end_year, mlr_occupation, displacement_rate_percent`,
     restricted to the leaf occupation rows named in `MLR_OCCUPATION_LEAVES`.
+  • `parse_total_displacement_rate` returns a DataFrame with columns
+    `period_label, period_start_year, period_end_year, displacement_rate_percent` for
+    Table 2's economy-wide "Total, 20 years and older" row — consumed by
+    `historical_displacement.mlr_displacement_rate` as a displacement-rate D source
+    distinct from (never spliced onto) the DWS count-derived sources.
   • `load_mlr_crosswalk` / `MLR_TO_DWS_GROUP` — the 1980-census-to-modern-DWS-group
     crosswalk, consumed by `dws_panel.mlr_rows_for_panel` to fold these rates into
     the DWS displacement panel.
@@ -178,6 +183,54 @@ def _find_table_page_text(article_pdf_path: str) -> str:
     raise ValueError(f"No page containing a {_TABLE_CAPTION!r} caption found in {article_pdf_path}")
 
 
+def _locate_periods_and_data_lines(article_pdf_path: str) -> tuple[list[tuple[str, int, int]], list[str]]:
+    """Find Table 2's period header on the caption page and return the periods plus the lines after it.
+
+    Shared by `parse_displacement_rate_table` (the leaf occupation rows) and
+    `parse_total_displacement_rate` (the economy-wide total row): both tables are
+    the same page, the same header, and the same row-continuation format, so both
+    parse from this one pass rather than each re-finding the page and the header.
+    """
+    page_text = _find_table_page_text(article_pdf_path)
+    lines = page_text.splitlines()
+
+    header_line_index = next((index for index, line in enumerate(lines) if line.strip().startswith("Characteristic")), None)
+    if header_line_index is None:
+        raise ValueError(f"No 'Characteristic ...' header row found in the Table 2 page of {article_pdf_path}")
+    periods = _parse_period_header(lines[header_line_index])
+    if len(periods) == 0:
+        raise ValueError(f"Parsed zero periods from the header row of {article_pdf_path}")
+    return periods, lines[header_line_index + 1 :]
+
+
+def _iter_table_rows(data_lines: list[str], period_count: int) -> list[tuple[str, list[str]]]:
+    """Parse Table 2's rows into (occupation_label, value_tokens) pairs.
+
+    A row's label sometimes wraps onto its own line ahead of the line carrying its
+    values (a section header, a wrapped label's first line, or footnote prose); such
+    a label-only line is carried forward in `pending_label_fragment` and prepended to
+    the next line that does parse as data — one that has at least one label token
+    ahead of its `period_count` trailing numeric tokens.
+    """
+    rows: list[tuple[str, list[str]]] = []
+    pending_label_fragment = ""
+    for line in data_lines:
+        cleaned_line = _strip_footnote_superscripts(_DOT_LEADER_PATTERN.sub(" ", line))
+        tokens = cleaned_line.split()
+
+        if len(tokens) <= period_count or not all(_NUMBER_TOKEN_PATTERN.fullmatch(token) for token in tokens[-period_count:]):
+            pending_label_fragment = f"{pending_label_fragment} {cleaned_line.strip()}".strip()
+            continue
+
+        value_tokens = tokens[-period_count:]
+        label_tokens = tokens[:-period_count]
+        occupation_label = f"{pending_label_fragment} {' '.join(label_tokens)}".strip().rstrip(".")
+        pending_label_fragment = ""
+        rows.append((occupation_label, value_tokens))
+
+    return rows
+
+
 def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
     """Parse Table 2's leaf occupation rows out of an MLR displaced-worker article PDF.
 
@@ -187,36 +240,10 @@ def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
     (matched by normalised label, so a row survives inter-article wording drift) and always
     emitted under that tuple's canonical spelling.
     """
-    page_text = _find_table_page_text(article_pdf_path)
-    lines = page_text.splitlines()
-
-    header_line_index = next((index for index, line in enumerate(lines) if line.strip().startswith("Characteristic")), None)
-    if header_line_index is None:
-        raise ValueError(f"No 'Characteristic ...' header row found in the Table 2 page of {article_pdf_path}")
-    periods = _parse_period_header(lines[header_line_index])
-    period_count = len(periods)
-    if period_count == 0:
-        raise ValueError(f"Parsed zero periods from the header row of {article_pdf_path}")
+    periods, data_lines = _locate_periods_and_data_lines(article_pdf_path)
 
     records = []
-    pending_label_fragment = ""
-    for line in lines[header_line_index + 1 :]:
-        cleaned_line = _strip_footnote_superscripts(_DOT_LEADER_PATTERN.sub(" ", line))
-        tokens = cleaned_line.split()
-
-        # A row needs at least one label token ahead of its period_count values; anything
-        # shorter, or whose trailing tokens aren't all numbers, is a label-only fragment
-        # (a section header, a wrapped label's first line, or footnote prose) to carry
-        # forward and prepend to the next row that does parse as data.
-        if len(tokens) <= period_count or not all(_NUMBER_TOKEN_PATTERN.fullmatch(token) for token in tokens[-period_count:]):
-            pending_label_fragment = f"{pending_label_fragment} {cleaned_line.strip()}".strip()
-            continue
-
-        value_tokens = tokens[-period_count:]
-        label_tokens = tokens[:-period_count]
-        occupation_label = f"{pending_label_fragment} {' '.join(label_tokens)}".strip().rstrip(".")
-        pending_label_fragment = ""
-
+    for occupation_label, value_tokens in _iter_table_rows(data_lines, len(periods)):
         canonical_occupation_label = _LEAF_KEY_TO_CANONICAL_LABEL.get(_normalize_occupation_key(occupation_label))
         if canonical_occupation_label is None:
             continue
@@ -243,3 +270,48 @@ def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
             "displacement_rate_percent",
         ],
     )
+
+
+# Table 2's economy-wide row, immediately under the header and above the White-collar /
+# Service / Blue-collar breakdown that MLR_OCCUPATION_LEAVES selects leaves from. Worded
+# exactly as all three articles print it (verified identical in mid_1990s_1999.pdf,
+# strong_labor_market_2001.pdf and displacement_1999_2000_2004.pdf).
+_TOTAL_ROW_LABEL = "Total, 20 years and older"
+_TOTAL_ROW_KEY = _normalize_occupation_key(_TOTAL_ROW_LABEL)
+
+
+def parse_total_displacement_rate(article_pdf_path: str) -> pd.DataFrame:
+    """Parse Table 2's economy-wide "Total, 20 years and older" row out of an MLR article PDF.
+
+    This is the displacement rate for all long-tenured workers 20 and older,
+    independent of occupation — the source `historical_displacement.mlr_displacement_rate`
+    turns into an annual economy-wide D estimate reaching back to 1981. Reuses the same
+    header/period location and row-continuation parsing as `parse_displacement_rate_table`
+    (via `_locate_periods_and_data_lines` / `_iter_table_rows`) rather than a second parser.
+
+    Returns a DataFrame with one row per period, columns `period_label,
+    period_start_year, period_end_year, displacement_rate_percent`. Raises ValueError
+    if the total row cannot be found on the Table 2 page.
+    """
+    periods, data_lines = _locate_periods_and_data_lines(article_pdf_path)
+
+    for occupation_label, value_tokens in _iter_table_rows(data_lines, len(periods)):
+        if _normalize_occupation_key(occupation_label) != _TOTAL_ROW_KEY:
+            continue
+
+        displacement_rates = [float(token) for token in value_tokens]
+        records = [
+            {
+                "period_label": period_label,
+                "period_start_year": period_start_year,
+                "period_end_year": period_end_year,
+                "displacement_rate_percent": displacement_rate_percent,
+            }
+            for (period_label, period_start_year, period_end_year), displacement_rate_percent in zip(periods, displacement_rates)
+        ]
+        return pd.DataFrame(
+            records,
+            columns=["period_label", "period_start_year", "period_end_year", "displacement_rate_percent"],
+        )
+
+    raise ValueError(f"No {_TOTAL_ROW_LABEL!r} row found in the Table 2 page of {article_pdf_path}")

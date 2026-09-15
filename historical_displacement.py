@@ -22,7 +22,7 @@ Outputs:
   • data/output/historical_displacement_rate.csv
   • data/raw/bls_api/<series_id>_<start>_<end>.json  (fetch cache)
 
-Five estimates are produced, so the model can be swept across D sources the way
+Six estimates are produced, so the model can be swept across D sources the way
 synthesize_dynamic.compute_equilibration_sensitivity sweeps the absorption
 scalar:
 
@@ -33,6 +33,14 @@ scalar:
                               share — assumes short-tenured workers are
                               displaced for the same mix of reasons, which the
                               release does not report
+  mlr_long_tenured            pre-2008 Monthly Labor Review displaced-worker
+                              articles' economy-wide rate, 1981-2000. A SEPARATE
+                              source from the four dws_* rows above, never
+                              spliced onto them: it divides by long-tenured
+                              workers employed, where the dws_* count-derived
+                              rows divide by total employment — two different
+                              quantities that happen to share units. See
+                              mlr_displacement_rate.
   productivity                smoothed nonfarm business output per hour
 
 Why the DWS is primary, and what was rejected — measured against BLS data
@@ -70,6 +78,7 @@ import requests
 from dotenv import load_dotenv
 
 from dws_panel import STRUCTURAL_REASON, load_dws_panel
+from mlr_displacement import parse_total_displacement_rate
 
 BLS_API_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 API_CACHE_DIR = "data/raw/bls_api"
@@ -98,16 +107,30 @@ DISPLACEMENT_SOURCES = (
     "dws_long_tenured",
     "dws_structural_long_tenured",
     "dws_structural_all_tenures",
+    "mlr_long_tenured",
     "productivity",
+)
+
+# Publication order of the three MLR articles (each covers more periods than the
+# last: 8, then 9, then 10) — see mlr_displacement.MLR_OCCUPATION_LEAVES's module
+# docstring and download_dws.MLR_ARTICLE_URLS for the source URLs these were
+# fetched from.
+MLR_ARTICLE_PATHS = (
+    "data/raw/dws/mlr/mid_1990s_1999.pdf",
+    "data/raw/dws/mlr/strong_labor_market_2001.pdf",
+    "data/raw/dws/mlr/displacement_1999_2000_2004.pdf",
 )
 
 DEFAULT_SOURCE = "dws_structural_all_tenures"
 
-# 1984 is the DWS's own start year (see dws_panel.py); the employment and CPS/OEWS
-# instruments reach back further still (1983 and 1999 respectively), and the
-# productivity series (PRS85006092) begins in 1947, so D is the binding constraint
-# on how far back the model's time variation can reach.
-DEFAULT_START_YEAR = 1984
+# 1981 is mlr_long_tenured's own start year — the earliest period the MLR articles'
+# Table 2 publishes (see mlr_displacement.py). The DWS count-derived sources start
+# in 1984 (see dws_panel.py); the employment and CPS/OEWS instruments reach back
+# further still (1983 and 1999 respectively), and the productivity series
+# (PRS85006092) begins in 1947. mlr_long_tenured is now the binding constraint on
+# how far back the model's time variation can reach; before it was added, that
+# constraint was the DWS's 1984 floor.
+DEFAULT_START_YEAR = 1981
 
 # The DWS asked about displacement over the previous five years through the 1992
 # survey and three years from 1994 on. Every survey currently in the panel is on
@@ -322,6 +345,61 @@ def dws_displacement_rate(
     return pd.Series(rate_by_year, name="displacement_rate").sort_index()
 
 
+def load_mlr_total_displacement_rate(article_paths: tuple[str, ...] = MLR_ARTICLE_PATHS) -> pd.DataFrame | None:
+    """Parse and combine the economy-wide total row from every available MLR article.
+
+    Mirrors load_dws_panel's shape: the file I/O and cross-article merge live here,
+    so mlr_displacement_rate itself stays a pure function of the combined table, the
+    same split dws_displacement_rate/load_dws_panel already uses.
+
+    Later articles cover more periods than earlier ones (8, then 9, then 10), so all
+    available articles are parsed and any period appearing in more than one is
+    deduplicated, keeping the later article's value — moot in practice, since every
+    overlapping period agrees exactly across all three articles
+    (tests/test_mlr_displacement.py). Returns None, with a warning, if none of
+    article_paths exist, so callers can skip this source rather than fail.
+    """
+    available_paths = [path for path in article_paths if os.path.exists(path)]
+    if not available_paths:
+        warnings.warn("No MLR articles found; cannot compute the mlr_long_tenured displacement rate.", stacklevel=2)
+        return None
+
+    total_rate_frames = [parse_total_displacement_rate(path) for path in available_paths]
+    combined_total_rate_df = pd.concat(total_rate_frames, ignore_index=True)
+    return combined_total_rate_df.drop_duplicates(subset=["period_label"], keep="last").sort_values("period_start_year")
+
+
+def mlr_displacement_rate(total_rate_df: pd.DataFrame) -> pd.Series:
+    """Annual displacement rate from the MLR economy-wide total row, spread across each period's years.
+
+    Each MLR article's Table 2 reports a two-year displacement rate for "Total, 20
+    years and older" (mlr_displacement.parse_total_displacement_rate); this divides
+    that published figure by the period length (always 2 years for every period seen
+    so far) and assigns the resulting annual rate to every year in the period — the
+    same spreading rule dws_displacement_rate applies to a DWS survey window.
+
+    This is a SEPARATE source from dws_long_tenured / dws_structural_long_tenured and
+    must never be spliced onto them. The denominators differ: this MLR figure is
+    displaced long-tenured workers over *long-tenured workers employed*, while the
+    count-derived dws_long_tenured divides displaced long-tenured workers by *total
+    employment* (see dws_displacement_rate). That is why the MLR annual values run
+    higher than the count path's — two different quantities that happen to share
+    units, not one series with a level break. This is the same rule the project
+    already applies to CPS-versus-OEWS employment (see CLAUDE.md): separate series,
+    drawn apart, never spliced into one.
+    """
+    rate_by_year: dict[int, float] = {}
+    for _, period_row in total_rate_df.iterrows():
+        period_start_year = int(period_row["period_start_year"])
+        period_end_year = int(period_row["period_end_year"])
+        period_years = period_end_year - period_start_year + 1
+        annual_rate = (period_row["displacement_rate_percent"] / 100.0) / period_years
+        for year in range(period_start_year, period_end_year + 1):
+            rate_by_year[year] = annual_rate
+
+    return pd.Series(rate_by_year, name="displacement_rate").sort_index()
+
+
 def economy_displacement_rate(
     source: str = DEFAULT_SOURCE,
     start_year: int = DEFAULT_START_YEAR,
@@ -333,6 +411,13 @@ def economy_displacement_rate(
 
     if source == "productivity":
         return productivity_displacement_rate(start_year, end_year)
+
+    if source == "mlr_long_tenured":
+        total_rate_df = load_mlr_total_displacement_rate()
+        if total_rate_df is None:
+            return None
+        rate_series = mlr_displacement_rate(total_rate_df)
+        return rate_series[(rate_series.index >= start_year) & (rate_series.index <= end_year)]
 
     displacement_panel_df = load_dws_panel()
     if displacement_panel_df is None:
@@ -366,9 +451,10 @@ def build_displacement_rate_table(start_year: int = DEFAULT_START_YEAR, end_year
                     "source": source,
                     "displacement_rate": float(displacement_rate),
                     "n_observations": int(len(rate_series)),
-                    # A DWS survey's rate is one window average repeated across the
-                    # years it covers, not an independent reading per year.
-                    "is_interpolated": source.startswith("dws"),
+                    # A DWS survey's or MLR article period's rate is one window
+                    # average repeated across the years it covers, not an
+                    # independent reading per year.
+                    "is_interpolated": source.startswith("dws") or source == "mlr_long_tenured",
                 }
             )
 

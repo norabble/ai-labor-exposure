@@ -44,6 +44,7 @@ from composition_era_validation import (
     occupation_correlation,
     period_key,
     plot_signal_over_time,
+    print_displacement_rate_tracking,
     sector_correlation,
     summarise_eras,
     unemployment_change_by_period,
@@ -376,6 +377,57 @@ class TestCorrelateWithDisplacementRate:
 
         assert not result_df.empty
         assert result_df.iloc[0]["n_periods"] == len(periods)
+
+    def test_source_parameter_selects_the_named_displacement_rate(self, monkeypatch):
+        """Default is productivity; passing source="dws_long_tenured" (or any other named
+        source) must route through economy_displacement_rate with that source, not always
+        productivity_displacement_rate."""
+        periods = ["2007_2008", "2008_2009", "2009_2010", "2010_2011", "2011_2012"]
+        correlation_df = _correlation_frame(list(zip(periods, [0.1, 0.3, 0.2, 0.4, 0.5])))
+        fake_displacement_rate = pd.Series({2008: 0.010, 2009: 0.020, 2010: 0.015, 2011: 0.025, 2012: 0.030})
+        captured_sources = []
+
+        def fake_economy_displacement_rate(source, *args, **kwargs):
+            captured_sources.append(source)
+            return fake_displacement_rate
+
+        monkeypatch.setattr(historical_displacement, "economy_displacement_rate", fake_economy_displacement_rate)
+
+        result_df = correlate_with_displacement_rate(correlation_df, source="dws_long_tenured")
+
+        assert captured_sources == ["dws_long_tenured"]
+        assert not result_df.empty
+
+    def test_empty_displacement_rate_series_produces_an_empty_result_not_an_error(self, monkeypatch):
+        """mlr_long_tenured is available as a source but can return a Series filtered to
+        nothing for a requested year range that misses its 1981-2000 coverage entirely —
+        that must behave like source unavailability (empty result), not raise."""
+        periods = ["2022_2023", "2023_2024"]
+        correlation_df = _correlation_frame(list(zip(periods, [0.1, 0.3])))
+        monkeypatch.setattr(historical_displacement, "economy_displacement_rate", lambda *args, **kwargs: pd.Series(dtype=float))
+
+        result_df = correlate_with_displacement_rate(correlation_df, source="mlr_long_tenured")
+
+        assert result_df.empty
+
+
+class TestPrintDisplacementRateTracking:
+    def test_prints_a_skip_message_for_an_empty_tracking_frame(self, capsys):
+        print_displacement_rate_tracking(pd.DataFrame(columns=["score", "pearson_r", "pearson_p", "n_periods"]), "mlr_long_tenured")
+
+        captured_output = capsys.readouterr().out
+        assert "mlr_long_tenured" in captured_output
+        assert "Skipped" in captured_output
+
+    def test_prints_each_score_row_for_a_non_empty_tracking_frame(self, capsys):
+        tracking_df = pd.DataFrame([{"score": COMPOSITION_SCORE_COLUMN, "pearson_r": 0.42, "pearson_p": 0.03, "n_periods": 8}])
+
+        print_displacement_rate_tracking(tracking_df, "productivity")
+
+        captured_output = capsys.readouterr().out
+        assert "productivity" in captured_output
+        assert COMPOSITION_SCORE_COLUMN in captured_output
+        assert "+0.420" in captured_output
 
 
 class TestOccupationLevelCorrelation:

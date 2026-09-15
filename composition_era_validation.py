@@ -568,29 +568,44 @@ def decompose_fit_strength(
     return pd.DataFrame(coefficient_rows, columns=CYCLE_OUTPUT_COLUMNS)
 
 
-def correlate_with_displacement_rate(period_correlation_df: pd.DataFrame, exclude_covid: bool = True) -> pd.DataFrame:
+DISPLACEMENT_RATE_TRACKING_SOURCES = ("productivity", "dws_long_tenured", "mlr_long_tenured")
+
+
+def correlate_with_displacement_rate(
+    period_correlation_df: pd.DataFrame, exclude_covid: bool = True, source: str = "productivity"
+) -> pd.DataFrame:
     """Does each model's fit strength track the economy-wide displacement rate itself?
 
     The prediction from docs/framework.md § Future investigation: the business
     cycle is that periods of greater displacement show stronger demand-type
-    sorting. The DWS cannot answer this — BLS publishes no archive of prior
-    releases, so the panel holds a single survey whose one rate is repeated across
-    2023-2025, giving no time variation at all. Smoothed productivity growth is
-    the only displacement estimate with annual coverage back to 1999, so it is
-    what this test uses.
+    sorting. Three D sources are available now (historical_displacement.DISPLACEMENT_SOURCES):
+    smoothed productivity growth has annual coverage back to 1947; dws_long_tenured
+    varies annually across 2005-2025 now that the DWS panel holds ten archived
+    surveys rather than one repeated rate; and mlr_long_tenured, built from the
+    pre-2008 Monthly Labor Review articles, varies across 1981-2000. `source` selects
+    which of the three this call uses — `productivity` is the default so existing
+    callers see no change in behaviour. dws_long_tenured and mlr_long_tenured are
+    never combined into one series (see historical_displacement.mlr_displacement_rate);
+    each is tested separately, one call per source.
 
-    This is a weak test by construction: roughly 24 usable periods, autocorrelated,
-    against a smoothed regressor. It is reported as a hypothesis check.
+    This is a weak test by construction: even the widest-coverage source gives only
+    roughly two dozen usable periods, autocorrelated, against a source whose own
+    within-period value never changes for the DWS/MLR sources (each period's D is a
+    survey-window or article-period average repeated across the years it covers). It
+    is reported as a hypothesis check; a null result is expected and uninformative,
+    not disconfirming, per this project's asymmetric reading rule.
     """
-    from historical_displacement import productivity_displacement_rate
+    from historical_displacement import economy_displacement_rate
 
     # PRS85006092 begins in 1947, so fetching from 1997 costs nothing and gives the
     # earliest period this test uses (1999_2000, which maps to displacement year 2000)
-    # a full centered 3-year window instead of an edge-truncated one. Matches the
-    # unemployment lookup's own widening (LNS14000000, see UNEMPLOYMENT_SERIES_START_YEAR
-    # above) so both business-cycle covariates see the same 1999-2025 span.
-    displacement_rate = productivity_displacement_rate(start_year=1997)
-    if displacement_rate is None:
+    # a full centered 3-year window instead of an edge-truncated one for the
+    # productivity source. Matches the unemployment lookup's own widening
+    # (LNS14000000, see UNEMPLOYMENT_SERIES_START_YEAR above) so both business-cycle
+    # covariates see the same 1999-2025 span. The dws_long_tenured and mlr_long_tenured
+    # sources ignore whichever part of this start year predates their own coverage.
+    displacement_rate = economy_displacement_rate(source, start_year=1997)
+    if displacement_rate is None or displacement_rate.empty:
         return pd.DataFrame(columns=["score", "pearson_r", "pearson_p", "n_periods"])
 
     comparison_df = period_correlation_df[~period_correlation_df["is_covid"]] if exclude_covid else period_correlation_df
@@ -610,17 +625,27 @@ def correlate_with_displacement_rate(period_correlation_df: pd.DataFrame, exclud
     return pd.DataFrame(correlation_rows, columns=["score", "pearson_r", "pearson_p", "n_periods"])
 
 
-def print_displacement_rate_tracking(tracking_df: pd.DataFrame) -> None:
-    """Print whether fit strength tracks the economy-wide displacement rate."""
+def print_displacement_rate_tracking(tracking_df: pd.DataFrame, source: str) -> None:
+    """Print whether fit strength tracks the named economy-wide displacement rate source.
+
+    Prints a skip message, rather than nothing, when a source could not be tested —
+    either because the source itself is entirely unavailable, or because fewer than
+    5 usable periods overlap it — so an absent source is visibly accounted for
+    rather than silently missing from the output.
+    """
+    print(f"\n── Does fit strength track the economy-wide displacement rate? ({source}) ──")
     if tracking_df.empty:
+        print(f"  Skipped: {source} has fewer than 5 usable periods overlapping this level's data.")
         return
-    print("\n── Does fit strength track the economy-wide displacement rate? (smoothed productivity) ──")
     for _, tracking_row in tracking_df.iterrows():
         print(
             f"  {tracking_row['score']:<26} Pearson {tracking_row['pearson_r']:+.3f} "
             f"(p={tracking_row['pearson_p']:.3f}, n={int(tracking_row['n_periods'])})"
         )
-    print("  Hypothesis check only: the DWS has one survey, so productivity is the only annual D available.")
+    print(
+        "  Hypothesis check only, few and autocorrelated periods: a null result here is uninformative, "
+        "not disconfirming (see docs/framework.md § Demand Composition Model)."
+    )
 
 
 def print_cycle_decomposition(cycle_decomposition_df: pd.DataFrame) -> None:
@@ -794,7 +819,9 @@ def _summarise_one_level(
         print_cycle_decomposition(cycle_decomposition_df)
         print(f"  ✓ {cycle_output_path}")
 
-    print_displacement_rate_tracking(correlate_with_displacement_rate(period_correlation_df))
+    for displacement_source in DISPLACEMENT_RATE_TRACKING_SOURCES:
+        tracking_df = correlate_with_displacement_rate(period_correlation_df, source=displacement_source)
+        print_displacement_rate_tracking(tracking_df, displacement_source)
 
     plot_signal_over_time(period_correlation_df, output_dir, level=level)
     print(f"  ✓ {era_output_path}")

@@ -563,12 +563,33 @@ miss. And n = 10 groups from a single survey. See
 
 **Does fit strength track the displacement rate itself?** The cycle decomposition
 uses the change in unemployment; the more direct question is whether periods of
-greater economy-wide displacement show stronger demand-type sorting. The DWS
-cannot answer it — one survey, one rate repeated across 2023–2025, no time
-variation — so smoothed productivity growth is the only annual D available.
-Composition fit strength correlates with it at +0.425 (p = 0.079, n = 18),
-trending in the predicted direction without reaching significance. A hypothesis
-check, not a result.
+greater economy-wide displacement show stronger demand-type sorting. Three D
+sources now have enough annual variation to test this
+(`historical_displacement.DISPLACEMENT_SOURCES`), and `correlate_with_displacement_rate`
+in `composition_era_validation.py` is parameterised over all three rather than
+hardcoded to one:
+
+| Source | Coverage | `composition_net_change` fit strength |
+|---|---|---|
+| `productivity` | 1947–2025 (smoothed) | +0.298, p = 0.158, n = 24 |
+| `dws_long_tenured` | 2005–2025 (annual, from the ten-survey DWS panel) | **+0.629, p = 0.004, n = 19** |
+| `mlr_long_tenured` | 1981–2000 (MLR articles' economy-wide rate) | skipped — only 1 usable period overlaps the sector-level series, which starts in 1999 |
+
+`dws_long_tenured` is significant at the sector level, and in the same direction
+for every model score tested (`net_employment_change` +0.226 p = 0.353,
+`occupation_exposure` +0.656 p = 0.002, `observed_exposure` +0.696 p = 0.001) —
+the strongest version of this hypothesis check the project has run. `mlr_long_tenured`
+cannot be tested at this level at all: it ends in 2000, a year before the
+sector-level YoY series begins (1999→2000 is the first period, mapping to
+displacement year 2000, so only one period overlaps — below the 5-period floor
+`correlate_with_displacement_rate` requires before reporting a source). This is a
+weak test by construction regardless — roughly twenty autocorrelated periods
+against a regressor whose own value repeats across a survey window — so even the
+significant `dws_long_tenured` reading is reported as a hypothesis check, not a
+confirmed result, per this project's asymmetric reading rule: a null would be
+uninformative, and a positive reading here is suggestive rather than confirmatory
+for the same reason. `mlr_long_tenured`'s skip is a genuine coverage gap, not
+evidence either way.
 
 ### Limitations
 
@@ -614,9 +635,29 @@ archive nor an MLR article for the 2002 or 2004 surveys. Because rates cannot be
 summed with counts, the two bases are kept distinguishable in the panel
 (`measurement_basis`, `source` columns) rather than blended, and every consumer
 that aggregates `displaced_thousands` filters to counts only — so this extension
-adds history without changing any existing correlation. The productivity-based
-`D` already spans further still, 1984–2025, and the cross-sectional correlations
-remain invariant to `D` either way.
+adds history without changing any existing correlation.
+
+That panel extension folds MLR rates in at the occupation level
+(`mlr_rows_for_panel`), but the panel itself was not, on its own, a route to a
+new *economy-wide* D: `dws_displacement_rate` filters to `measurement_basis ==
+"count_thousands"` and so never reads those rate rows. `historical_displacement.py`
+now reaches D back to 1981 by a second, independent path: `mlr_long_tenured`
+parses Table 2's own economy-wide "Total, 20 years and older" row directly out of
+the three MLR article PDFs (`mlr_displacement.parse_total_displacement_rate`,
+`historical_displacement.mlr_displacement_rate`) rather than going through the
+panel at all. Its annual values run 1.20%–1.95% over 1981–2000 — higher than
+`dws_long_tenured`'s 0.56–1.69%, because the two divide by different
+denominators (long-tenured workers *employed* for the MLR rate, versus *total*
+employment for the count-derived rate) and are two different quantities that
+happen to share units, not one series with a level break. `mlr_long_tenured` is
+therefore its own entry in `DISPLACEMENT_SOURCES`, never spliced onto
+`dws_long_tenured` or `dws_structural_long_tenured` — the same rule the project
+already applies to CPS-versus-OEWS employment. `DEFAULT_START_YEAR` moved from
+1984 to 1981 to match: `mlr_long_tenured` is now the binding floor on how far
+back D's time variation reaches, not the DWS count panel. The cross-sectional
+correlations remain invariant to which `D` source is chosen either way, since D
+is a scalar that cancels out of them; only D's amplitude and time variation
+differ by source.
 
 ### Future investigation: the business cycle
 

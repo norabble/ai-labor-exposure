@@ -4,7 +4,12 @@ import os
 
 import pytest
 
-from mlr_displacement import MLR_OCCUPATION_LEAVES, _normalize_occupation_key, parse_displacement_rate_table
+from mlr_displacement import (
+    MLR_OCCUPATION_LEAVES,
+    _normalize_occupation_key,
+    parse_displacement_rate_table,
+    parse_total_displacement_rate,
+)
 
 ARTICLE_PATH = "data/raw/dws/mlr/mid_1990s_1999.pdf"
 ARTICLE_PRESENT = os.path.exists(ARTICLE_PATH)
@@ -148,6 +153,66 @@ class TestRateTableParsing2004Article:
         from."""
         rate_df = parse_displacement_rate_table(ARTICLE_PATH_2004)
         assert set(rate_df["mlr_occupation"].unique()) == set(MLR_OCCUPATION_LEAVES)
+
+
+class TestTotalDisplacementRateParsing:
+    """Table 2's economy-wide "Total, 20 years and older" row, parsed independently of the
+    occupation leaves. All three articles are expected to be present in this environment."""
+
+    @pytest.mark.skipif(not ARTICLE_PRESENT, reason="MLR article not downloaded; run download_dws.py")
+    def test_eight_periods_are_recovered_from_the_1999_article(self):
+        total_rate_df = parse_total_displacement_rate(ARTICLE_PATH)
+        assert sorted(total_rate_df["period_label"]) == [
+            "1981-82",
+            "1983-84",
+            "1985-86",
+            "1987-88",
+            "1989-90",
+            "1991-92",
+            "1993-94",
+            "1995-96",
+        ]
+
+    @pytest.mark.skipif(not ARTICLE_PRESENT_2004, reason="MLR 2004 article not downloaded; run download_dws.py")
+    def test_ten_periods_are_recovered_from_the_2004_article(self):
+        total_rate_df = parse_total_displacement_rate(ARTICLE_PATH_2004)
+        assert sorted(total_rate_df["period_label"]) == [
+            "1981-82",
+            "1983-84",
+            "1985-86",
+            "1987-88",
+            "1989-90",
+            "1991-92",
+            "1993-94",
+            "1995-96",
+            "1997-98",
+            "1999-2000",
+        ]
+
+    @pytest.mark.skipif(not ARTICLE_PRESENT_2004, reason="MLR 2004 article not downloaded; run download_dws.py")
+    def test_a_known_published_total_value_is_recovered_exactly(self):
+        """1999-2000 is published as 2.5 percent, per the 2004 article (the only one covering it)."""
+        total_rate_df = parse_total_displacement_rate(ARTICLE_PATH_2004)
+        row = total_rate_df[total_rate_df["period_label"] == "1999-2000"]
+        assert row["displacement_rate_percent"].iloc[0] == pytest.approx(2.5)
+
+    @pytest.mark.skipif(
+        not (ARTICLE_PRESENT and ARTICLE_PRESENT_2001 and ARTICLE_PRESENT_2004),
+        reason="not all three MLR articles are downloaded; run download_dws.py",
+    )
+    def test_overlapping_periods_agree_exactly_across_all_three_articles(self):
+        """A free consistency check on both the parser and the source: the total row for
+        1981-82 through 1995-96 is published identically in every article that carries it."""
+        rate_by_article = {
+            article_path: parse_total_displacement_rate(article_path).set_index("period_label")["displacement_rate_percent"]
+            for article_path in (ARTICLE_PATH, ARTICLE_PATH_2001, ARTICLE_PATH_2004)
+        }
+        shared_periods = ["1981-82", "1983-84", "1985-86", "1987-88", "1989-90", "1991-92", "1993-94", "1995-96"]
+        expected_values = [3.9, 3.1, 3.1, 2.4, 3.1, 3.9, 3.3, 2.9]
+
+        for article_path, rate_by_period in rate_by_article.items():
+            for period_label, expected_value in zip(shared_periods, expected_values):
+                assert rate_by_period[period_label] == pytest.approx(expected_value), f"{article_path} disagrees on {period_label}"
 
 
 class TestCrosswalk:

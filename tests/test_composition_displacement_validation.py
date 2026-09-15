@@ -219,3 +219,52 @@ class TestCorrelateWithLeaveOneOut:
         correlations = correlate_with_leave_one_out(comparison_df, "composition_predicted_share")
 
         assert correlations["n_groups"] == 5
+
+
+class TestDisplacementPanel:
+    @staticmethod
+    def _multi_survey_panel():
+        from composition_displacement_validation import soc_major_to_dws_group
+
+        groups = sorted(set(soc_major_to_dws_group().values()))
+        rows = []
+        for survey_year in (2018, 2020, 2022):
+            for index, group in enumerate(groups):
+                rows.append(
+                    {
+                        "survey_year": survey_year,
+                        "source_table": "table_5_occupation",
+                        "group_name": group,
+                        "displaced_thousands": 100.0 + index * 10,
+                        "tenure_class": "long_tenured",
+                        "reason": None,
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    def test_one_row_per_survey_and_model(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
+        assert set(panel_df["survey_year"]) == {2018, 2020, 2022}
+        assert panel_df.groupby("survey_year")["model"].nunique().eq(2).all()
+
+    def test_n_groups_counts_groups_not_rows(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
+        assert (panel_df["n_groups"] == 10).all()
+
+    def test_a_survey_with_too_few_groups_is_skipped(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        thin_df = self._multi_survey_panel()
+        thin_df = thin_df[~((thin_df.survey_year == 2018) & (thin_df.group_name != "service occupations"))]
+        panel_df = build_displacement_comparison_panel(thin_df)
+        assert 2018 not in set(panel_df["survey_year"])
+
+    def test_both_models_are_scored(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
+        assert set(panel_df["model"]) == {"composition", "dynamic"}

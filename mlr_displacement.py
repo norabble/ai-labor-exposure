@@ -89,6 +89,28 @@ def _build_leaf_key_to_canonical_label() -> dict[str, str]:
 
 _LEAF_KEY_TO_CANONICAL_LABEL = _build_leaf_key_to_canonical_label()
 
+# Crosswalk from the 1980-census occupational taxonomy (MLR_OCCUPATION_LEAVES) to the ten
+# modern DWS groups (dws_panel.DWS_TO_SOC_MAJOR keys). Committed reference data, following the
+# pattern harmonize_soc.py uses for seeds/soc_crosswalks/: a static, hand-derived correspondence
+# rather than something downloaded or recomputed at run time.
+MLR_CROSSWALK_PATH = "seeds/mlr_occupation_crosswalk.csv"
+MLR_CROSSWALK_COLUMNS = ["mlr_occupation", "dws_group", "mapping_confidence", "note"]
+
+
+def load_mlr_crosswalk(path: str = MLR_CROSSWALK_PATH) -> pd.DataFrame:
+    """Load the 1980-census-to-DWS-group crosswalk seed, one row per MLR_OCCUPATION_LEAVES entry."""
+    crosswalk_df = pd.read_csv(path)
+    missing_columns = [column for column in MLR_CROSSWALK_COLUMNS if column not in crosswalk_df.columns]
+    if missing_columns:
+        raise ValueError(f"{path} lacks columns {missing_columns}")
+    return crosswalk_df
+
+
+# Built from the seed at import time, mirroring how DWS_TO_SOC_MAJOR is a plain module-level
+# dict in dws_panel.py — callers look this up without re-reading the CSV on every use.
+_MLR_CROSSWALK_DF = load_mlr_crosswalk()
+MLR_TO_DWS_GROUP: dict[str, str] = dict(zip(_MLR_CROSSWALK_DF["mlr_occupation"], _MLR_CROSSWALK_DF["dws_group"]))
+
 
 def _strip_footnote_superscripts(text: str) -> str:
     """Remove unicode superscript footnote markers glued to labels and period headers."""

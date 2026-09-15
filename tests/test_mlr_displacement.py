@@ -148,3 +148,28 @@ class TestRateTableParsing2004Article:
         from."""
         rate_df = parse_displacement_rate_table(ARTICLE_PATH_2004)
         assert set(rate_df["mlr_occupation"].unique()) == set(MLR_OCCUPATION_LEAVES)
+
+
+class TestCrosswalk:
+    def test_every_leaf_has_a_mapping(self):
+        from mlr_displacement import MLR_OCCUPATION_LEAVES, MLR_TO_DWS_GROUP
+
+        assert set(MLR_OCCUPATION_LEAVES) <= set(MLR_TO_DWS_GROUP)
+
+    def test_every_target_is_a_real_dws_group(self):
+        from dws_panel import DWS_TO_SOC_MAJOR
+        from mlr_displacement import MLR_TO_DWS_GROUP
+
+        assert set(MLR_TO_DWS_GROUP.values()) <= set(DWS_TO_SOC_MAJOR)
+
+    def test_all_ten_modern_groups_are_reachable(self):
+        from dws_panel import DWS_TO_SOC_MAJOR
+        from mlr_displacement import MLR_TO_DWS_GROUP
+
+        assert set(MLR_TO_DWS_GROUP.values()) == set(DWS_TO_SOC_MAJOR)
+
+    def test_low_confidence_mappings_are_flagged(self):
+        from mlr_displacement import load_mlr_crosswalk
+
+        crosswalk_df = load_mlr_crosswalk()
+        assert (crosswalk_df["mapping_confidence"] == "low").any()

@@ -14,6 +14,15 @@ rows — the release repeats that label under Total, Men, Women and again for ea
 industry panel, with a different count each time. Only the first is the
 all-workers total, so a parser that matched the label without taking the first
 match would silently report 212 thousand displaced instead of 3,324.
+
+tests/fixtures/dws_archive_2016.html is a byte-identical copy of the real
+archived release (verified with `cmp` after committing) rather than a trimmed
+fixture, because it exercises `parse_archived_text_release`'s plain-text
+`<PRE>`-block layout: dot-leader-padded labels, fixed-width-aligned (not
+delimited) numeric columns, and labels wrapped across two physical lines. A
+hand-trimmed fixture risks losing the exact whitespace that layout depends on,
+and a committed fixture is also subject to the trailing-whitespace pre-commit
+hook, which is why that hook excludes tests/fixtures/.
 """
 
 import os
@@ -29,6 +38,7 @@ from dws_panel import (
     load_dws_panel,
     merge_panel,
     parse_archived_release,
+    parse_archived_text_release,
     parse_occupation_table,
     parse_reason_table,
     parse_survey_period,
@@ -340,3 +350,110 @@ class TestArchiveParsing:
         panel_df = parse_archived_release("<html><body><pre>Total 1234</pre></body></html>", 2012)
         assert panel_df.empty
         assert list(panel_df.columns) == PANEL_COLUMNS
+
+
+# A minimal synthetic occupation table in the same dot-leader / whitespace-run
+# layout as the real 2008-2016 archives, with the Farming leaf's count suppressed
+# as a dash rather than a real value. Embedded in a full <html> page with the
+# window footnote sentence, so parse_archived_text_release can be exercised
+# end-to-end without depending on which real year happens to suppress a count.
+_SYNTHETIC_PLAIN_TEXT_ARCHIVE = """
+<html><body><pre>
+Table 5. Long-tenured displaced workers (1) by occupation of lost job and employment status in January 2016
+(Numbers in thousands)
+              Occupation of lost job                  Total
+                                                                  Total      Employed   Unemployed  Not in the
+                                                                                                   labor force
+
+     Total, 20 years and over (2).................     3,191      100.0        65.5        15.9        18.6
+
+ Management, business, and financial operations occupations       702      100.0        72.1        14.6        13.3
+ Professional and related occupations...........       598      100.0        65.5        12.3        22.3
+ Service occupations..............................       313      100.0        63.4        19.0        17.6
+ Sales and related occupations..................       340      100.0        66.1        18.3        15.6
+ Office and administrative support occupations..       479      100.0        61.1        13.0        25.9
+ Farming, fishing, and forestry occupations.....          -      100.0         (3)         (3)         (3)
+ Construction and extraction occupations........       193      100.0        61.1        28.5        10.4
+ Installation, maintenance, and repair occupations       102      100.0        62.3        16.4        21.3
+ Production occupations.........................       246      100.0        55.3        21.1        23.6
+ Transportation and material moving occupations        171      100.0        78.9         9.1        12.0
+
+   1 Data refer to persons who had 3 or more years of tenure on a job they had lost or left between January 2013
+and December 2015 because of plant or company closings or moves, insufficient work, or the abolishment of
+their positions or shifts.
+   2 Total includes a small number who did not report occupation.
+   3 Data not shown where base is less than 75,000.
+</pre></body></html>
+"""
+
+
+class TestArchiveTextParsing:
+    """Parsing the five archived releases (2008-2016) that lay tables out as plain-text <PRE> blocks."""
+
+    FIXTURE_PATH = "tests/fixtures/dws_archive_2016.html"
+
+    @classmethod
+    def _fixture_html(cls):
+        with open(cls.FIXTURE_PATH, encoding="utf-8") as fixture_file:
+            return fixture_file.read()
+
+    def test_ten_leaf_occupation_rows_are_extracted_from_the_real_fixture(self):
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+
+        assert len(occupation_rows) == 10
+
+    def test_group_names_match_the_soc_mapping_case_insensitively(self):
+        """The release prints Title Case; DWS_TO_SOC_MAJOR is keyed lowercase — expected and correct."""
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+
+        assert {group_name.lower() for group_name in occupation_rows["group_name"]} == set(DWS_TO_SOC_MAJOR)
+        assert occupation_rows["soc_majors"].notna().all()
+
+    def test_dispatches_through_parse_archived_release_by_content_not_index(self):
+        """parse_archived_release must detect the plain-text layout and delegate on its own."""
+        dispatched_panel_df = parse_archived_release(self._fixture_html(), 2016)
+        direct_panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+
+        assert len(dispatched_panel_df) == len(direct_panel_df) == 13
+
+    def test_the_window_comes_from_the_release_text(self):
+        """The 2016 survey reports displacement over 2013-2015, not 2016."""
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+
+        assert panel_df["period_start_year"].iloc[0] == 2013
+        assert panel_df["period_end_year"].iloc[0] == 2015
+        assert panel_df["period_years"].iloc[0] == 3
+
+    def test_columns_match_the_existing_panel_schema(self):
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+
+        assert list(panel_df.columns) == PANEL_COLUMNS
+
+    def test_comma_thousands_separator_parses_correctly_not_truncated_at_the_comma(self):
+        from dws_panel import _pre_table_count_string
+
+        count_string = _pre_table_count_string("3,191")
+
+        assert count_string == "3191"
+        assert pd.to_numeric(count_string) == 3191.0
+
+    def test_a_suppressed_dash_becomes_nan_not_zero(self):
+        """A dash means the base was under 75,000, which is not the same as no displacement."""
+        panel_df = parse_archived_text_release(_SYNTHETIC_PLAIN_TEXT_ARCHIVE, 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"].copy()
+        occupation_rows["group_name"] = occupation_rows["group_name"].str.lower()
+        occupation_rows = occupation_rows.set_index("group_name")
+
+        farming_value = occupation_rows.loc["farming, fishing, and forestry occupations", "displaced_thousands"]
+
+        assert pd.isna(farming_value)
+
+    def test_other_leaf_counts_in_the_synthetic_archive_are_unaffected_by_the_suppression(self):
+        panel_df = parse_archived_text_release(_SYNTHETIC_PLAIN_TEXT_ARCHIVE, 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        present_counts = occupation_rows["displaced_thousands"].dropna()
+
+        assert (present_counts > 0).all()
+        assert len(present_counts) == 9

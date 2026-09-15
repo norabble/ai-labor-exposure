@@ -48,12 +48,18 @@ releases `download_dws.download_archived_releases` fetches from
 archived page carries every table inline on one page rather than split across
 three files, so tables are selected by their heading text rather than by a fixed
 index — ordering is not guaranteed stable across sixteen years of releases. Of
-the nine archives, only 2018, 2020, 2022, and 2024 render their tables as HTML
-`<table>` elements that `pandas.read_html` can parse; 2008–2016 lay theirs out as
-plain-text `<PRE>` blocks and are out of scope for this parser, which skips them
-with a warning rather than raising.
+the nine archives, 2018, 2020, 2022, and 2024 render their tables as HTML
+`<table>` elements that `pandas.read_html` can parse directly; 2008–2016 lay
+theirs out as plain-text `<PRE>` blocks instead, with dot-leader-padded labels
+and fixed-width-aligned (not delimited) numeric columns. `parse_archived_release`
+detects which layout a page uses — no inline `<table>` at all means `<PRE>` —
+and dispatches to `parse_archived_text_release`, which reconstructs the same
+column shape `_occupation_rows` and `_reason_rows` already expect out of the
+plain text, rather than duplicating their leaf-selection, dash-to-NaN, SOC
+mapping, and coverage-check logic.
 """
 
+import html
 import io
 import os
 import re
@@ -107,6 +113,15 @@ STRUCTURAL_REASON = "position or shift abolished"
 # sum exactly to the published total. Anything beyond this gap means the leaf set
 # has drifted and the parser is silently dropping a group.
 LEAF_COVERAGE_TOLERANCE = 0.05
+
+# Patterns used to recover tabular rows from a plain-text <PRE> block (2008-2016
+# archives). Dot leaders pad a row label out to its numbers column
+# ("Service occupations............."); numeric columns are aligned with runs of
+# plain whitespace rather than a delimiter, so rows are split on those runs, never
+# a fixed character offset.
+_DOT_LEADER_PATTERN = re.compile(r"\.{2,}")
+_WHITESPACE_RUN_PATTERN = re.compile(r"\s{2,}")
+_PRE_TABLE_NUMERIC_TOKEN_PATTERN = re.compile(r"-|[\d,]+(?:\.\d+)?")
 
 
 def verify_soc_coverage() -> None:
@@ -224,15 +239,15 @@ def parse_archived_release(archive_html: str, survey_year: int) -> pd.DataFrame:
     heading text that selects it uniquely; it is intentionally left unparsed here
     rather than risk picking up the wrong "Characteristic" table.
 
-    Returns an empty, correctly-columned frame with a warning printed to stdout when
-    the page carries no HTML tables at all (the five 2008-2016 plain-text archives),
-    so a caller looping over every archived release can skip those without treating
-    them as a failure.
+    Dispatches to `parse_archived_text_release` when the page carries no inline
+    HTML `<table>` elements at all — the five 2008-2016 archives, which lay their
+    tables out as plain-text `<PRE>` blocks instead — so a caller looping over
+    every archived release gets parsed rows for all nine rather than having to
+    special-case the plain-text layout itself.
     """
     candidate_tables = _read_flattened_tables(archive_html)
     if not candidate_tables:
-        print(f"  ⚠ No inline HTML tables in the {survey_year} archived release; skipping (plain-text layout, out of scope).")
-        return pd.DataFrame(columns=PANEL_COLUMNS)
+        return parse_archived_text_release(archive_html, survey_year)
 
     parsed_frames: list[pd.DataFrame] = []
     occupation_table = _select_table_by_heading(candidate_tables, "Occupation of lost job")
@@ -349,6 +364,157 @@ def parse_reason_table(release_html_path: str) -> pd.DataFrame:
     """Parse Table 2 into one row per reason for job loss, as counts rather than percentages."""
     release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
     return _reason_rows(release_df)
+
+
+def _archive_pre_blocks(archive_html: str) -> list[str]:
+    """Every `<PRE>` block's text on an archived release page, HTML entities decoded, in document order.
+
+    The five 2008-2016 archives lay every table out as one plain-text `<PRE>`
+    block per table rather than as HTML `<table>` elements, so this is the
+    plain-text analogue of `_read_flattened_tables`.
+    """
+    return [html.unescape(pre_block_text) for pre_block_text in re.findall(r"<pre[^>]*>(.*?)</pre>", archive_html, re.S | re.I)]
+
+
+def _select_pre_block(pre_blocks: list[str], caption_text: str, exclude_text: str | None = None) -> str | None:
+    """The first pre block whose caption contains caption_text and, if given, not exclude_text.
+
+    Only the caption — the block's first 400 characters, with whitespace runs
+    collapsed to one space so a phrase wrapped across two physical lines still
+    reads as one string — is searched, not the whole block. "reason for job loss"
+    also appears deep inside unrelated tables (a row-group label in Table 6 and
+    Table 8, a repeated column header in Table 2 itself), so searching the whole
+    block finds too many matches; restricting the search to the caption and, for
+    the reason table, excluding Table 3's competing caption phrase ("...advance
+    notice, reason for job loss...") is what makes the match unique. Selection is
+    always by this caption content, never by the block's position on the page,
+    which is not guaranteed stable across sixteen years of releases.
+    """
+    for pre_block_text in pre_blocks:
+        caption = re.sub(r"\s+", " ", pre_block_text[:400]).strip().lower()
+        if caption_text in caption and (exclude_text is None or exclude_text not in caption):
+            return pre_block_text
+    return None
+
+
+def _parse_pre_table_rows(pre_block_text: str) -> list[tuple[str, list[str]]]:
+    """Every (row_label, numeric_tokens) row in a `<PRE>`-formatted table block.
+
+    Dot leaders pad a row label out to its numbers column
+    (`Service occupations.............`); those are collapsed to a single space
+    first with `_DOT_LEADER_PATTERN`, and each line is then split on runs of two
+    or more whitespace characters with `_WHITESPACE_RUN_PATTERN` — never a fixed
+    character offset, which the repo's trailing-whitespace-stripping pre-commit
+    hook could silently break for a column-position-dependent parser.
+
+    A label too long for the label column wraps onto its own line with no
+    numbers at all (`Management, business, and financial operations\\n   occupations
+    ....`); such a line is buffered as a pending label fragment and prefixed onto
+    the label of the next line that does carry numbers, so the two physical lines
+    recombine into one row.
+    """
+    pending_label_fragment = ""
+    parsed_rows: list[tuple[str, list[str]]] = []
+    for raw_line in pre_block_text.split("\n"):
+        line = _DOT_LEADER_PATTERN.sub(" ", raw_line).strip()
+        if not line:
+            pending_label_fragment = ""
+            continue
+        line_tokens = _WHITESPACE_RUN_PATTERN.split(line)
+        if len(line_tokens) >= 2 and _PRE_TABLE_NUMERIC_TOKEN_PATTERN.fullmatch(line_tokens[1]):
+            row_label = f"{pending_label_fragment} {line_tokens[0]}".strip() if pending_label_fragment else line_tokens[0]
+            parsed_rows.append((row_label, line_tokens[1:]))
+            pending_label_fragment = ""
+        elif len(line_tokens) == 1:
+            pending_label_fragment = f"{pending_label_fragment} {line_tokens[0]}".strip() if pending_label_fragment else line_tokens[0]
+        else:
+            pending_label_fragment = ""
+    return parsed_rows
+
+
+def _pre_table_count_string(numeric_token: str) -> str:
+    """Strip thousands-separator commas from a `<PRE>`-table numeric token, leaving a suppressed dash as-is.
+
+    `pandas.read_html` strips comma thousands separators automatically when it
+    parses an HTML `<table>`; the rows `_parse_pre_table_rows` recovers bypass
+    `read_html` entirely, so this stands in for that step. Without it,
+    `pd.to_numeric` inside `_occupation_rows` / `_reason_rows` would coerce
+    "3,191" to NaN rather than 3191 — comma-separated, not truncated at the comma.
+    """
+    return numeric_token if numeric_token == "-" else numeric_token.replace(",", "")
+
+
+def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataFrame:
+    """Parse a plain-text `<PRE>`-block archived DWS release (2008-2016) into panel rows.
+
+    Reconstructs, out of the plain text, the same column shape `_occupation_rows`
+    and `_reason_rows` already expect from an HTML table — column names chosen to
+    satisfy the regex patterns those helpers search for (`"occupation of lost
+    job"` / `"total"` for the occupation table; `"characteristic"` / `"total"` plus
+    each `REASON_COLUMN_PATTERNS` phrase for the reason table) — then calls them,
+    so leaf selection, dash-to-NaN, SOC mapping, and the coverage check live in one
+    place rather than being duplicated here.
+
+    Only the reason table's first "Total, 20 years and over" row is used — the
+    same row the HTML-table path takes via `_reason_rows`' own first-match logic —
+    since the release repeats that label for the Men and Women breakdowns beneath
+    it. The five numeric tokens on that row are, in publication order, the total
+    count, the (redundant) 100.0% total, and the plant/insufficient-work/position
+    percentages; that order is stable across all five plain-text archives.
+
+    Returns an empty, correctly-columned frame with a warning printed to stdout
+    when neither table can be found on the page, so a caller looping over every
+    archived release can treat that as "nothing to parse" rather than a failure.
+    """
+    pre_blocks = _archive_pre_blocks(archive_html)
+    parsed_frames: list[pd.DataFrame] = []
+
+    occupation_block = _select_pre_block(pre_blocks, "by occupation of lost job")
+    if occupation_block is not None:
+        occupation_table_df = pd.DataFrame(
+            [
+                (row_label, _pre_table_count_string(numeric_tokens[0]))
+                for row_label, numeric_tokens in _parse_pre_table_rows(occupation_block)
+            ],
+            columns=["occupation of lost job", "total"],
+        )
+        parsed_frames.append(_occupation_rows(occupation_table_df))
+
+    reason_block = _select_pre_block(pre_blocks, "reason for job loss", exclude_text="advance notice")
+    if reason_block is not None:
+        total_row = next(
+            (
+                numeric_tokens
+                for row_label, numeric_tokens in _parse_pre_table_rows(reason_block)
+                if row_label.lower().startswith("total, 20 years and over")
+            ),
+            None,
+        )
+        if total_row is not None and len(total_row) >= 5:
+            reason_table_df = pd.DataFrame(
+                [
+                    {
+                        "characteristic": "Total, 20 years and over",
+                        "total": _pre_table_count_string(total_row[0]),
+                        "plant or company closed down or moved": total_row[2],
+                        "insufficient work": total_row[3],
+                        "position or shift abolished": total_row[4],
+                    }
+                ]
+            )
+            parsed_frames.append(_reason_rows(reason_table_df))
+
+    if not parsed_frames:
+        print(f"  ⚠ No occupation or reason table found in the {survey_year} archived plain-text release; skipping.")
+        return pd.DataFrame(columns=PANEL_COLUMNS)
+
+    release_panel_df = pd.concat(parsed_frames, ignore_index=True)
+    period_start_year, period_end_year = _parse_archived_period(archive_html)
+    release_panel_df["survey_year"] = survey_year
+    release_panel_df["period_start_year"] = period_start_year
+    release_panel_df["period_end_year"] = period_end_year
+    release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    return release_panel_df[PANEL_COLUMNS]
 
 
 def parse_total_table(release_html_path: str) -> pd.DataFrame:

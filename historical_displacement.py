@@ -103,7 +103,18 @@ DISPLACEMENT_SOURCES = (
 
 DEFAULT_SOURCE = "dws_structural_all_tenures"
 
+# The DWS asked about displacement over the previous five years through the 1992
+# survey and three years from 1994 on. Every survey currently in the panel is on
+# the three-year window; this exists so a pre-1994 extension cannot inherit the
+# wrong divisor by accident.
+RECALL_WINDOW_CHANGE_YEAR = 1994
+
 OUTPUT_COLUMNS = ["year", "source", "displacement_rate", "n_observations", "is_interpolated"]
+
+
+def recall_window_years(survey_year: int) -> int:
+    """Years of displacement a given DWS survey asked about."""
+    return 3 if survey_year >= RECALL_WINDOW_CHANGE_YEAR else 5
 
 
 @functools.cache
@@ -241,9 +252,12 @@ def dws_displacement_rate(
 ) -> pd.Series:
     """Annual displacement rate from one DWS survey window, spread across the years it covers.
 
-    Each survey reports displacement over the three calendar years preceding it, so
-    the resulting rate is an annual average over that window and is assigned to
-    every year in it. The window length comes from the panel, not a hardcoded 3.
+    Each survey reports displacement over the three calendar years preceding it
+    (five for surveys before 1994), so the resulting rate is an annual average over
+    that window and is assigned to every year in it. The window length is read from
+    the panel's own `period_years` column when present; `recall_window_years` keyed
+    on `survey_year` is the fallback, so a row that never records `period_years`
+    cannot silently inherit the wrong (three-year) divisor for a pre-1994 survey.
 
     When structural_only is set, the count is restricted to "position or shift
     abolished". For the long-tenured tenure class the release reports that reason
@@ -253,7 +267,8 @@ def dws_displacement_rate(
     rate_by_year: dict[int, float] = {}
 
     for survey_year, survey_df in displacement_panel_df.groupby("survey_year"):
-        period_years = int(survey_df["period_years"].iloc[0])
+        period_years_value = survey_df["period_years"].iloc[0]
+        period_years = int(period_years_value) if pd.notna(period_years_value) else recall_window_years(int(survey_year))
         period_start_year = int(survey_df["period_start_year"].iloc[0])
         period_end_year = int(survey_df["period_end_year"].iloc[0])
 

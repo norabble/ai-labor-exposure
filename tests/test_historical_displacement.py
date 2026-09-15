@@ -112,6 +112,25 @@ def _employment(years=range(2023, 2026), thousands=160000.0):
     return pd.Series({year: thousands for year in years}, name="value")
 
 
+class TestRecallWindow:
+    def test_modern_surveys_use_a_three_year_window(self):
+        from historical_displacement import recall_window_years
+
+        assert recall_window_years(2008) == 3
+        assert recall_window_years(2026) == 3
+
+    def test_pre_1994_surveys_use_a_five_year_window(self):
+        from historical_displacement import recall_window_years
+
+        assert recall_window_years(1992) == 5
+        assert recall_window_years(1984) == 5
+
+    def test_the_boundary_year_itself_is_three(self):
+        from historical_displacement import recall_window_years
+
+        assert recall_window_years(1994) == 3
+
+
 class TestDwsDisplacementRate:
     def test_all_tenures_rate_is_count_over_employment_over_window(self):
         rate_series = dws_displacement_rate(_panel(), _employment(), tenure_class="all_tenures")

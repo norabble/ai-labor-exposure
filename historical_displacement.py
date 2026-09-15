@@ -103,6 +103,12 @@ DISPLACEMENT_SOURCES = (
 
 DEFAULT_SOURCE = "dws_structural_all_tenures"
 
+# 1984 is the DWS's own start year (see dws_panel.py); the employment and CPS/OEWS
+# instruments reach back further still (1983 and 1999 respectively), and the
+# productivity series (PRS85006092) begins in 1947, so D is the binding constraint
+# on how far back the model's time variation can reach.
+DEFAULT_START_YEAR = 1984
+
 # The DWS asked about displacement over the previous five years through the 1992
 # survey and three years from 1994 on. Every survey currently in the panel is on
 # the three-year window; this exists so a pre-1994 extension cannot inherit the
@@ -213,7 +219,7 @@ def fetch_annual_means(series_id: str, start_year: int, end_year: int) -> pd.Ser
 
 
 def productivity_displacement_rate(
-    start_year: int = 2005,
+    start_year: int = DEFAULT_START_YEAR,
     end_year: int = 2025,
     smoothing_years: int = PRODUCTIVITY_SMOOTHING_YEARS,
 ) -> pd.Series | None:
@@ -239,7 +245,7 @@ def productivity_displacement_rate(
     return (smoothed_growth.clip(lower=0.0) / 100.0).rename("displacement_rate")
 
 
-def employment_by_year(start_year: int = 2005, end_year: int = 2025) -> pd.Series | None:
+def employment_by_year(start_year: int = DEFAULT_START_YEAR, end_year: int = 2025) -> pd.Series | None:
     """Total nonfarm employment in thousands, annual means — the displacement rate denominator."""
     return fetch_annual_means(EMPLOYMENT_SERIES_ID, start_year, end_year)
 
@@ -309,7 +315,7 @@ def dws_displacement_rate(
 
 def economy_displacement_rate(
     source: str = DEFAULT_SOURCE,
-    start_year: int = 2005,
+    start_year: int = DEFAULT_START_YEAR,
     end_year: int = 2025,
 ) -> pd.Series | None:
     """Return the annual economy-wide displacement rate from the named source."""
@@ -337,7 +343,7 @@ def economy_displacement_rate(
     )
 
 
-def build_displacement_rate_table(start_year: int = 2005, end_year: int = 2025) -> pd.DataFrame:
+def build_displacement_rate_table(start_year: int = DEFAULT_START_YEAR, end_year: int = 2025) -> pd.DataFrame:
     """Compute every displacement rate source into one long table for comparison and sweeping."""
     rate_rows = []
     for source in DISPLACEMENT_SOURCES:

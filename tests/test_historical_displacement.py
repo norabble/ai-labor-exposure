@@ -131,6 +131,26 @@ class TestRecallWindow:
         assert recall_window_years(1994) == 3
 
 
+class TestWidenedRange:
+    def test_default_start_year_reaches_the_dws_panel(self):
+        import historical_displacement
+
+        assert historical_displacement.DEFAULT_START_YEAR == 1984
+
+    def test_productivity_rate_accepts_the_widened_range(self, monkeypatch):
+        import historical_displacement
+
+        captured_years = {}
+
+        def fake_fetch(series_id, start_year, end_year):
+            captured_years["start"] = start_year
+            return pd.Series({year: 2.0 for year in range(start_year, end_year + 1)})
+
+        monkeypatch.setattr(historical_displacement, "fetch_annual_means", fake_fetch)
+        historical_displacement.productivity_displacement_rate(start_year=1984, end_year=2025)
+        assert captured_years["start"] == 1984
+
+
 class TestDwsDisplacementRate:
     def test_all_tenures_rate_is_count_over_employment_over_window(self):
         rate_series = dws_displacement_rate(_panel(), _employment(), tenure_class="all_tenures")

@@ -593,10 +593,20 @@ is really a claim about its composition class. Relaxing this — plausibly by
 weighting with a Routine Task Intensity index built from the O\*NET data already
 on disk — is the first thing to try next.
 
-**One DWS survey.** BLS publishes no archive of prior Displaced Worker Supplement
-releases, so the panel holds only January 2026 (covering 2023–2025) and
-accumulates forward. This bounds the amplitude and time-variation work, not the
-correlations, which are invariant to `D`.
+**The DWS panel reaches 2008, not the spec's 1984 floor.** An earlier note here
+claimed BLS published no archive of prior Displaced Worker Supplement releases,
+so the panel held only the single January 2026 survey; that claim was wrong —
+see the correction in `CLAUDE.md` under `seeds/dws_displacement_panel.csv` — and
+the panel now holds ten biennial surveys, 2008–2026. This bounds the amplitude
+and time-variation work more generously than one survey did, though the
+cross-sectional correlations remain invariant to `D` either way. The archive
+itself is the hard floor: no BLS news-release archive exists for 2000–2006, so
+2008 is as far back as this route goes. The productivity-based `D` already
+spans further, 1984–2025. Recovering DWS coverage between 1984 and 2008 would
+need the Displaced Worker Supplement results BLS published in *Monthly Labor
+Review* articles rather than news releases — verified reachable as PDFs, though
+they leave a gap of their own between roughly 1997 and 2007 — and is a named
+follow-on, not yet attempted.
 
 ### Future investigation: the business cycle
 

@@ -66,6 +66,14 @@ ten: 2008–2026 in even years), writing one row per (survey_year, model) to
 the headline output above; the panel is additional evidence beside it. A survey
 needs r ≈ 0.63 to be individually significant at n=10, so the panel is read as a
 range and a sign pattern across surveys, not averaged into one number.
+
+All ten surveys land on the positive side of zero for both models, but that
+uniformity is not ten independent confirmations: the predicted vector — the
+2025-derived model score per occupation — is identical across every survey, so
+only the observed side varies, and consecutive biennial DWS releases also share
+overlapping three-year recall windows. A sign test or an averaged r would
+therefore be bogus. The consistent sign is noted as suggestive, not pooled into
+a claim of significance.
 """
 
 import os
@@ -124,11 +132,7 @@ def observed_displacement_by_group(displacement_panel_df: pd.DataFrame, survey_y
     # future release cannot silently empty the merge.
     survey_df["dws_group"] = survey_df["group_name"].astype(str).str.strip().str.lower()
 
-    # reindex rather than a plain column selection: "soc_majors" is carried by the
-    # real panel but is not load-bearing for this function's own output, so a
-    # caller-built frame that omits it (e.g. a synthetic multi-survey fixture)
-    # gets a NaN column instead of a KeyError.
-    return survey_df.reindex(columns=["dws_group", "soc_majors", "displaced_thousands"]).rename(
+    return survey_df[["dws_group", "soc_majors", "displaced_thousands"]].rename(
         columns={"displaced_thousands": "observed_displaced_thousands"}
     )
 

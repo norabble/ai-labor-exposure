@@ -235,6 +235,12 @@ class TestDisplacementPanel:
                         "survey_year": survey_year,
                         "source_table": "table_5_occupation",
                         "group_name": group,
+                        # Every real panel row carries this — a bare bracket
+                        # selection in observed_displacement_by_group raises
+                        # KeyError without it, and that KeyError is deliberate:
+                        # a silently missing crosswalk field must fail loudly,
+                        # not degrade into a NaN column.
+                        "soc_majors": "|".join(DWS_TO_SOC_MAJOR[group]),
                         "displaced_thousands": 100.0 + index * 10,
                         "tenure_class": "long_tenured",
                         "reason": None,

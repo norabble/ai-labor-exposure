@@ -644,16 +644,24 @@ def correlate_with_displacement_rate(
     uninformative, not disconfirming, per this project's asymmetric reading rule —
     and, as the above makes explicit, so is a positive result confounded with time.
     """
-    from historical_displacement import economy_displacement_rate
+    from historical_displacement import DEFAULT_START_YEAR, economy_displacement_rate
 
-    # PRS85006092 begins in 1947, so fetching from 1997 costs nothing and gives the
-    # earliest period this test uses (1999_2000, which maps to displacement year 2000)
-    # a full centered 3-year window instead of an edge-truncated one for the
-    # productivity source. Matches the unemployment lookup's own widening
+    # PRS85006092 (productivity) begins in 1947, so fetching from 1997 costs nothing
+    # and gives the earliest period this test uses (1999_2000, which maps to
+    # displacement year 2000) a full centered 3-year rolling window instead of an
+    # edge-truncated one. It also matches the unemployment lookup's own widening
     # (LNS14000000, see UNEMPLOYMENT_SERIES_START_YEAR above) so both business-cycle
-    # covariates see the same 1999-2025 span. The dws_long_tenured and mlr_long_tenured
-    # sources ignore whichever part of this start year predates their own coverage.
-    displacement_rate = economy_displacement_rate(source, start_year=1997)
+    # covariates see the same 1999-2025 span. dws_long_tenured's own coverage
+    # (2005+) starts after 1997 regardless, so widening it further changes nothing.
+    # mlr_long_tenured's coverage (1981-2000) starts BEFORE 1997, so the same floor
+    # would TRUNCATE rather than widen it — cutting its usable range to four years,
+    # below this function's own five-period floor below, and silently suppressing
+    # the source at every level regardless of how many periods actually overlap it.
+    # Each source is therefore fetched from whichever start year is its own: 1997
+    # for productivity, DEFAULT_START_YEAR (1981, at or before every other source's
+    # true floor) for the rest.
+    displacement_rate_start_year = 1997 if source == "productivity" else DEFAULT_START_YEAR
+    displacement_rate = economy_displacement_rate(source, start_year=displacement_rate_start_year)
     if displacement_rate is None or displacement_rate.empty:
         return pd.DataFrame(columns=TRACKING_OUTPUT_COLUMNS)
 

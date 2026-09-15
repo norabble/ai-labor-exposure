@@ -493,6 +493,46 @@ class TestCorrelateWithDisplacementRate:
 
         assert result_df.empty
 
+    def test_mlr_source_is_fetched_from_its_own_floor_not_truncated_to_1997(self, monkeypatch):
+        """Before the fix, this function hardcoded start_year=1997 for every source. That
+        widens productivity's range harmlessly, but mlr_long_tenured's own coverage
+        (1981-2000) starts BEFORE 1997, so the same floor truncated it to four years —
+        below the five-period floor above — and suppressed the source at every level,
+        regardless of how many periods actually overlapped it (seventeen, at CPS level)."""
+        captured_start_years = []
+
+        def fake_economy_displacement_rate(source, start_year=None, **kwargs):
+            captured_start_years.append(start_year)
+            return pd.Series({year: 0.01 + 0.0001 * year for year in range(1983, 2001)})
+
+        monkeypatch.setattr(historical_displacement, "economy_displacement_rate", fake_economy_displacement_rate)
+        periods = [f"{year}_{year + 1}" for year in range(1982, 2000)]
+        fit_r_values = [0.1 + 0.01 * index for index in range(len(periods))]
+        correlation_df = _correlation_frame(list(zip(periods, fit_r_values)))
+
+        result_df = correlate_with_displacement_rate(correlation_df, source="mlr_long_tenured")
+
+        assert captured_start_years == [historical_displacement.DEFAULT_START_YEAR]
+        assert not result_df.empty
+
+    def test_productivity_source_still_gets_the_widened_1997_floor(self, monkeypatch):
+        """productivity's own coverage (1947+) starts well before 1997, so widening its
+        fetch to 1997 is the deliberate centered-window buffer described in the function's
+        comment, not a truncation — this must not regress to DEFAULT_START_YEAR too."""
+        captured_start_years = []
+
+        def fake_economy_displacement_rate(source, start_year=None, **kwargs):
+            captured_start_years.append(start_year)
+            return pd.Series({year: 0.01 + 0.0001 * year for year in range(1997, 2013)})
+
+        monkeypatch.setattr(historical_displacement, "economy_displacement_rate", fake_economy_displacement_rate)
+        periods = ["2007_2008", "2008_2009", "2009_2010", "2010_2011", "2011_2012"]
+        correlation_df = _correlation_frame(list(zip(periods, [0.1, 0.3, 0.2, 0.4, 0.5])))
+
+        correlate_with_displacement_rate(correlation_df, source="productivity")
+
+        assert captured_start_years == [1997]
+
 
 class TestPrintDisplacementRateTracking:
     def test_prints_a_skip_message_for_an_empty_tracking_frame(self, capsys):

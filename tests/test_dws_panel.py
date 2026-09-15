@@ -30,10 +30,15 @@ import os
 import pandas as pd
 import pytest
 
+import dws_panel
 from dws_panel import (
+    ARCHIVE_DIR,
     DWS_TO_SOC_MAJOR,
+    MLR_ARTICLE_PATHS,
     PANEL_COLUMNS,
+    SEED_PANEL_PATH,
     STRUCTURAL_REASON,
+    _archive_years_available,
     build_release_panel,
     load_dws_panel,
     merge_panel,
@@ -43,6 +48,7 @@ from dws_panel import (
     parse_reason_table,
     parse_survey_period,
     parse_total_table,
+    rebuild_historical_panel_from_raw,
     verify_soc_coverage,
 )
 
@@ -52,6 +58,8 @@ TABLE_5_FIXTURE = os.path.join(FIXTURE_DIR, "dws_table5_sample.html")
 TABLE_8_FIXTURE = os.path.join(FIXTURE_DIR, "dws_table8_sample.html")
 
 RAW_RELEASE_PRESENT = os.path.exists("data/raw/dws/disp_t05.html")
+ARCHIVES_PRESENT = os.path.isdir(ARCHIVE_DIR) and bool(_archive_years_available(ARCHIVE_DIR))
+MLR_ARTICLES_PRESENT = all(os.path.exists(path) for path in MLR_ARTICLE_PATHS)
 
 
 class TestSocCoverage:
@@ -636,3 +644,160 @@ class TestMeasurementBasis:
         panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
         per_year = panel_df.groupby("survey_year")["measurement_basis"].nunique()
         assert (per_year == 1).all()
+
+
+def _synthetic_archive_row(survey_year):
+    return {
+        "survey_year": survey_year,
+        "period_start_year": survey_year - 3,
+        "period_end_year": survey_year - 1,
+        "period_years": 3,
+        "source_table": "table_8_all_tenures",
+        "group_name": "Total",
+        "mlr_occupation": "",
+        "soc_majors": "",
+        "displaced_thousands": 1000.0 + survey_year,
+        "displacement_rate_percent": float("nan"),
+        "reason": "all",
+        "tenure_class": "all_tenures",
+        "measurement_basis": "count_thousands",
+        "source": "news_release_archive",
+    }
+
+
+def _synthetic_mlr_rate_row(period_start_year, period_end_year, mlr_occupation="Professional specialty"):
+    return {
+        "period_label": f"{period_start_year}-{str(period_end_year)[-2:]}",
+        "period_start_year": period_start_year,
+        "period_end_year": period_end_year,
+        "mlr_occupation": mlr_occupation,
+        "displacement_rate_percent": 2.5,
+    }
+
+
+class TestRebuildHistoricalPanelFromRaw:
+    """rebuild_historical_panel_from_raw is the committed, tested entry point that
+
+    replaces the seed-rebuild procedure that previously existed only as prose in
+    the implementation plan (I4 in the 2026-09-15 final review). These tests
+    isolate the orchestration logic — combining archive and MLR rows, deduplicating
+    overlaps, and handling missing raw sources — from the real parsers, which
+    already have their own extensive tests elsewhere in this file and in
+    tests/test_mlr_displacement.py. See TestRebuildHistoricalPanelFromRawAgainstRealFiles
+    below for the integration-level check against the actual downloaded archives,
+    MLR PDFs, and the committed seed.
+    """
+
+    def test_combines_archive_and_mlr_rows(self, monkeypatch, tmp_path):
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        (archive_dir / "disp_2010.html").write_text("<html></html>")
+        mlr_path = tmp_path / "article.pdf"
+        mlr_path.write_text("not a real pdf, parse_displacement_rate_table is monkeypatched")
+
+        monkeypatch.setattr(dws_panel, "parse_archived_release", lambda html, year: pd.DataFrame([_synthetic_archive_row(year)]))
+        monkeypatch.setattr(dws_panel, "parse_displacement_rate_table", lambda path: pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]))
+
+        combined_df = rebuild_historical_panel_from_raw(archive_dir=str(archive_dir), mlr_article_paths=(str(mlr_path),))
+
+        assert set(combined_df["source"]) == {"news_release_archive", "mlr_article"}
+        assert list(combined_df.columns) == PANEL_COLUMNS
+
+    def test_deduplicates_overlapping_mlr_periods_keeping_the_later_article(self, monkeypatch, tmp_path):
+        """Two articles reporting the same (period, occupation) pair must not double the row --
+        mirrors historical_displacement.load_mlr_total_displacement_rate's own dedup rule."""
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        first_article = tmp_path / "first.pdf"
+        first_article.write_text("stub")
+        second_article = tmp_path / "second.pdf"
+        second_article.write_text("stub")
+
+        rate_frames_by_path = {
+            str(first_article): pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]),
+            str(second_article): pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]),
+        }
+        monkeypatch.setattr(dws_panel, "parse_displacement_rate_table", lambda path: rate_frames_by_path[path])
+
+        combined_df = rebuild_historical_panel_from_raw(
+            archive_dir=str(archive_dir), mlr_article_paths=(str(first_article), str(second_article))
+        )
+
+        assert len(combined_df) == 1
+
+    def test_missing_archive_dir_still_returns_mlr_rows(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(dws_panel, "parse_displacement_rate_table", lambda path: pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]))
+
+        combined_df = rebuild_historical_panel_from_raw(
+            archive_dir=str(tmp_path / "does_not_exist"), mlr_article_paths=(str(tmp_path / "article.pdf"),)
+        )
+
+        # The MLR path doesn't exist either, so both contributions are empty, but the
+        # function must not raise -- it returns an empty, correctly-shaped frame.
+        assert combined_df.empty
+        assert list(combined_df.columns) == PANEL_COLUMNS
+
+    def test_missing_mlr_articles_still_returns_archive_rows(self, monkeypatch, tmp_path):
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        (archive_dir / "disp_2010.html").write_text("<html></html>")
+        monkeypatch.setattr(dws_panel, "parse_archived_release", lambda html, year: pd.DataFrame([_synthetic_archive_row(year)]))
+
+        combined_df = rebuild_historical_panel_from_raw(
+            archive_dir=str(archive_dir), mlr_article_paths=(str(tmp_path / "does_not_exist.pdf"),)
+        )
+
+        assert len(combined_df) == 1
+        assert combined_df.iloc[0]["source"] == "news_release_archive"
+
+    def test_discovers_archive_years_from_the_directory_listing(self, tmp_path):
+        """A future archive (e.g. 2028, once BLS publishes one) must be picked up from
+        the directory listing alone, with no code change -- not from a hardcoded year list."""
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        (archive_dir / "disp_2008.html").write_text("")
+        (archive_dir / "disp_2028.html").write_text("")
+        (archive_dir / "disp_t02.html").write_text("")  # current-release file; must not match
+        (archive_dir / "not_an_archive.txt").write_text("")
+
+        assert _archive_years_available(str(archive_dir)) == [2008, 2028]
+
+
+@pytest.mark.skipif(not (ARCHIVES_PRESENT and MLR_ARTICLES_PRESENT), reason="raw DWS archives or MLR articles not downloaded")
+class TestRebuildHistoricalPanelFromRawAgainstRealFiles:
+    """Integration-level check against the real downloaded archives and MLR PDFs,
+    skipped (not failed) when they are absent, the same convention every other
+    real-file test in this suite follows. Reproduces the 2026-09-15 final review's
+    own spot-check: rebuilding from raw sources and comparing against the
+    committed seed's historical portion (everything except the current rolling
+    release, which this function deliberately excludes -- see its docstring)."""
+
+    def test_matches_the_committed_seeds_historical_portion_exactly(self):
+        rebuilt_df = rebuild_historical_panel_from_raw()
+
+        seed_df = pd.read_csv(SEED_PANEL_PATH, dtype={"soc_majors": str, "mlr_occupation": str}).fillna(
+            {"soc_majors": "", "mlr_occupation": ""}
+        )
+        historical_seed_df = seed_df[seed_df["source"] != "news_release"]
+
+        assert len(rebuilt_df) == len(historical_seed_df)
+
+        sort_columns = ["survey_year", "source_table", "group_name", "reason", "mlr_occupation"]
+        merged_df = (
+            historical_seed_df.sort_values(sort_columns)
+            .reset_index(drop=True)
+            .merge(
+                rebuilt_df.sort_values(sort_columns).reset_index(drop=True),
+                on=sort_columns,
+                how="outer",
+                suffixes=("_seed", "_rebuilt"),
+                indicator=True,
+            )
+        )
+        assert (merged_df["_merge"] == "both").all(), "every row must match by key between the seed and the rebuild"
+
+        for value_column in ["displaced_thousands", "displacement_rate_percent"]:
+            seed_values = merged_df[f"{value_column}_seed"]
+            rebuilt_values = merged_df[f"{value_column}_rebuilt"]
+            both_nan = seed_values.isna() & rebuilt_values.isna()
+            assert ((seed_values == rebuilt_values) | both_nan).all(), f"{value_column} mismatch between seed and rebuild"

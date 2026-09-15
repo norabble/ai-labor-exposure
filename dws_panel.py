@@ -39,12 +39,17 @@ Inputs:
   • data/raw/dws/disp_t02.html        (optional — latest release, from download_dws.py)
   • data/raw/dws/disp_t05.html
   • data/raw/dws/disp_t08.html
+  • data/raw/dws/archives/disp_<year>.html  (optional — archived releases, for
+    rebuild_historical_panel_from_raw; from download_dws.py)
   • mlr_displacement.parse_displacement_rate_table output  (via mlr_rows_for_panel,
-    consumed by the seed-rebuild script described in the project's implementation
-    plan, not by load_dws_panel itself)
+    consumed by rebuild_historical_panel_from_raw below, this module's own
+    committed rebuild entry point — `python dws_panel.py`)
 
 Outputs:
   • data/output/dws_displacement_panel.csv  (seed panel merged with the latest release)
+  • data/output/dws_historical_panel_rebuilt.csv  (rebuild_historical_panel_from_raw's
+    output, via `python dws_panel.py` — for comparison against the seed, not
+    auto-promoted)
 
 The panel carries two measurement bases, distinguished by the `measurement_basis`
 column (`count_thousands` or `rate_percent`) and the `source` column
@@ -102,7 +107,7 @@ import re
 
 import pandas as pd
 
-from mlr_displacement import mlr_to_dws_group
+from mlr_displacement import mlr_to_dws_group, parse_displacement_rate_table
 
 SEED_PANEL_PATH = "seeds/dws_displacement_panel.csv"
 RAW_RELEASE_DIR = "data/raw/dws"
@@ -888,3 +893,139 @@ def mlr_rows_for_panel(rate_df: pd.DataFrame) -> pd.DataFrame:
     panel_rows_df["source"] = "mlr_article"
 
     return panel_rows_df[PANEL_COLUMNS]
+
+
+# Where download_dws.py puts the nine archived releases. Duplicated from
+# download_dws.ARCHIVE_DIR's value rather than imported: download_dws.py is a
+# fetch script, this module is the parser, and historical_displacement.py already
+# imports from this module, so importing download_dws here risks a future cycle
+# for no real benefit over keeping the one literal path in sync by hand.
+ARCHIVE_DIR = "data/raw/dws/archives"
+
+# The three MLR article paths download_dws.py fetches. Duplicated from
+# historical_displacement.MLR_ARTICLE_PATHS rather than imported: that module
+# imports FROM this one (`from dws_panel import STRUCTURAL_REASON, load_dws_panel`),
+# so importing it back here would be circular.
+MLR_ARTICLE_PATHS = (
+    "data/raw/dws/mlr/mid_1990s_1999.pdf",
+    "data/raw/dws/mlr/strong_labor_market_2001.pdf",
+    "data/raw/dws/mlr/displacement_1999_2000_2004.pdf",
+)
+
+REBUILT_HISTORICAL_PANEL_PATH = "data/output/dws_historical_panel_rebuilt.csv"
+
+_ARCHIVE_FILE_NAME_PATTERN = re.compile(r"disp_(\d{4})\.html")
+
+
+def _archive_years_available(archive_dir: str) -> list[int]:
+    """Survey years for every downloaded archive file present in archive_dir.
+
+    Discovered by listing the directory rather than hardcoding the nine known
+    years, so a future archive (e.g. a 2028 release, once BLS publishes one) is
+    picked up the moment download_dws.py fetches it, with no code change here.
+    """
+    if not os.path.isdir(archive_dir):
+        return []
+    matched_years = (_ARCHIVE_FILE_NAME_PATTERN.fullmatch(file_name) for file_name in os.listdir(archive_dir))
+    return sorted(int(match.group(1)) for match in matched_years if match)
+
+
+def rebuild_historical_panel_from_raw(
+    archive_dir: str = ARCHIVE_DIR,
+    mlr_article_paths: tuple[str, ...] = MLR_ARTICLE_PATHS,
+) -> pd.DataFrame:
+    """Rebuild the pre-2026 archive + MLR portion of the panel directly from raw sources.
+
+    This is the committed, tested counterpart to the seed-rebuild procedure that
+    previously existed only as prose in the project's implementation plan (whose
+    own version of the snippet was wrong — it called load_dws_panel, a no-op for
+    this purpose, since load_dws_panel only ever merges the *current* release
+    onto the existing seed and never reads the archives or MLR articles at all).
+    parse_archived_release, and mlr_rows_for_panel by extension
+    parse_displacement_rate_table, otherwise had no production caller.
+
+    This exists for maintainability and provenance, not to recover lost data:
+    the committed seed is currently exactly reproducible from these raw sources
+    (verified 2026-09-15: 126/126 archive rows and 140/140 MLR rows, zero value
+    mismatches against seeds/dws_displacement_panel.csv). Run it after
+    download_dws.py fetches a new archive or MLR article
+    (`python dws_panel.py`), diff data/output/dws_historical_panel_rebuilt.csv
+    against seeds/dws_displacement_panel.csv, and promote by hand -- the same
+    convention as every other seed in this project. It never writes to seeds/
+    itself and never touches the committed seed's contents.
+
+    Deliberately excludes the current (rolling) release's own three tables
+    (disp_t02/t05/t08.html): that incremental step is load_dws_panel's job via
+    build_release_panel and merge_panel, and stays separate so this function's
+    output depends only on the archived, no-longer-rolling raw sources rather
+    than on whatever the rolling current-release page happens to show right now.
+
+    A missing archive directory or missing MLR articles are not errors: each
+    produces an empty contribution with a printed notice, exactly like
+    load_dws_panel already does for a missing current release, so a partial
+    raw-data checkout still rebuilds whatever it can.
+    """
+    archive_years = _archive_years_available(archive_dir)
+    if not archive_years:
+        print(f"  ⚠ No archived DWS releases found under {archive_dir}; historical panel will carry no archive rows.")
+
+    archive_frames = []
+    for survey_year in archive_years:
+        archive_path = os.path.join(archive_dir, f"disp_{survey_year}.html")
+        with open(archive_path, encoding="utf-8", errors="replace") as archive_file:
+            archive_frames.append(parse_archived_release(archive_file.read(), survey_year))
+
+    available_mlr_paths = [path for path in mlr_article_paths if os.path.exists(path)]
+    if not available_mlr_paths:
+        print("  ⚠ No MLR articles found; historical panel will carry no pre-2008 rate rows.")
+
+    mlr_rows_df = pd.DataFrame(columns=PANEL_COLUMNS)
+    if available_mlr_paths:
+        rate_frames = [parse_displacement_rate_table(path) for path in available_mlr_paths]
+        # Later articles cover more periods than earlier ones; an overlapping period
+        # agrees exactly across all three (tests/test_mlr_displacement.py), so which
+        # one wins on a tie is moot in practice -- mirrors
+        # historical_displacement.load_mlr_total_displacement_rate's own dedup rule.
+        combined_rate_df = pd.concat(rate_frames, ignore_index=True).drop_duplicates(subset=["period_label", "mlr_occupation"], keep="last")
+        mlr_rows_df = mlr_rows_for_panel(combined_rate_df)
+
+    historical_panel_df = pd.concat([*archive_frames, mlr_rows_df], ignore_index=True)
+    historical_panel_df = historical_panel_df.drop_duplicates(
+        subset=["survey_year", "source_table", "group_name", "reason", "tenure_class", "mlr_occupation"], keep="last"
+    )
+    return historical_panel_df.sort_values(["survey_year", "source_table", "group_name", "reason"]).reset_index(drop=True)[PANEL_COLUMNS]
+
+
+def main() -> None:
+    """Rebuild the historical panel from raw archives and MLR articles and write it for comparison.
+
+    Writes to REBUILT_HISTORICAL_PANEL_PATH rather than seeds/dws_displacement_panel.csv
+    or the normal load_dws_panel output path -- promotion into the seed is a manual
+    step the maintainer takes after diffing, the same convention every other seed
+    in this project follows.
+    """
+    rebuilt_df = rebuild_historical_panel_from_raw()
+    print(f"Rebuilt {len(rebuilt_df)} historical panel rows from raw archives and MLR articles.")
+
+    if os.path.exists(SEED_PANEL_PATH):
+        seed_df = pd.read_csv(SEED_PANEL_PATH, dtype={"soc_majors": str, "mlr_occupation": str}).fillna(
+            {"soc_majors": "", "mlr_occupation": ""}
+        )
+        # The seed also carries the current rolling release (source == "news_release"),
+        # which this rebuild deliberately excludes -- compare only the shared portion.
+        historical_seed_df = seed_df[seed_df["source"] != "news_release"].reset_index(drop=True)
+        if len(historical_seed_df) == len(rebuilt_df):
+            print(f"  Row count matches the committed seed's historical portion ({len(rebuilt_df)} rows).")
+        else:
+            print(
+                f"  ⚠ Row count differs from the committed seed's historical portion: "
+                f"rebuilt {len(rebuilt_df)} vs. seed {len(historical_seed_df)}. Diff before promoting."
+            )
+
+    os.makedirs(os.path.dirname(REBUILT_HISTORICAL_PANEL_PATH), exist_ok=True)
+    rebuilt_df.to_csv(REBUILT_HISTORICAL_PANEL_PATH, index=False)
+    print(f"  ✓ {REBUILT_HISTORICAL_PANEL_PATH}  (diff against {SEED_PANEL_PATH} and promote by hand if it matches)")
+
+
+if __name__ == "__main__":
+    main()

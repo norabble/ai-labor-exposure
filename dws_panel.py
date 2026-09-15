@@ -67,19 +67,32 @@ whose A-19 groups are already one per major group.
 
 `parse_archived_release` extends the panel further back using the nine archived
 releases `download_dws.download_archived_releases` fetches from
-/news.release/archives/disp_<MMDDYYYY>.htm. Unlike the current release, an
-archived page carries every table inline on one page rather than split across
-three files, so tables are selected by their heading text rather than by a fixed
-index — ordering is not guaranteed stable across sixteen years of releases. Of
-the nine archives, 2018, 2020, 2022, and 2024 render their tables as HTML
+/news.release/archives/disp_<MMDDYYYY>.htm, and all three tables — occupation,
+reason, and the all-tenures total analogous to Table 8 — are recovered from
+every one of the nine. Unlike the current release, an archived page carries
+every table inline on one page rather than split across three files, so the
+occupation and reason tables are selected by their heading text rather than by
+a fixed index — ordering is not guaranteed stable across sixteen years of
+releases. Table 8 cannot be selected by heading text on the HTML-table archives
+(2018-2024): it shares its column signature with two other tables on the page
+and no heading distinguishes any of the three, so `_select_total_table` picks
+it out instead by a semantic invariant — its total must exceed Table 5's own
+published long-tenured total, which the other same-signature tables merely
+repeat — and skips it with a warning, rather than guessing, when that
+invariant fails to single out exactly one candidate. On the plain-text
+archives (2008-2016) Table 8's caption is unique among the page's `<PRE>`
+captions, so it is found directly by `_select_pre_block`, the same way the
+occupation and reason blocks already are.
+
+Of the nine archives, 2018, 2020, 2022, and 2024 render their tables as HTML
 `<table>` elements that `pandas.read_html` can parse directly; 2008–2016 lay
 theirs out as plain-text `<PRE>` blocks instead, with dot-leader-padded labels
 and fixed-width-aligned (not delimited) numeric columns. `parse_archived_release`
 detects which layout a page uses — no inline `<table>` at all means `<PRE>` —
 and dispatches to `parse_archived_text_release`, which reconstructs the same
-column shape `_occupation_rows` and `_reason_rows` already expect out of the
-plain text, rather than duplicating their leaf-selection, dash-to-NaN, SOC
-mapping, and coverage-check logic.
+column shape `_occupation_rows`, `_reason_rows`, and `_total_rows` already
+expect out of the plain text, rather than duplicating their leaf-selection,
+dash-to-NaN, SOC mapping, and coverage-check logic.
 """
 
 import html
@@ -156,6 +169,21 @@ LEAF_COVERAGE_TOLERANCE = 0.05
 _DOT_LEADER_PATTERN = re.compile(r"\.{2,}")
 _WHITESPACE_RUN_PATTERN = re.compile(r"\s{2,}")
 _PRE_TABLE_NUMERIC_TOKEN_PATTERN = re.compile(r"-|[\d,]+(?:\.\d+)?")
+
+# An archived HTML release's Table 8 (all-tenures total) shares this six-column
+# "Characteristic" plus employment-status-breakdown signature with two other
+# tables on the page — Table 1 (long-tenured, by age/sex/race) and Table 3
+# (long-tenured, by advance notice) — so no heading text picks it out alone; see
+# _select_total_table. The reason and area-of-residence tables carry different
+# breakdown columns (by reason for job loss, by census region) and never match.
+_TOTAL_TABLE_SIGNATURE_PATTERNS = (r"^characteristic", r"^total$", r"employed", r"unemployed", r"not in (?:the )?labor force")
+
+# Table 8 has always carried this many rows (one "Total, 20 years and over" row
+# plus its age/sex/race/ethnicity breakdown) in every archived and current
+# release checked so far. Corroborating evidence only, per _select_total_table —
+# never the primary selector, since a row-count match alone cannot distinguish
+# Table 8 from the other same-signature tables.
+_EXPECTED_TOTAL_TABLE_ROW_COUNT = 59
 
 
 def verify_soc_coverage() -> None:
@@ -260,18 +288,121 @@ def _select_table_by_heading(candidate_tables: list[pd.DataFrame], heading_text:
     return None
 
 
+def _has_total_table_signature(candidate_df: pd.DataFrame) -> bool:
+    """True if candidate_df carries Table 8's six-column "Characteristic" plus
+    employment-status-breakdown signature — see `_TOTAL_TABLE_SIGNATURE_PATTERNS`.
+    """
+    return all(any(re.search(pattern, column) for column in candidate_df.columns) for pattern in _TOTAL_TABLE_SIGNATURE_PATTERNS)
+
+
+def _table5_long_tenured_total(occupation_table_df: pd.DataFrame) -> float:
+    """Table 5's own published long-tenured total (its "Total, ..." row), read the
+    same way `_occupation_rows` reads it — `startswith("total,")`, tolerating a
+    footnote marker appended straight onto the label. This is the baseline
+    `_select_total_table`'s invariant compares each same-signature candidate against:
+    the true long-tenured population, not the ten leaf groups' sum, which
+    `_occupation_rows` already establishes omits a small unclassified residual (see
+    LEAF_COVERAGE_TOLERANCE) and so would sit close enough to Table 1's own
+    long-tenured grand total to leave the two indistinguishable by magnitude alone.
+    """
+    occupation_column = _find_column(occupation_table_df, r"occupation of lost job")
+    total_column = _find_column(occupation_table_df, r"^total$")
+    return pd.to_numeric(
+        occupation_table_df.loc[
+            occupation_table_df[occupation_column].astype(str).str.strip().str.lower().str.startswith("total,"),
+            total_column,
+        ],
+        errors="coerce",
+    ).max()
+
+
+def _select_total_table(candidate_tables: list[pd.DataFrame], occupation_table_df: pd.DataFrame, survey_year: int) -> pd.DataFrame | None:
+    """Select Table 8 (the all-tenures total) among an archived HTML release's tables.
+
+    Table 8 shares its six-column signature with two other tables on the page — Table
+    1 (long-tenured, by age/sex/race) and Table 3 (long-tenured, by advance notice) —
+    and no heading text distinguishes any of the three (see the module docstring and
+    `_has_total_table_signature`). This was previously left unparsed for exactly that
+    reason. It is now selected by a semantic invariant instead of a heuristic:
+    all-tenures displacement must exceed long-tenured displacement from the same
+    release, so the winning candidate's "Total, 20 years and over" total must exceed
+    `_table5_long_tenured_total` — Table 5's own published long-tenured total, the
+    authoritative figure for "long-tenured displacement from the same release" (Table
+    1 and Table 3 both republish this identical number under their own headings, so
+    they tie rather than exceed it and are excluded by the strict inequality; only
+    Table 8, which counts short-tenured workers too, actually exceeds it).
+
+    If zero same-signature candidates satisfy the invariant, or more than one does,
+    this returns None with a warning naming the survey year, exactly as a missing
+    occupation or reason table is skipped elsewhere in this module — a wrong Table 8
+    would silently poison the project's default displacement rate, so failing to
+    parse is strictly better than guessing. A row count of 59 (`_EXPECTED_TOTAL_TABLE_ROW_COUNT`,
+    matching the current release's own Table 8) is checked only as corroboration once a
+    unique candidate is already selected; it never decides which candidate wins.
+    """
+    long_tenured_total = _table5_long_tenured_total(occupation_table_df)
+    invariant_satisfying_tables: list[pd.DataFrame] = []
+
+    for candidate_df in candidate_tables:
+        if not _has_total_table_signature(candidate_df):
+            continue
+        characteristic_column = _find_column(candidate_df, r"^characteristic")
+        total_column = _find_column(candidate_df, r"^total$")
+        total_rows = candidate_df[
+            candidate_df[characteristic_column].astype(str).str.strip().str.lower().str.startswith("total, 20 years and over")
+        ]
+        if total_rows.empty:
+            continue
+        candidate_total = pd.to_numeric(total_rows.iloc[0][total_column], errors="coerce")
+        if pd.notna(candidate_total) and candidate_total > long_tenured_total:
+            invariant_satisfying_tables.append(candidate_df)
+
+    if len(invariant_satisfying_tables) != 1:
+        print(
+            f"  ⚠ Could not uniquely identify Table 8 (all-tenures total) in the {survey_year} archived release — "
+            f"{len(invariant_satisfying_tables)} same-signature candidates exceeded the long-tenured baseline "
+            f"({long_tenured_total:,.0f}); skipping the all-tenures row rather than guessing."
+        )
+        return None
+
+    selected_total_table = invariant_satisfying_tables[0]
+    characteristic_column = _find_column(selected_total_table, r"^characteristic")
+    total_column = _find_column(selected_total_table, r"^total$")
+    selected_total = pd.to_numeric(
+        selected_total_table[
+            selected_total_table[characteristic_column].astype(str).str.strip().str.lower().str.startswith("total, 20 years and over")
+        ].iloc[0][total_column],
+        errors="coerce",
+    )
+    assert selected_total > long_tenured_total, "the selected Table 8 candidate must exceed the long-tenured baseline"
+
+    if len(selected_total_table) != _EXPECTED_TOTAL_TABLE_ROW_COUNT:
+        print(
+            f"  ⚠ Table 8 in the {survey_year} archived release has {len(selected_total_table)} rows, not the "
+            f"expected {_EXPECTED_TOTAL_TABLE_ROW_COUNT} — keeping it since the long-tenured-total invariant "
+            f"still uniquely selected it."
+        )
+    return selected_total_table
+
+
 def parse_archived_release(archive_html: str, survey_year: int) -> pd.DataFrame:
     """Every panel row an archived release can supply, in the committed panel's schema.
 
-    Mirrors the current-release parser's occupation and reason output so the two
-    accumulate into one seed: leaf occupation rows from the occupation table (Table
-    5) and the three reason rows (Table 2), both selected out of the page by heading
-    text rather than a fixed table index. The archived layout also carries an
-    all-tenures total analogous to Table 8, but — unlike the occupation and reason
-    tables — it shares an identical column signature with two other tables on the
-    page ("Characteristic" plus an employment-status breakdown), so there is no
-    heading text that selects it uniquely; it is intentionally left unparsed here
-    rather than risk picking up the wrong "Characteristic" table.
+    Mirrors the current-release parser's occupation, reason, and all-tenures output so
+    all three accumulate into one seed: leaf occupation rows from the occupation table
+    (Table 5), the three reason rows (Table 2), and the single all-tenures total
+    analogous to Table 8 — all selected out of the page's inline tables rather than a
+    fixed index, since ordering is not guaranteed stable across sixteen years of
+    releases. The occupation and reason tables are selected by heading text
+    (`_select_table_by_heading`); Table 8 cannot be, because it shares its column
+    signature with two other tables on the page and no heading distinguishes any of
+    the three, so it is instead selected by the semantic invariant in
+    `_select_total_table` — its total must exceed Table 5's own published
+    long-tenured total, which the same-signature tables merely repeat rather than
+    exceed. That invariant is asserted once a unique candidate is chosen, and the
+    table is skipped with a warning (rather than guessed) if zero or more than one
+    candidate satisfies it, or if there is no occupation table to read the baseline
+    from at all.
 
     Dispatches to `parse_archived_text_release` when the page carries no inline
     HTML `<table>` elements at all — the five 2008-2016 archives, which lay their
@@ -290,6 +421,10 @@ def parse_archived_release(archive_html: str, survey_year: int) -> pd.DataFrame:
     reason_table = _select_table_by_heading(candidate_tables, "Reason for job loss")
     if reason_table is not None:
         parsed_frames.append(_reason_rows(reason_table))
+    if occupation_table is not None:
+        total_table = _select_total_table(candidate_tables, occupation_table, survey_year)
+        if total_table is not None:
+            parsed_frames.append(_total_rows(total_table))
 
     if not parsed_frames:
         print(f"  ⚠ No occupation or reason table found in the {survey_year} archived release; skipping.")
@@ -488,13 +623,14 @@ def _pre_table_count_string(numeric_token: str) -> str:
 def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataFrame:
     """Parse a plain-text `<PRE>`-block archived DWS release (2008-2016) into panel rows.
 
-    Reconstructs, out of the plain text, the same column shape `_occupation_rows`
-    and `_reason_rows` already expect from an HTML table — column names chosen to
-    satisfy the regex patterns those helpers search for (`"occupation of lost
-    job"` / `"total"` for the occupation table; `"characteristic"` / `"total"` plus
-    each `REASON_COLUMN_PATTERNS` phrase for the reason table) — then calls them,
-    so leaf selection, dash-to-NaN, SOC mapping, and the coverage check live in one
-    place rather than being duplicated here.
+    Reconstructs, out of the plain text, the same column shape `_occupation_rows`,
+    `_reason_rows`, and `_total_rows` already expect from an HTML table — column
+    names chosen to satisfy the regex patterns those helpers search for
+    (`"occupation of lost job"` / `"total"` for the occupation table;
+    `"characteristic"` / `"total"` plus each `REASON_COLUMN_PATTERNS` phrase for the
+    reason table; `"characteristic"` / `"total"` again for the all-tenures table) —
+    then calls them, so leaf selection, dash-to-NaN, SOC mapping, and the coverage
+    check live in one place rather than being duplicated here.
 
     Only the reason table's first "Total, 20 years and over" row is used — the
     same row the HTML-table path takes via `_reason_rows`' own first-match logic —
@@ -503,9 +639,16 @@ def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataF
     count, the (redundant) 100.0% total, and the plant/insufficient-work/position
     percentages; that order is stable across all five plain-text archives.
 
+    Table 8's own "Total, 20 years and over" row needs none of the HTML path's
+    same-signature disambiguation (`_select_total_table`): its caption ("Table 8.
+    Total displaced workers...") is unique among the page's `<PRE>` captions, so
+    `_select_pre_block` finds it directly, the same way it already finds the
+    occupation and reason blocks.
+
     Returns an empty, correctly-columned frame with a warning printed to stdout
-    when neither table can be found on the page, so a caller looping over every
-    archived release can treat that as "nothing to parse" rather than a failure.
+    when none of the three tables can be found on the page, so a caller looping
+    over every archived release can treat that as "nothing to parse" rather than a
+    failure.
     """
     pre_blocks = _archive_pre_blocks(archive_html)
     parsed_frames: list[pd.DataFrame] = []
@@ -545,8 +688,22 @@ def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataF
             )
             parsed_frames.append(_reason_rows(reason_table_df))
 
+    total_block = _select_pre_block(pre_blocks, "table 8.")
+    if total_block is not None:
+        total_row = next(
+            (
+                numeric_tokens
+                for row_label, numeric_tokens in _parse_pre_table_rows(total_block)
+                if row_label.lower().startswith("total, 20 years and over")
+            ),
+            None,
+        )
+        if total_row is not None:
+            total_table_df = pd.DataFrame([{"characteristic": "Total, 20 years and over", "total": _pre_table_count_string(total_row[0])}])
+            parsed_frames.append(_total_rows(total_table_df))
+
     if not parsed_frames:
-        print(f"  ⚠ No occupation or reason table found in the {survey_year} archived plain-text release; skipping.")
+        print(f"  ⚠ No occupation, reason, or total table found in the {survey_year} archived plain-text release; skipping.")
         return pd.DataFrame(columns=PANEL_COLUMNS)
 
     release_panel_df = pd.concat(parsed_frames, ignore_index=True)
@@ -559,16 +716,29 @@ def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataF
     return release_panel_df[PANEL_COLUMNS]
 
 
-def parse_total_table(release_html_path: str) -> pd.DataFrame:
-    """Parse Table 8 into the single all-tenures displacement total."""
-    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+def _total_rows(total_table_df: pd.DataFrame) -> pd.DataFrame:
+    """Table 8's single all-tenures displacement total, in the panel's row shape.
 
-    characteristic_column = _find_column(release_df, r"^characteristic")
-    total_column = _find_column(release_df, r"^total$")
+    Shared by the current-release parser (`parse_total_table`, which reads the table
+    from its own standalone file) and both archived-release parsers —
+    `parse_archived_text_release`, which reconstructs the same column shape out of a
+    plain-text `<PRE>` block, and `parse_archived_release`'s HTML-table path, which
+    selects the table via `_select_total_table` — so the row shape lives in one place.
 
-    all_worker_rows = release_df[release_df[characteristic_column].astype(str).str.strip().str.lower() == "total, 20 years and over"]
+    Matched by `startswith` rather than an exact match on "total, 20 years and over",
+    because an archived release's Table 8 (and the same-signature tables
+    `_select_total_table` compares it against) sometimes appends a footnote marker
+    directly onto that label with no separating space ("...and over(2)"); this is the
+    same tolerance `_occupation_rows` already applies to Table 5's own total row.
+    """
+    characteristic_column = _find_column(total_table_df, r"^characteristic")
+    total_column = _find_column(total_table_df, r"^total$")
+
+    all_worker_rows = total_table_df[
+        total_table_df[characteristic_column].astype(str).str.strip().str.lower().str.startswith("total, 20 years and over")
+    ]
     if all_worker_rows.empty:
-        raise ValueError(f"Table 8 has no 'Total, 20 years and over' row in {release_html_path}")
+        raise ValueError("Table 8 has no 'Total, 20 years and over' row")
 
     return pd.DataFrame(
         [
@@ -585,6 +755,15 @@ def parse_total_table(release_html_path: str) -> pd.DataFrame:
             }
         ]
     )
+
+
+def parse_total_table(release_html_path: str) -> pd.DataFrame:
+    """Parse Table 8 into the single all-tenures displacement total."""
+    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    try:
+        return _total_rows(release_df)
+    except ValueError as total_row_error:
+        raise ValueError(f"{total_row_error} in {release_html_path}") from total_row_error
 
 
 def build_release_panel(raw_release_dir: str = RAW_RELEASE_DIR) -> pd.DataFrame:

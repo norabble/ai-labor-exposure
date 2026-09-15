@@ -293,6 +293,32 @@ class TestMlrArticleUrls:
         assert MLR_ARTICLE_URLS["displacement_1999_2000_2004"].endswith("/opub/mlr/2004/06/art4full.pdf")
 
 
+# A synthetic HTML archive whose only Table-8-signature candidate (a "Characteristic"
+# table with an employment-status breakdown) reports a "Total, 20 years and over"
+# total (900) below Table 5's own published long-tenured total (1,005) — the
+# invariant `_select_total_table` requires is never satisfied, so the all-tenures
+# row must be skipped rather than guessed. The occupation table carries all ten
+# DWS_TO_SOC_MAJOR leaf groups so the rest of the release still parses normally.
+_ZERO_CANDIDATE_TOTAL_TABLE_FIXTURE = (
+    "<html><body>"
+    "<p>Workers displaced between January 2016 and December 2018.</p>"
+    "<table>"
+    "<tr><th>Occupation of lost job</th><th>Total</th></tr>"
+    "<tr><th>Occupation of lost job</th><th>Total</th></tr>"
+    "<tr><td>Total, 20 years and over</td><td>1005</td></tr>"
+    + "".join(f"<tr><td>{group_name.title()}</td><td>100</td></tr>" for group_name in DWS_TO_SOC_MAJOR)
+    + "</table>"
+    "<table>"
+    "<tr><th>Characteristic</th><th>Total</th><th>Percent Employed</th><th>Percent Unemployed</th>"
+    "<th>Percent Not In Labor Force</th></tr>"
+    "<tr><th>Characteristic</th><th>Total</th><th>Percent Employed</th><th>Percent Unemployed</th>"
+    "<th>Percent Not In Labor Force</th></tr>"
+    "<tr><td>Total, 20 years and over</td><td>900</td><td>100.0</td><td>50.0</td><td>20.0</td></tr>"
+    "</table>"
+    "</body></html>"
+)
+
+
 class TestArchiveParsing:
     """Parsing the four archived releases that render their tables as HTML."""
 
@@ -365,6 +391,54 @@ class TestArchiveParsing:
         assert panel_df.empty
         assert list(panel_df.columns) == PANEL_COLUMNS
 
+    def test_table_8_all_tenures_row_is_selected_by_the_invariant(self):
+        """Table 8 shares its column signature with two other same-shaped tables on the
+        page (Table 1 and Table 3), both of which merely repeat Table 5's own
+        long-tenured total rather than exceeding it — only Table 8 (all tenures,
+        including short-tenured workers) actually exceeds that baseline.
+        """
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["tenure_class"].iloc[0] == "all_tenures"
+        assert total_rows["reason"].iloc[0] == "all"
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+
+    def test_table_8_row_matches_the_current_releases_row_shape(self):
+        """The archived-release row must carry the same non-numeric shape as the 2026
+        current-release row (source_table, tenure_class, reason, group_name,
+        measurement_basis) — only the count itself differs between releases.
+        """
+        from dws_panel import parse_total_table
+
+        archived_panel_df = parse_archived_release(self._fixture_html(), 2022)
+        archived_total_row = archived_panel_df[archived_panel_df["source_table"] == "table_8_all_tenures"].iloc[0]
+        current_release_total_row = parse_total_table(TABLE_8_FIXTURE).iloc[0]
+
+        for shared_column in ["source_table", "tenure_class", "reason", "group_name", "measurement_basis"]:
+            assert archived_total_row[shared_column] == current_release_total_row[shared_column], shared_column
+
+    def test_no_candidate_exceeding_the_invariant_skips_with_a_warning(self, capsys):
+        """A fixture where the only Table-8-signature candidate does NOT exceed Table
+        5's long-tenured total must be skipped, not guessed at.
+        """
+        panel_df = parse_archived_release(_ZERO_CANDIDATE_TOTAL_TABLE_FIXTURE, 2019)
+
+        assert panel_df[panel_df["source_table"] == "table_8_all_tenures"].empty
+        captured_output = capsys.readouterr().out
+        assert "2019" in captured_output
+        assert "Could not uniquely identify Table 8" in captured_output
+
+    def test_no_candidate_exceeding_the_invariant_still_yields_occupation_rows(self):
+        """The skip is scoped to the all-tenures row; the occupation table it shares a
+        page with must still parse.
+        """
+        panel_df = parse_archived_release(_ZERO_CANDIDATE_TOTAL_TABLE_FIXTURE, 2019)
+
+        assert len(panel_df[panel_df["source_table"] == "table_5_occupation"]) == 10
+
 
 # A minimal synthetic occupation table in the same dot-leader / whitespace-run
 # layout as the real 2008-2016 archives, with the Farming leaf's count suppressed
@@ -430,7 +504,18 @@ class TestArchiveTextParsing:
         dispatched_panel_df = parse_archived_release(self._fixture_html(), 2016)
         direct_panel_df = parse_archived_text_release(self._fixture_html(), 2016)
 
-        assert len(dispatched_panel_df) == len(direct_panel_df) == 13
+        # Ten occupation leaves, three reasons, one all-tenures total.
+        assert len(dispatched_panel_df) == len(direct_panel_df) == 14
+
+    def test_table_8_row_is_produced_and_exceeds_the_leaf_sum(self):
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["tenure_class"].iloc[0] == "all_tenures"
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+        assert total_rows["displaced_thousands"].iloc[0] == 7440
 
     def test_the_window_comes_from_the_release_text(self):
         """The 2016 survey reports displacement over 2013-2015, not 2016."""
@@ -471,6 +556,47 @@ class TestArchiveTextParsing:
 
         assert (present_counts > 0).all()
         assert len(present_counts) == 9
+
+
+class TestArchiveTextParsingTableEightAcrossSurveyYears:
+    """Table 8 for each of the five plain-text archives (2008-2016), one test per
+    survey year, as required by task 10d.
+
+    2016 has a committed byte-identical fixture (dws_archive_2016.html) and always
+    runs. The other four years' archives are fetched by download_dws.py into
+    data/raw/dws/archives/, which — like data/raw/dws/disp_t05.html above
+    (RAW_RELEASE_PRESENT) — is gitignored rather than committed, so those cases
+    skip rather than fail when the file has not been downloaded, e.g. in CI.
+    """
+
+    @staticmethod
+    def _archive_path(survey_year):
+        return os.path.join("data", "raw", "dws", "archives", f"disp_{survey_year}.html")
+
+    def test_2016_table_8_exceeds_the_leaf_sum(self):
+        with open("tests/fixtures/dws_archive_2016.html", encoding="utf-8") as fixture_file:
+            panel_df = parse_archived_text_release(fixture_file.read(), 2016)
+
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+
+    @pytest.mark.parametrize("survey_year", [2008, 2010, 2012, 2014])
+    def test_downloaded_archive_table_8_exceeds_the_leaf_sum(self, survey_year):
+        archive_path = self._archive_path(survey_year)
+        if not os.path.exists(archive_path):
+            pytest.skip(f"{archive_path} not downloaded")
+
+        with open(archive_path, encoding="utf-8", errors="replace") as archive_file:
+            panel_df = parse_archived_text_release(archive_file.read(), survey_year)
+
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
 
 
 class TestMeasurementBasis:

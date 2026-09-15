@@ -1,4 +1,56 @@
 survey_year,period_start_year,period_end_year,period_years,source_table,group_name,soc_majors,displaced_thousands,reason,tenure_class
+2018,2015,2017,3,table_2_reason,"Total, 20 years and over",,1094.027,plant or company closed down or moved,long_tenured
+2018,2015,2017,3,table_2_reason,"Total, 20 years and over",,784.003,insufficient work,long_tenured
+2018,2015,2017,3,table_2_reason,"Total, 20 years and over",,1102.97,position or shift abolished,long_tenured
+2018,2015,2017,3,table_5_occupation,Construction and extraction occupations,47,169.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,34.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,88.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,598.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,Office and administrative support occupations,43,453.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,Production occupations,51,246.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,545.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,Sales and related occupations,41,343.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,Service occupations,31|33|35|37|39,293.0,all,long_tenured
+2018,2015,2017,3,table_5_occupation,Transportation and material moving occupations,53,168.0,all,long_tenured
+2020,2017,2019,3,table_2_reason,"Total, 20 years and over",,1084.832,plant or company closed down or moved,long_tenured
+2020,2017,2019,3,table_2_reason,"Total, 20 years and over",,619.904,insufficient work,long_tenured
+2020,2017,2019,3,table_2_reason,"Total, 20 years and over",,967.264,position or shift abolished,long_tenured
+2020,2017,2019,3,table_5_occupation,Construction and extraction occupations,47,124.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,8.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,106.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,715.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,Office and administrative support occupations,43,321.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,Production occupations,51,201.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,481.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,Sales and related occupations,41,283.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,Service occupations,31|33|35|37|39,252.0,all,long_tenured
+2020,2017,2019,3,table_5_occupation,Transportation and material moving occupations,53,163.0,all,long_tenured
+2022,2019,2021,3,table_2_reason,"Total, 20 years and over",,1370.076,plant or company closed down or moved,long_tenured
+2022,2019,2021,3,table_2_reason,"Total, 20 years and over",,1111.164,insufficient work,long_tenured
+2022,2019,2021,3,table_2_reason,"Total, 20 years and over",,1114.76,position or shift abolished,long_tenured
+2022,2019,2021,3,table_5_occupation,Construction and extraction occupations,47,173.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,4.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,97.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,722.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,Office and administrative support occupations,43,435.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,Production occupations,51,194.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,689.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,Sales and related occupations,41,342.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,Service occupations,31|33|35|37|39,647.0,all,long_tenured
+2022,2019,2021,3,table_5_occupation,Transportation and material moving occupations,53,220.0,all,long_tenured
+2024,2021,2023,3,table_2_reason,"Total, 20 years and over",,940.97,plant or company closed down or moved,long_tenured
+2024,2021,2023,3,table_2_reason,"Total, 20 years and over",,670.28,insufficient work,long_tenured
+2024,2021,2023,3,table_2_reason,"Total, 20 years and over",,966.75,position or shift abolished,long_tenured
+2024,2021,2023,3,table_5_occupation,Construction and extraction occupations,47,115.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,17.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,95.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,604.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,Office and administrative support occupations,43,330.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,Production occupations,51,149.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,494.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,Sales and related occupations,41,278.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,Service occupations,31|33|35|37|39,323.0,all,long_tenured
+2024,2021,2023,3,table_5_occupation,Transportation and material moving occupations,53,144.0,all,long_tenured
 2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,761.196,insufficient work,long_tenured
 2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,1083.624,plant or company closed down or moved,long_tenured
 2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,1475.856,position or shift abolished,long_tenured

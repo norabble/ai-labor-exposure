@@ -41,8 +41,20 @@ the leaves are kept, and together they cover all 22 SOC major groups exactly
 once — but the mapping is one-to-many ("Professional and related occupations"
 spans SOC 15 through 29), so it cannot reuse CPS_TO_SOC_MAJOR from cps_panel.py,
 whose A-19 groups are already one per major group.
+
+`parse_archived_release` extends the panel further back using the nine archived
+releases `download_dws.download_archived_releases` fetches from
+/news.release/archives/disp_<MMDDYYYY>.htm. Unlike the current release, an
+archived page carries every table inline on one page rather than split across
+three files, so tables are selected by their heading text rather than by a fixed
+index — ordering is not guaranteed stable across sixteen years of releases. Of
+the nine archives, only 2018, 2020, 2022, and 2024 render their tables as HTML
+`<table>` elements that `pandas.read_html` can parse; 2008–2016 lay theirs out as
+plain-text `<PRE>` blocks and are out of scope for this parser, which skips them
+with a warning rather than raising.
 """
 
+import io
 import os
 import re
 
@@ -149,15 +161,115 @@ def parse_survey_period(release_html_path: str) -> tuple[int, int, int]:
     return int(survey_match.group(1)), int(window_match.group(1)), int(window_match.group(2))
 
 
-def parse_occupation_table(release_html_path: str) -> pd.DataFrame:
-    """Parse Table 5 into one row per leaf occupation group, mapped to SOC major groups."""
+def _parse_archived_period(archive_html: str) -> tuple[int, int]:
+    """Read the three-year displacement window (period_start_year, period_end_year) from an archived release's text.
+
+    Unlike the current release, an archived release's survey year is supplied by the
+    caller of `parse_archived_release` — the January in which BLS conducted that
+    survey — rather than derived here. The window does not equal that year: the
+    archive published as `disp_2018.html` (page title "2017 A01 Results") reports
+    displacement between January 2015 and December 2017, not 2018 itself.
+    """
+    release_text = re.sub(r"<[^>]*>", " ", archive_html)
+    release_text = re.sub(r"\s+", " ", release_text)
+
+    window_match = re.search(r"between January (\d{4}) and December (\d{4})", release_text)
+    if window_match is None:
+        raise ValueError("could not read the displacement window from the archived release")
+
+    return int(window_match.group(1)), int(window_match.group(2))
+
+
+def _read_flattened_tables(archive_html: str) -> list[pd.DataFrame]:
+    """Every inline `<table>` on the page, each with `_flatten_columns` already applied.
+
+    Returns an empty list — rather than letting `pandas.read_html` raise — when the
+    page carries no `<table>` elements at all. Five of the nine archived releases
+    (2008–2016) lay their tables out as plain-text `<PRE>` blocks; those are out of
+    scope for this parser, and the caller treats an empty list as "nothing here to
+    parse" rather than a failure.
+    """
+    try:
+        return [_flatten_columns(candidate_df) for candidate_df in pd.read_html(io.StringIO(archive_html))]
+    except ValueError:
+        return []
+
+
+def _select_table_by_heading(candidate_tables: list[pd.DataFrame], heading_text: str) -> pd.DataFrame | None:
+    """The table any of whose flattened columns contain heading_text, or None.
+
+    Archived releases carry every table inline on one page and the ordering is not
+    guaranteed stable across sixteen years of releases, so tables are selected by
+    what they contain rather than by index. The heading text does not always land in
+    the first column: "Reason for job loss" appears only inside the second-header-row
+    labels ("Percent distribution by reason for job loss ..."), never as a first
+    column header on its own, so every column is checked rather than just the first.
+    """
+    for candidate_df in candidate_tables:
+        if any(heading_text.lower() in str(column).lower() for column in candidate_df.columns):
+            return candidate_df
+    return None
+
+
+def parse_archived_release(archive_html: str, survey_year: int) -> pd.DataFrame:
+    """Every panel row an archived release can supply, in the committed panel's schema.
+
+    Mirrors the current-release parser's occupation and reason output so the two
+    accumulate into one seed: leaf occupation rows from the occupation table (Table
+    5) and the three reason rows (Table 2), both selected out of the page by heading
+    text rather than a fixed table index. The archived layout also carries an
+    all-tenures total analogous to Table 8, but — unlike the occupation and reason
+    tables — it shares an identical column signature with two other tables on the
+    page ("Characteristic" plus an employment-status breakdown), so there is no
+    heading text that selects it uniquely; it is intentionally left unparsed here
+    rather than risk picking up the wrong "Characteristic" table.
+
+    Returns an empty, correctly-columned frame with a warning printed to stdout when
+    the page carries no HTML tables at all (the five 2008-2016 plain-text archives),
+    so a caller looping over every archived release can skip those without treating
+    them as a failure.
+    """
+    candidate_tables = _read_flattened_tables(archive_html)
+    if not candidate_tables:
+        print(f"  ⚠ No inline HTML tables in the {survey_year} archived release; skipping (plain-text layout, out of scope).")
+        return pd.DataFrame(columns=PANEL_COLUMNS)
+
+    parsed_frames: list[pd.DataFrame] = []
+    occupation_table = _select_table_by_heading(candidate_tables, "Occupation of lost job")
+    if occupation_table is not None:
+        parsed_frames.append(_occupation_rows(occupation_table))
+    reason_table = _select_table_by_heading(candidate_tables, "Reason for job loss")
+    if reason_table is not None:
+        parsed_frames.append(_reason_rows(reason_table))
+
+    if not parsed_frames:
+        print(f"  ⚠ No occupation or reason table found in the {survey_year} archived release; skipping.")
+        return pd.DataFrame(columns=PANEL_COLUMNS)
+
+    release_panel_df = pd.concat(parsed_frames, ignore_index=True)
+    period_start_year, period_end_year = _parse_archived_period(archive_html)
+    release_panel_df["survey_year"] = survey_year
+    release_panel_df["period_start_year"] = period_start_year
+    release_panel_df["period_end_year"] = period_end_year
+    release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    return release_panel_df[PANEL_COLUMNS]
+
+
+def _occupation_rows(occupation_table_df: pd.DataFrame) -> pd.DataFrame:
+    """Table 5's leaf occupation rows, mapped to SOC major groups.
+
+    Shared by the current-release parser (`parse_occupation_table`, which reads the
+    table from its own standalone file) and the archived-release parser
+    (`parse_archived_release`, which selects the same table by heading text out of a
+    page carrying every table inline), so the leaf-row selection, dash-to-NaN, and
+    coverage checks live in one place.
+    """
     verify_soc_coverage()
-    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
 
-    occupation_column = _find_column(release_df, r"occupation of lost job")
-    total_column = _find_column(release_df, r"^total$")
+    occupation_column = _find_column(occupation_table_df, r"occupation of lost job")
+    total_column = _find_column(occupation_table_df, r"^total$")
 
-    occupation_df = release_df[[occupation_column, total_column]].copy()
+    occupation_df = occupation_table_df[[occupation_column, total_column]].copy()
     occupation_df.columns = ["group_name", "displaced_thousands"]
     occupation_df["group_name"] = occupation_df["group_name"].astype(str).str.strip()
 
@@ -189,28 +301,35 @@ def parse_occupation_table(release_html_path: str) -> pd.DataFrame:
     return occupation_df
 
 
-def parse_reason_table(release_html_path: str) -> pd.DataFrame:
-    """Parse Table 2 into one row per reason for job loss, as counts rather than percentages.
+def parse_occupation_table(release_html_path: str) -> pd.DataFrame:
+    """Parse Table 5 into one row per leaf occupation group, mapped to SOC major groups."""
+    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    return _occupation_rows(release_df)
+
+
+def _reason_rows(reason_table_df: pd.DataFrame) -> pd.DataFrame:
+    """Table 2's three reason-for-job-loss rows, as counts rather than percentages.
 
     The release publishes reasons as a percent distribution over the long-tenured
     total; those percentages are converted to counts here so every panel row carries
-    the same unit.
+    the same unit. Shared by the current-release parser (`parse_reason_table`) and
+    the archived-release parser (`parse_archived_release`).
     """
-    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    characteristic_column = _find_column(reason_table_df, r"^characteristic")
+    total_column = _find_column(reason_table_df, r"^total$")
 
-    characteristic_column = _find_column(release_df, r"^characteristic")
-    total_column = _find_column(release_df, r"^total$")
-
-    all_worker_rows = release_df[release_df[characteristic_column].astype(str).str.strip().str.lower() == "total, 20 years and over"]
+    all_worker_rows = reason_table_df[
+        reason_table_df[characteristic_column].astype(str).str.strip().str.lower() == "total, 20 years and over"
+    ]
     if all_worker_rows.empty:
-        raise ValueError(f"Table 2 has no 'Total, 20 years and over' row in {release_html_path}")
+        raise ValueError("reason table has no 'Total, 20 years and over' row")
     # The first such row is the all-workers total; the later ones break out men and women.
     total_row = all_worker_rows.iloc[0]
     displaced_total = pd.to_numeric(total_row[total_column], errors="coerce")
 
     reason_rows = []
     for reason_label, column_pattern in REASON_COLUMN_PATTERNS.items():
-        reason_percent = pd.to_numeric(total_row[_find_column(release_df, column_pattern)], errors="coerce")
+        reason_percent = pd.to_numeric(total_row[_find_column(reason_table_df, column_pattern)], errors="coerce")
         reason_rows.append(
             {
                 "group_name": "Total, 20 years and over",
@@ -224,6 +343,12 @@ def parse_reason_table(release_html_path: str) -> pd.DataFrame:
             }
         )
     return pd.DataFrame(reason_rows)
+
+
+def parse_reason_table(release_html_path: str) -> pd.DataFrame:
+    """Parse Table 2 into one row per reason for job loss, as counts rather than percentages."""
+    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    return _reason_rows(release_df)
 
 
 def parse_total_table(release_html_path: str) -> pd.DataFrame:

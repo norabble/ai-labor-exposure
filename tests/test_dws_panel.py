@@ -28,6 +28,7 @@ from dws_panel import (
     build_release_panel,
     load_dws_panel,
     merge_panel,
+    parse_archived_release,
     parse_occupation_table,
     parse_reason_table,
     parse_survey_period,
@@ -266,3 +267,60 @@ class TestArchiveUrls:
         from download_dws import ARCHIVE_RELEASE_URLS
 
         assert all("/news.release/archives/" in url for url in ARCHIVE_RELEASE_URLS.values())
+
+
+class TestArchiveParsing:
+    """Parsing the four archived releases that render their tables as HTML."""
+
+    FIXTURE_PATH = "tests/fixtures/dws_archive_2022.html"
+
+    @classmethod
+    def _fixture_html(cls):
+        with open(cls.FIXTURE_PATH, encoding="utf-8") as fixture_file:
+            return fixture_file.read()
+
+    def test_ten_leaf_occupation_rows_are_extracted(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        assert len(occupation_rows) == 10
+
+    def test_occupation_group_names_match_the_soc_mapping(self):
+        """Case-insensitively: the release prints Title Case, DWS_TO_SOC_MAJOR is keyed lowercase.
+
+        _occupation_rows stores the release's own casing and lowercases only for the
+        lookup, so the current-release and archived-release paths agree.
+        """
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        assert {name.lower() for name in occupation_rows["group_name"]} == set(DWS_TO_SOC_MAJOR)
+
+    def test_every_occupation_row_resolves_to_soc_majors(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        assert occupation_rows["soc_majors"].notna().all()
+
+    def test_survey_year_is_stamped_on_every_row(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        assert (panel_df["survey_year"] == 2022).all()
+
+    def test_the_displacement_window_is_read_from_the_release_not_the_survey_year(self):
+        """The 2022 survey reports displacement over 2019-2021, not 2022."""
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        assert panel_df["period_start_year"].iloc[0] == 2019
+        assert panel_df["period_end_year"].iloc[0] == 2021
+        assert panel_df["period_years"].iloc[0] == 3
+
+    def test_counts_are_positive_and_suppressed_values_are_not_zero(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        present = panel_df["displaced_thousands"].dropna()
+        assert (present > 0).all()
+
+    def test_columns_match_the_existing_panel_schema(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        assert list(panel_df.columns) == PANEL_COLUMNS
+
+    def test_a_plain_text_archive_yields_an_empty_frame_rather_than_raising(self):
+        """2008-2016 archives use <PRE> blocks and are handled by a separate parser."""
+        panel_df = parse_archived_release("<html><body><pre>Total 1234</pre></body></html>", 2012)
+        assert panel_df.empty
+        assert list(panel_df.columns) == PANEL_COLUMNS

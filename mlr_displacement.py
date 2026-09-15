@@ -21,10 +21,11 @@ import pdfplumber
 # Table 2's occupation block is a hierarchy (White-collar / Service / Blue-collar
 # occupations, each summing their own children's displaced-worker counts), and text
 # extraction destroys the indentation that would otherwise reveal that structure. These are
-# the leaf rows only, verified verbatim against the 1999, 2001, and 2004 MLR articles.
-# Selecting by exact label membership rather than by position: an aggregate row
-# double-counts its children's displaced workers if it is treated as an independent
-# occupation alongside them.
+# the leaf rows only, worded exactly as the 1999 article (`mid_1990s_1999.pdf`) prints them —
+# the canonical spelling emitted in the output `mlr_occupation` column regardless of which
+# article a row was matched from. Selecting by normalised-label membership rather than by
+# position: an aggregate row double-counts its children's displaced workers if it is treated
+# as an independent occupation alongside them.
 MLR_OCCUPATION_LEAVES = (
     "Executive, administrative, and managerial",
     "Professional specialty",
@@ -47,6 +48,46 @@ _DOT_LEADER_PATTERN = re.compile(r"\.{2,}")
 _SUPERSCRIPT_PATTERN = re.compile(r"[¹²³⁰-⁹]+")
 _NUMBER_TOKEN_PATTERN = re.compile(r"\.?\d+(?:\.\d+)?")
 _PERIOD_TOKEN_PATTERN = re.compile(r"(\d{4})[‐‑‒–—-](\d{2,4})")
+_WHITESPACE_RUN_PATTERN = re.compile(r"\s+")
+
+
+def _normalize_occupation_key(occupation_label: str) -> str:
+    """Fold an occupation label to a comparison key robust to inter-article wording drift.
+
+    Every MLR article re-typesets Table 2's occupation labels, and each new article examined so
+    far has introduced its own small drift from the 1999 article's wording that
+    `MLR_OCCUPATION_LEAVES` is worded from — a dropped comma (`Executive, administrative and
+    managerial` in the 2001 article), a hyphen rendered as a space (`Transportation and material
+    moving occupations` in the 2001 and 2004 articles). Rather than enumerate each variant as it
+    turns up, both the canonical leaf labels and every article's row labels are folded through
+    this key before comparison: lowercased, with hyphens and commas neutralised to spaces (since
+    both are used inconsistently as separators across articles) and whitespace runs collapsed.
+    """
+    normalized_text = occupation_label.lower().replace("-", " ").replace(",", " ")
+    return _WHITESPACE_RUN_PATTERN.sub(" ", normalized_text).strip()
+
+
+def _build_leaf_key_to_canonical_label() -> dict[str, str]:
+    """Map each leaf's normalised key back to its canonical (1999-article) spelling.
+
+    A row matched under a drifted spelling from a later article is still emitted with one
+    consistent label. Guards against two distinct leaves normalising to the same key — that
+    would silently merge two occupation groups, which is worse than the wording-drift gap this
+    mapping fixes — by inserting one leaf at a time and checking for a pre-existing key, rather
+    than a dict comprehension, which would silently keep only one of a colliding pair.
+    """
+    leaf_key_to_canonical_label: dict[str, str] = {}
+    for leaf_label in MLR_OCCUPATION_LEAVES:
+        leaf_key = _normalize_occupation_key(leaf_label)
+        if leaf_key in leaf_key_to_canonical_label:
+            raise ValueError(
+                f"Normalised occupation key {leaf_key!r} collides between {leaf_key_to_canonical_label[leaf_key]!r} and {leaf_label!r}"
+            )
+        leaf_key_to_canonical_label[leaf_key] = leaf_label
+    return leaf_key_to_canonical_label
+
+
+_LEAF_KEY_TO_CANONICAL_LABEL = _build_leaf_key_to_canonical_label()
 
 
 def _strip_footnote_superscripts(text: str) -> str:
@@ -113,7 +154,9 @@ def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
 
     Returns a long-form DataFrame with one row per (occupation, period) pair, columns
     `period_label, period_start_year, period_end_year, mlr_occupation,
-    displacement_rate_percent`, restricted to the rows named in `MLR_OCCUPATION_LEAVES`.
+    displacement_rate_percent`, restricted to the occupations in `MLR_OCCUPATION_LEAVES`
+    (matched by normalised label, so a row survives inter-article wording drift) and always
+    emitted under that tuple's canonical spelling.
     """
     page_text = _find_table_page_text(article_pdf_path)
     lines = page_text.splitlines()
@@ -145,7 +188,8 @@ def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
         occupation_label = f"{pending_label_fragment} {' '.join(label_tokens)}".strip().rstrip(".")
         pending_label_fragment = ""
 
-        if occupation_label not in MLR_OCCUPATION_LEAVES:
+        canonical_occupation_label = _LEAF_KEY_TO_CANONICAL_LABEL.get(_normalize_occupation_key(occupation_label))
+        if canonical_occupation_label is None:
             continue
 
         displacement_rates = [float(token) for token in value_tokens]
@@ -155,7 +199,7 @@ def parse_displacement_rate_table(article_pdf_path: str) -> pd.DataFrame:
                     "period_label": period_label,
                     "period_start_year": period_start_year,
                     "period_end_year": period_end_year,
-                    "mlr_occupation": occupation_label,
+                    "mlr_occupation": canonical_occupation_label,
                     "displacement_rate_percent": displacement_rate_percent,
                 }
             )

@@ -25,11 +25,16 @@ import pytest
 
 import historical_displacement
 from historical_displacement import (
+    CHART_NAME,
+    DEFAULT_SOURCE,
     DISPLACEMENT_SOURCES,
+    LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES,
+    TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES,
     build_displacement_rate_table,
     dws_displacement_rate,
     economy_displacement_rate,
     fetch_annual_means,
+    plot_displacement_rate_history,
     productivity_displacement_rate,
 )
 
@@ -442,3 +447,110 @@ class TestLoadMlrTotalDisplacementRate:
         assert rate_series.index.max() == 2000
         assert rate_series.min() >= 0.012
         assert rate_series.max() <= 0.020
+
+
+class TestPlotDisplacementRateHistory:
+    """plot_displacement_rate_history draws the six D sources across two axes split
+    by denominator (see the function's own docstring). These tests check the
+    plumbing — the file gets written, every source lands in exactly one group,
+    a missing source degrades rather than crashes, and the footnote's distinct-value
+    counts are computed from the data passed in rather than hardcoded — not the
+    pixels themselves.
+    """
+
+    @staticmethod
+    def _rate_table(sources=DISPLACEMENT_SOURCES):
+        rows = []
+        for source in sources:
+            if source == "productivity":
+                years = range(1981, 2008)
+            elif source == "mlr_long_tenured":
+                years = range(1981, 1984)
+            else:
+                years = range(2005, 2008)
+            year_list = list(years)
+            for index, year in enumerate(year_list):
+                rows.append(
+                    {
+                        "year": year,
+                        "source": source,
+                        "displacement_rate": 0.01 + 0.001 * index,
+                        "n_observations": len(year_list),
+                        "is_interpolated": source != "productivity",
+                    }
+                )
+        return pd.DataFrame(rows)[historical_displacement.OUTPUT_COLUMNS]
+
+    def test_writes_the_named_chart_file(self, tmp_path):
+        plot_displacement_rate_history(self._rate_table(), output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()
+
+    def test_every_non_productivity_source_has_exactly_one_denominator_group_and_a_color(self):
+        """productivity is drawn as a reference line, not a denominator series, so it is
+        deliberately excluded from both groups. Every other named source must land in
+        exactly one group and have an assigned line color — a future new source that
+        skipped this registration would silently vanish from the chart instead of
+        failing loudly."""
+        grouped_sources = set(TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES) | set(LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES)
+
+        assert set(TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES).isdisjoint(LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES)
+        assert grouped_sources == set(DISPLACEMENT_SOURCES) - {"productivity"}
+        assert set(historical_displacement.SOURCE_COLORS) == grouped_sources
+
+    def test_default_source_is_drawn_in_the_total_employment_panel(self):
+        """DEFAULT_SOURCE must be legible as the rate the model actually uses; if it ever
+        moved to the long-tenured group, the chart's bold/marker emphasis (applied only
+        within the total-employment loop) would silently land on the wrong series."""
+        assert DEFAULT_SOURCE in TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES
+
+    def test_a_missing_source_degrades_rather_than_crashing(self, tmp_path):
+        """build_displacement_rate_table can legitimately omit a source (e.g. no MLR
+        articles on disk) — the chart must still draw the sources it does have."""
+        dws_only_rate_table_df = self._rate_table(sources=[source for source in DISPLACEMENT_SOURCES if source != "mlr_long_tenured"])
+
+        plot_displacement_rate_history(dws_only_rate_table_df, output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()
+
+    def test_runs_with_only_productivity_available(self, tmp_path):
+        productivity_only_rate_table_df = self._rate_table(sources=["productivity"])
+
+        plot_displacement_rate_history(productivity_only_rate_table_df, output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()
+
+    def test_footnote_reports_distinct_value_counts_computed_from_the_data(self, tmp_path, monkeypatch):
+        """The footnote's '10 distinct values across 21 years' style claim must be
+        computed from the frame passed in, not hardcoded — otherwise it silently goes
+        stale the next time the DWS or MLR panel grows a survey."""
+        captured_figures = []
+        original_close = historical_displacement.plt.close
+
+        def _capture_then_close(figure):
+            captured_figures.append(figure)
+            original_close(figure)
+
+        monkeypatch.setattr(historical_displacement.plt, "close", _capture_then_close)
+
+        rate_table_df = self._rate_table()
+        plot_displacement_rate_history(rate_table_df, output_dir=str(tmp_path))
+
+        footnote_text = captured_figures[0].texts[-1].get_text()
+        dws_long_tenured_df = rate_table_df[rate_table_df["source"] == "dws_long_tenured"]
+        mlr_df = rate_table_df[rate_table_df["source"] == "mlr_long_tenured"]
+        assert (
+            f"dws_long_tenured holds {dws_long_tenured_df['displacement_rate'].nunique()} distinct values "
+            f"across {len(dws_long_tenured_df)} years" in footnote_text
+        )
+        assert f"mlr_long_tenured holds {mlr_df['displacement_rate'].nunique()} across {len(mlr_df)}" in footnote_text
+
+    def test_real_output_table_produces_a_chart(self, tmp_path):
+        """Integration check against the file the pipeline actually writes."""
+        if not os.path.exists(historical_displacement.OUTPUT_PATH):
+            pytest.skip("historical_displacement_rate.csv not built; run historical_displacement.py")
+
+        rate_table_df = pd.read_csv(historical_displacement.OUTPUT_PATH)
+        plot_displacement_rate_history(rate_table_df, output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()

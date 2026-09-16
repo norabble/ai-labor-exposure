@@ -20,6 +20,7 @@ Inputs:
 
 Outputs:
   • data/output/historical_displacement_rate.csv
+  • data/output/visualizations/historical_displacement_rate_sources.png
   • data/raw/bls_api/<series_id>_<start>_<end>.json  (fetch cache)
 
 Six estimates are produced, so the model can be swept across D sources the way
@@ -73,8 +74,10 @@ import json
 import os
 import warnings
 
+import matplotlib.pyplot as plt
 import pandas as pd
 import requests
+import seaborn as sns
 from dotenv import load_dotenv
 
 from dws_panel import STRUCTURAL_REASON, load_dws_panel
@@ -83,6 +86,50 @@ from mlr_displacement import parse_total_displacement_rate
 BLS_API_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 API_CACHE_DIR = "data/raw/bls_api"
 OUTPUT_PATH = "data/output/historical_displacement_rate.csv"
+VISUALIZATION_OUTPUT_DIR = "data/output/visualizations"
+CHART_NAME = "historical_displacement_rate_sources.png"
+
+# The DWS-derived and MLR sources divide by different denominators — total
+# employment for the four dws_* rows, long-tenured workers employed for
+# mlr_long_tenured (see mlr_displacement_rate's docstring) — so they are drawn
+# on separate axes rather than one shared scale. productivity is neither: it is
+# the only non-interpolated source (a smoothed macro series, not a survey
+# window average), so it is drawn as a dotted reference line on both axes for
+# context rather than assigned to either group.
+TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES = (
+    "dws_all_tenures",
+    "dws_long_tenured",
+    "dws_structural_long_tenured",
+    "dws_structural_all_tenures",
+)
+LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES = ("mlr_long_tenured",)
+
+# Fixed categorical order (never cycled) — the first four slots of the
+# project's validated 8-hue sequence for the total-employment group, plus the
+# fifth (magenta) reserved for the long-tenured-denominator group so it never
+# shares a hue with anything on the panel above it. Validated with
+# scripts/validate_palette.js "#2a78d6,#eb6834,#1baf7a,#4a3aa7,#e87ba4" --mode light.
+SOURCE_COLORS = {
+    "dws_all_tenures": "#2a78d6",
+    "dws_long_tenured": "#eb6834",
+    "dws_structural_long_tenured": "#1baf7a",
+    "dws_structural_all_tenures": "#4a3aa7",
+    "mlr_long_tenured": "#e87ba4",
+}
+PRODUCTIVITY_COLOR = "gray"
+
+SOURCE_LABELS = {
+    "dws_all_tenures": "DWS, all tenures",
+    "dws_long_tenured": "DWS, long-tenured (3+ yrs)",
+    "dws_structural_long_tenured": "DWS, structural + long-tenured",
+    "dws_structural_all_tenures": "DWS, structural, all tenures — DEFAULT_SOURCE",
+    "mlr_long_tenured": "MLR long-tenured (pre-2008 articles)",
+}
+
+# No archived DWS release or MLR article covers the 2002 or 2004 surveys — a
+# genuine hole in survey coverage, not a gap to be bridged. See CLAUDE.md's
+# seeds/dws_displacement_panel.csv note.
+SURVEY_COVERAGE_HOLE = (2001, 2004)
 
 # Nonfarm business sector output per hour, percent change from previous quarter
 # at an annual rate.
@@ -467,6 +514,145 @@ def build_displacement_rate_table(start_year: int = DEFAULT_START_YEAR, end_year
     return pd.DataFrame(rate_rows)[OUTPUT_COLUMNS].sort_values(["source", "year"]).reset_index(drop=True)
 
 
+def plot_displacement_rate_history(displacement_rate_df: pd.DataFrame, output_dir: str = VISUALIZATION_OUTPUT_DIR) -> None:
+    """Draw every displacement rate source across the 45-year span, on two axes.
+
+    Two properties of this data would mislead a reader if drawn as one smooth
+    line on one axis, so the design answers both directly rather than in a
+    caption alone:
+
+    Different denominators. The four dws_* sources divide displaced workers by
+    *total employment*; mlr_long_tenured divides by *long-tenured workers
+    employed* — a different quantity, not a level break in the same one (see
+    mlr_displacement_rate's docstring). They are drawn on two stacked axes with
+    their own denominator named in the axis label and title, never on one
+    shared scale.
+
+    Step functions, not annual readings. is_interpolated sources repeat one
+    survey-window or article-period average across every year it covers
+    (dws_long_tenured: 10 distinct values across 21 years; mlr_long_tenured: 6
+    across 20 — computed below, not hardcoded, so this stays correct if the
+    panel grows). drawstyle="steps-post" draws the flat window and the
+    instantaneous jump at the survey boundary that a smooth line would hide.
+    productivity is the only non-interpolated source and is drawn as a plain
+    dotted reference line instead, on both axes, to keep that distinction
+    visible.
+
+    The 2001-2004 hole (no archived DWS release or MLR article covers the 2002
+    or 2004 survey) is shown as a hatched band rather than bridged — the two
+    step lines already stop and start either side of it, so nothing connects
+    across it, and the band makes the absence legible instead of just blank.
+
+    dws_structural_all_tenures is DEFAULT_SOURCE — the rate the demand
+    composition model actually uses — and is drawn heavier, with markers, at
+    the top of the legend, so that is legible without reading the caption.
+    """
+    sns.set_theme(style="whitegrid")
+    figure, (total_employment_axis, long_tenured_axis) = plt.subplots(2, 1, figsize=(13, 8.5), sharex=True, height_ratios=[2, 1])
+
+    hole_start, hole_end = SURVEY_COVERAGE_HOLE
+    for axis in (total_employment_axis, long_tenured_axis):
+        axis.axvspan(
+            hole_start - 0.5,
+            hole_end + 0.5,
+            facecolor="lightgray",
+            alpha=0.45,
+            hatch="//",
+            edgecolor="dimgray",
+            linewidth=0,
+            zorder=0,
+        )
+
+    productivity_df = displacement_rate_df[displacement_rate_df["source"] == "productivity"].sort_values("year")
+    for axis, with_label in ((total_employment_axis, True), (long_tenured_axis, False)):
+        axis.plot(
+            productivity_df["year"],
+            productivity_df["displacement_rate"] * 100,
+            color=PRODUCTIVITY_COLOR,
+            linestyle=":",
+            linewidth=1.4,
+            label="Productivity (smoothed, not interpolated — reference)" if with_label else None,
+            zorder=2,
+        )
+
+    for source in TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES:
+        source_df = displacement_rate_df[displacement_rate_df["source"] == source].sort_values("year")
+        if source_df.empty:
+            continue
+        is_default_source = source == DEFAULT_SOURCE
+        total_employment_axis.plot(
+            source_df["year"],
+            source_df["displacement_rate"] * 100,
+            drawstyle="steps-post",
+            color=SOURCE_COLORS[source],
+            linewidth=2.4 if is_default_source else 1.3,
+            marker="o" if is_default_source else None,
+            markersize=4,
+            label=SOURCE_LABELS[source],
+            alpha=1.0 if is_default_source else 0.8,
+            zorder=5 if is_default_source else 3,
+        )
+
+    for source in LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES:
+        source_df = displacement_rate_df[displacement_rate_df["source"] == source].sort_values("year")
+        if source_df.empty:
+            continue
+        long_tenured_axis.plot(
+            source_df["year"],
+            source_df["displacement_rate"] * 100,
+            drawstyle="steps-post",
+            color=SOURCE_COLORS[source],
+            linewidth=1.8,
+            marker="o",
+            markersize=4,
+            label=SOURCE_LABELS[source],
+            zorder=4,
+        )
+
+    total_employment_axis.set_ylabel("Displacement rate\n(% of total employment)")
+    long_tenured_axis.set_ylabel("Displacement rate\n(% of long-tenured\nworkers employed)")
+    long_tenured_axis.set_xlabel("Year")
+
+    total_employment_axis.set_title(
+        "Total-employment denominator — DWS displaced-worker counts ÷ total employment", fontsize=10, loc="left"
+    )
+    long_tenured_axis.set_title(
+        "Long-tenured-employment denominator — a DIFFERENT quantity, not comparable to the panel above",
+        fontsize=9.5,
+        loc="left",
+        color=SOURCE_COLORS["mlr_long_tenured"],
+    )
+
+    for axis in (total_employment_axis, long_tenured_axis):
+        if axis.get_legend_handles_labels()[0]:  # empty when its source group has no data to plot
+            axis.legend(fontsize=8, loc="upper right", framealpha=0.9)
+
+    figure.suptitle(
+        "Economy-wide displacement rate D, 1981–2025 — six estimates feeding the demand composition model",
+        fontsize=12,
+        y=0.95,
+    )
+
+    dws_long_tenured_df = displacement_rate_df[displacement_rate_df["source"] == "dws_long_tenured"]
+    mlr_df = displacement_rate_df[displacement_rate_df["source"] == "mlr_long_tenured"]
+    footnote_text = (
+        "Step lines are one survey-window (DWS) or article-period (MLR) average repeated across every year it "
+        f"covers, not an annual reading: dws_long_tenured holds {dws_long_tenured_df['displacement_rate'].nunique()} "
+        f"distinct values across {len(dws_long_tenured_df)} years; mlr_long_tenured holds "
+        f"{mlr_df['displacement_rate'].nunique()} across {len(mlr_df)}. Hatched band marks "
+        f"{hole_start}–{hole_end}, where BLS published neither an archived DWS release nor an MLR article — left "
+        "blank, not bridged. dws_structural_all_tenures (bold, top panel) is DEFAULT_SOURCE, the rate the model "
+        "actually uses."
+    )
+    figure.text(0.5, 0.01, footnote_text, ha="center", fontsize=7.3, style="italic", color="dimgray", wrap=True)
+
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, CHART_NAME)
+    figure.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(figure)
+    print(f"  Saved {output_path}")
+
+
 def main() -> None:
     """Build the displacement rate table and write it to data/output/."""
     print("Estimating economy-wide displacement rates...")
@@ -485,6 +671,11 @@ def main() -> None:
             f"({source_df['year'].min()}–{source_df['year'].max()}, n={len(source_df)})"
         )
     print(f"  ✓ {OUTPUT_PATH}")
+
+    try:
+        plot_displacement_rate_history(displacement_rate_df)
+    except Exception as chart_error:  # a reporting artifact must never break this entry point
+        warnings.warn(f"Could not draw the displacement rate chart ({chart_error})", stacklevel=2)
 
 
 if __name__ == "__main__":

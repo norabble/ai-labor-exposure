@@ -21,6 +21,8 @@ Outputs:
   • data/output/occupation_composition_model_report.csv
   • data/output/historical_displacement_rate.csv (rebuilt by run_stage, so a
     pipeline run refreshes D's own table rather than shipping a stale commit)
+  • data/output/visualizations/historical_displacement_rate_sources.png
+    (drawn from that table by the same call, so both stay in sync)
 
 The model
 ─────────
@@ -235,8 +237,11 @@ def write_displacement_rate_table() -> None:
     economy_displacement_rate() directly — so a failure here must warn and let the
     stage continue, exactly as cps_historical_panel.run_stage() does with its own
     fetch. The file is a reporting artifact; the model is unaffected either way.
+
+    Also draws historical_displacement_rate_sources.png from the same table, so a
+    pipeline run produces both at the same point.
     """
-    from historical_displacement import OUTPUT_PATH, build_displacement_rate_table
+    from historical_displacement import OUTPUT_PATH, build_displacement_rate_table, plot_displacement_rate_history
 
     try:
         displacement_rate_df = build_displacement_rate_table()
@@ -252,6 +257,13 @@ def write_displacement_rate_table() -> None:
     displacement_rate_df.to_csv(OUTPUT_PATH, index=False)
     year_span = f"{int(displacement_rate_df['year'].min())}-{int(displacement_rate_df['year'].max())}"
     print(f"  Wrote {OUTPUT_PATH} ({displacement_rate_df['source'].nunique()} sources, {year_span})")
+
+    # The chart is a reporting artifact, not a model input — its failure must
+    # warn and let the stage continue, the same way the table rebuild above does.
+    try:
+        plot_displacement_rate_history(displacement_rate_df)
+    except Exception as chart_error:
+        warnings.warn(f"Could not draw the displacement rate chart ({chart_error})", stacklevel=2)
 
 
 def run_stage() -> None:

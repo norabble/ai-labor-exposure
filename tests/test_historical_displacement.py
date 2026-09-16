@@ -520,10 +520,10 @@ class TestPlotDisplacementRateHistory:
 
         assert (tmp_path / CHART_NAME).exists()
 
-    def test_footnote_reports_distinct_value_counts_computed_from_the_data(self, tmp_path, monkeypatch):
-        """The footnote's '10 distinct values across 21 years' style claim must be
-        computed from the frame passed in, not hardcoded — otherwise it silently goes
-        stale the next time the DWS or MLR panel grows a survey."""
+    @staticmethod
+    def _capture_saved_figures(monkeypatch):
+        """Intercept plt.close so a test can inspect the figure after
+        plot_displacement_rate_history saves and closes it."""
         captured_figures = []
         original_close = historical_displacement.plt.close
 
@@ -532,6 +532,70 @@ class TestPlotDisplacementRateHistory:
             original_close(figure)
 
         monkeypatch.setattr(historical_displacement.plt, "close", _capture_then_close)
+        return captured_figures
+
+    def test_productivity_is_drawn_only_on_the_total_employment_panel(self, tmp_path, monkeypatch):
+        """productivity has no displacement denominator at all — it is smoothed
+        productivity growth, not a count over any population — so plotting it against
+        the long-tenured panel's "% of long-tenured workers employed" axis would assert
+        a denominator it does not have, and matching heights on both panels would
+        invite exactly the cross-panel comparison the two-panel split exists to
+        prevent."""
+        captured_figures = self._capture_saved_figures(monkeypatch)
+
+        plot_displacement_rate_history(self._rate_table(), output_dir=str(tmp_path))
+
+        total_employment_axis, long_tenured_axis = captured_figures[0].axes[:2]
+        total_employment_labels = total_employment_axis.get_legend_handles_labels()[1]
+        long_tenured_labels = long_tenured_axis.get_legend_handles_labels()[1]
+
+        assert any("Productivity" in label for label in total_employment_labels)
+        assert not any("Productivity" in label for label in long_tenured_labels)
+        assert not any(line.get_label() == "productivity" or "Productivity" in line.get_label() for line in long_tenured_axis.get_lines())
+
+    def test_long_tenured_panel_scales_to_its_own_narrow_range(self, tmp_path, monkeypatch):
+        """The 'not comparable to the panel above' title has to be backed by the
+        geometry: if the long-tenured axis were stretched to match productivity's much
+        wider range, the two panels would look comparable despite the label."""
+        rows = []
+        for year in range(1981, 2001):
+            # A wide-swinging productivity series, 0%-6%, so a shared scale would be obvious.
+            rows.append(
+                {
+                    "year": year,
+                    "source": "productivity",
+                    "displacement_rate": 0.06 if year % 2 == 0 else 0.0,
+                    "n_observations": 20,
+                    "is_interpolated": False,
+                }
+            )
+            # mlr_long_tenured stays in a narrow 1.2%-1.6% band.
+            rows.append(
+                {
+                    "year": year,
+                    "source": "mlr_long_tenured",
+                    "displacement_rate": 0.012 + 0.00002 * (year - 1981),
+                    "n_observations": 20,
+                    "is_interpolated": True,
+                }
+            )
+        narrow_mlr_rate_table_df = pd.DataFrame(rows)[historical_displacement.OUTPUT_COLUMNS]
+        captured_figures = self._capture_saved_figures(monkeypatch)
+
+        plot_displacement_rate_history(narrow_mlr_rate_table_df, output_dir=str(tmp_path))
+
+        _, long_tenured_axis = captured_figures[0].axes[:2]
+        _, ylim_max = long_tenured_axis.get_ylim()
+
+        # mlr_long_tenured tops out at 1.6; productivity peaks at 6.0. A shared or
+        # matched scale would push this well past 3; the panel's own data does not.
+        assert ylim_max < 3.0
+
+    def test_footnote_reports_distinct_value_counts_computed_from_the_data(self, tmp_path, monkeypatch):
+        """The footnote's '10 distinct values across 21 years' style claim must be
+        computed from the frame passed in, not hardcoded — otherwise it silently goes
+        stale the next time the DWS or MLR panel grows a survey."""
+        captured_figures = self._capture_saved_figures(monkeypatch)
 
         rate_table_df = self._rate_table()
         plot_displacement_rate_history(rate_table_df, output_dir=str(tmp_path))

@@ -92,10 +92,11 @@ CHART_NAME = "historical_displacement_rate_sources.png"
 # The DWS-derived and MLR sources divide by different denominators — total
 # employment for the four dws_* rows, long-tenured workers employed for
 # mlr_long_tenured (see mlr_displacement_rate's docstring) — so they are drawn
-# on separate axes rather than one shared scale. productivity is neither: it is
-# the only non-interpolated source (a smoothed macro series, not a survey
-# window average), so it is drawn as a dotted reference line on both axes for
-# context rather than assigned to either group.
+# on separate axes rather than one shared scale. productivity is neither: it
+# has no displacement denominator at all (it is smoothed productivity growth,
+# not a count over any population), so it is drawn as a dotted reference line
+# on the total-employment panel only, labelled as a proxy rather than a rate,
+# and left off the long-tenured panel rather than assigned to either group.
 TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES = (
     "dws_all_tenures",
     "dws_long_tenured",
@@ -526,7 +527,17 @@ def plot_displacement_rate_history(displacement_rate_df: pd.DataFrame, output_di
     employed* — a different quantity, not a level break in the same one (see
     mlr_displacement_rate's docstring). They are drawn on two stacked axes with
     their own denominator named in the axis label and title, never on one
-    shared scale.
+    shared scale, and each axis is left to autoscale to its own series so the
+    long-tenured panel's much narrower range (roughly 1.1-2.0%) is visibly
+    different from the total-employment panel's rather than matched to it.
+    productivity has no displacement denominator at all — it is smoothed
+    productivity growth, not a count over any population — so it is drawn only
+    on the total-employment panel, as a dotted line labelled as a proxy rather
+    than a rate, and left off the long-tenured panel entirely: plotting it
+    there against a "% of long-tenured workers employed" axis would assert a
+    denominator it does not have, and drawing it at matching heights on both
+    panels would invite exactly the cross-panel comparison the two-panel split
+    exists to prevent.
 
     Step functions, not annual readings. is_interpolated sources repeat one
     survey-window or article-period average across every year it covers
@@ -534,9 +545,6 @@ def plot_displacement_rate_history(displacement_rate_df: pd.DataFrame, output_di
     across 20 — computed below, not hardcoded, so this stays correct if the
     panel grows). drawstyle="steps-post" draws the flat window and the
     instantaneous jump at the survey boundary that a smooth line would hide.
-    productivity is the only non-interpolated source and is drawn as a plain
-    dotted reference line instead, on both axes, to keep that distinction
-    visible.
 
     The 2001-2004 hole (no archived DWS release or MLR article covers the 2002
     or 2004 survey) is shown as a hatched band rather than bridged — the two
@@ -563,17 +571,22 @@ def plot_displacement_rate_history(displacement_rate_df: pd.DataFrame, output_di
             zorder=0,
         )
 
+    # Drawn on the total-employment panel only: productivity growth has no
+    # displacement denominator at all (it is not a count over any population),
+    # so plotting it against either axis's "% of ... employed" label would
+    # assert something false, and drawing it at matching heights on both
+    # panels would invite exactly the cross-panel comparison this chart's
+    # split into two panels exists to prevent.
     productivity_df = displacement_rate_df[displacement_rate_df["source"] == "productivity"].sort_values("year")
-    for axis, with_label in ((total_employment_axis, True), (long_tenured_axis, False)):
-        axis.plot(
-            productivity_df["year"],
-            productivity_df["displacement_rate"] * 100,
-            color=PRODUCTIVITY_COLOR,
-            linestyle=":",
-            linewidth=1.4,
-            label="Productivity (smoothed, not interpolated — reference)" if with_label else None,
-            zorder=2,
-        )
+    total_employment_axis.plot(
+        productivity_df["year"],
+        productivity_df["displacement_rate"] * 100,
+        color=PRODUCTIVITY_COLOR,
+        linestyle=":",
+        linewidth=1.4,
+        label="Productivity growth (proxy — no displacement denominator)",
+        zorder=2,
+    )
 
     for source in TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES:
         source_df = displacement_rate_df[displacement_rate_df["source"] == source].sort_values("year")
@@ -642,7 +655,8 @@ def plot_displacement_rate_history(displacement_rate_df: pd.DataFrame, output_di
         f"{mlr_df['displacement_rate'].nunique()} across {len(mlr_df)}. Hatched band marks "
         f"{hole_start}–{hole_end}, where BLS published neither an archived DWS release nor an MLR article — left "
         "blank, not bridged. dws_structural_all_tenures (bold, top panel) is DEFAULT_SOURCE, the rate the model "
-        "actually uses."
+        "actually uses. Productivity growth has no displacement denominator and appears only on the top panel. "
+        "The two panels are independently scaled, not a shared axis."
     )
     figure.text(0.5, 0.01, footnote_text, ha="center", fontsize=7.3, style="italic", color="dimgray", wrap=True)
 

@@ -30,7 +30,7 @@ from synthesize_impacts import (
     derive_exposure_tier,
     rollup_to_occupation,
 )
-from validate_bls import build_unit_scores
+from validate_bls import _sort_period, build_unit_scores
 
 
 def _task_df(rows):
@@ -364,30 +364,30 @@ class TestAttachGrowthColumns:
         return pd.DataFrame(
             {
                 "key": ["a"],
-                "TOT_EMP_21": [100.0],
-                "TOT_EMP_22": [110.0],
-                "TOT_EMP_23": [121.0],
-                "A_MEDIAN_22": [50.0],
-                "A_MEDIAN_23": [55.0],
+                "TOT_EMP_2021": [100.0],
+                "TOT_EMP_2022": [110.0],
+                "TOT_EMP_2023": [121.0],
+                "A_MEDIAN_2022": [50.0],
+                "A_MEDIAN_2023": [55.0],
             }
         )
 
     def test_pre_anchor_periods_get_hist_prefix(self):
-        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
-        assert result.iloc[0]["hist_emp_growth_21_22"] == pytest.approx(0.10)
-        assert result.iloc[0]["emp_growth_22_23"] == pytest.approx(0.10)
-        assert "hist_emp_growth_22_23" not in result.columns
+        result = attach_growth_columns(self._trend_frame(), ["2021", "2022", "2023"])
+        assert result.iloc[0]["hist_emp_growth_2021_2022"] == pytest.approx(0.10)
+        assert result.iloc[0]["emp_growth_2022_2023"] == pytest.approx(0.10)
+        assert "hist_emp_growth_2022_2023" not in result.columns
 
     def test_composite_and_pre_ai_anchored_at_2022(self):
-        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
+        result = attach_growth_columns(self._trend_frame(), ["2021", "2022", "2023"])
         assert result.iloc[0]["emp_growth_composite"] == pytest.approx(0.10)
         assert result.iloc[0]["wage_growth_composite"] == pytest.approx(0.10)
-        assert result.iloc[0]["hist_emp_growth_pre_ai"] == pytest.approx(0.10)
+        assert result.iloc[0]["hist_emp_growth_pre_ai_2021_2022"] == pytest.approx(0.10)
 
     def test_wage_growth_skipped_when_a_year_lacks_wages(self):
-        result = attach_growth_columns(self._trend_frame(), ["21", "22", "23"])
-        assert "hist_wage_growth_21_22" not in result.columns
-        assert "emp_growth_22_23" in result.columns
+        result = attach_growth_columns(self._trend_frame(), ["2021", "2022", "2023"])
+        assert "hist_wage_growth_2021_2022" not in result.columns
+        assert "emp_growth_2022_2023" in result.columns
 
 
 class TestSectorJackknife:
@@ -629,7 +629,7 @@ class TestBuildUnitScores:
         merged_validation_df = pd.DataFrame(
             {
                 "OCC_CODE": ["15-1252", "15-1253", "11-9013"],
-                "TOT_EMP_25": [1000.0, 200.0, 50.0],
+                "TOT_EMP_2025": [1000.0, 200.0, 50.0],
                 "occupation_exposure": [0.10, 0.40, 0.02],
                 "net_employment_change": [0.15, None, -0.05],
             }
@@ -637,14 +637,42 @@ class TestBuildUnitScores:
         unit_membership_df = pd.DataFrame(
             {
                 "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-99-0000"],
-                "year": ["22", "22", "21", "22", "22"],
+                "year": ["2022", "2022", "2021", "2022", "2022"],
                 "oews_code": ["15-1252", "15-1253", "15-1132", "11-9013", "99-0000"],
             }
         )
         unit_scores_df = build_unit_scores(
-            merged_validation_df, unit_membership_df, "TOT_EMP_25", ["occupation_exposure", "net_employment_change"]
+            merged_validation_df, unit_membership_df, "TOT_EMP_2025", ["occupation_exposure", "net_employment_change"]
         ).set_index("unit_id")
         assert unit_scores_df.loc["U-15-1252", "occupation_exposure"] == pytest.approx(0.15)
         assert unit_scores_df.loc["U-15-1252", "net_employment_change"] == pytest.approx(0.15)
         assert unit_scores_df.loc["U-11-9013", "occupation_exposure"] == pytest.approx(0.02)
         assert "U-99-0000" not in unit_scores_df.index
+
+
+class TestSortPeriod:
+    """
+    _sort_period is the near-duplicate of composition_era_validation's
+    _period_sort_key used to chronologically order growth columns for the
+    signal-over-time charts. With four-digit years the old (99, 0) sentinel
+    sorted composite/pre_ai FIRST rather than last (99 < 1983), and exact
+    equality against "pre_ai" raised on a span-carrying key like
+    'pre_ai_2005_2022'.
+    """
+
+    def test_composite_and_pre_ai_sort_last_among_four_digit_periods(self):
+        columns = [
+            "emp_growth_composite",
+            "emp_growth_2022_2023",
+            "hist_emp_growth_1999_2000",
+            "hist_emp_growth_1983_1984",
+        ]
+        assert sorted(columns, key=_sort_period) == [
+            "hist_emp_growth_1983_1984",
+            "hist_emp_growth_1999_2000",
+            "emp_growth_2022_2023",
+            "emp_growth_composite",
+        ]
+
+    def test_span_carrying_pre_ai_key_does_not_raise_and_sorts_with_composite(self):
+        assert _sort_period("hist_emp_growth_pre_ai_2005_2022") == _sort_period("emp_growth_composite")

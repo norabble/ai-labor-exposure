@@ -24,8 +24,10 @@ const https = require('https');
     downloadPath: downloadDir
   });
 
-  // 2024 and 2025 are only available as the full "all areas" file; 2022/2023 and earlier are national-only.
-  // SOC 2018 codes: 2019+. SOC 2010 codes: 2010–2018. SOC 2000 codes: 2005–2009.
+  // SOC 2018 codes: 2019+. SOC 2010 codes: 2010-2018. SOC 2000 codes: 1999-2009.
+  // 1999-2002 are annual estimates; 2003 onward carry a May reference month, so
+  // the 2002->2003 interval is not a clean twelve months. 1997-1998 are omitted:
+  // they use the pre-SOC five-digit OES coding system with div/maj group headers.
   const urls = [
     'https://www.bls.gov/oes/special-requests/oesm25all.zip',
     'https://www.bls.gov/oes/special.requests/oesm24all.zip',
@@ -48,6 +50,12 @@ const https = require('https');
     'https://www.bls.gov/oes/special.requests/oesm07nat.zip',
     'https://www.bls.gov/oes/special.requests/oesm06nat.zip',
     'https://www.bls.gov/oes/special.requests/oesm05nat.zip',
+    'https://www.bls.gov/oes/special-requests/oesm04nat.zip',
+    'https://www.bls.gov/oes/special-requests/oesm03nat.zip',
+    'https://www.bls.gov/oes/special-requests/oes02nat.zip',
+    'https://www.bls.gov/oes/special-requests/oes01nat.zip',
+    'https://www.bls.gov/oes/special-requests/oes00nat.zip',
+    'https://www.bls.gov/oes/special-requests/oes99nat.zip',
   ];
 
   for (const url of urls) {

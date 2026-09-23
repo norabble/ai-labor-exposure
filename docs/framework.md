@@ -481,15 +481,15 @@ and its time variation.
 Sector-level Pearson r against year-over-year employment growth, n = 22 sectors,
 averaged in Fisher-z space, COVID periods excluded:
 
-| Model | pre-2022 (15 periods) | AI era (3 periods) | difference | Welch p |
+| Model | pre-2022 (21 periods) | AI era (3 periods) | difference | Welch p |
 |---|---:|---:|---:|---:|
-| Demand composition only | +0.202 | +0.348 | +0.146 | 0.050 |
-| Dynamic, AI penetration | +0.218 | +0.455 | +0.237 | 0.033 |
-| Rebound-adjusted | −0.067 | −0.274 | −0.207 | 0.172 |
-| Observed AI coverage | +0.053 | −0.212 | −0.265 | 0.113 |
+| Demand composition only | +0.206 | +0.348 | +0.142 | 0.010 |
+| Dynamic, AI penetration | +0.199 | +0.455 | +0.256 | 0.033 |
+| Rebound-adjusted | −0.029 | −0.274 | −0.245 | 0.132 |
+| Observed AI coverage | +0.076 | −0.212 | −0.288 | 0.100 |
 
 The composition-only model has a pre-AI signal, and pre-2022 it is
-indistinguishable from the full AI model (+0.202 against +0.218) — unsurprising,
+indistinguishable from the full AI model (+0.206 against +0.199) — unsurprising,
 since AI penetration is anachronistic in that era and can add nothing. Its
 strongest periods are 2006→07, 2007→08 and 2008→09 (+0.61, +0.66, +0.54, all
 individually significant), which is the financial crisis.
@@ -499,35 +499,36 @@ pre-AI signal could mean the taxonomy describes a general mechanism, or it could
 mean it is picking up cyclical sorting, since Bounded and clerical work is shed
 in downturns and rehired in recoveries. `decompose_fit_strength` separates them
 by regressing Fisher-z fit strength on the change in unemployment plus an AI-era
-indicator (n = 18 periods, COVID excluded):
+indicator (n = 24 periods, COVID excluded):
 
 | Term | Composition only | Dynamic, AI penetration |
 |---|---|---|
-| intercept (signal at zero cyclical movement) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
-| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
-| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
-| R² | 0.498 | 0.494 |
+| intercept (signal at zero cyclical movement) | **+0.224, p < 0.0001** | +0.208, p < 0.0001 |
+| change in unemployment | **+0.137, p = 0.0020** | +0.057, p = 0.062 |
+| AI era | +0.112, p = 0.349 | **+0.272, p = 0.0052** |
+| R² | 0.403 | 0.417 |
 
 Three findings follow.
 
-**The taxonomy has a general, non-cyclical baseline.** The intercept is +0.238
-(p = 0.0004) — a real sector-level signal at zero cyclical movement, from a
+**The taxonomy has a general, non-cyclical baseline.** The intercept is +0.224
+(p < 0.0001) — a real sector-level signal at zero cyclical movement, from a
 predictor containing no technology data at all. This is the direct evidence that
 the Bounded/Unbounded/Adversarial framework applies before AI.
 
 **Its strength is strongly cyclical.** Each percentage point of rising
-unemployment adds +0.160 to composition-only fit strength (p = 0.0024). This
+unemployment adds +0.137 to composition-only fit strength (p = 0.0020). This
 confirms, as a measurement, the hypothesis recorded under
 [Future investigation: the business cycle](#future-investigation-the-business-cycle):
 the composition fits sector growth best when unemployment is rising. The
 mechanism is plausible — labor-saving reorganisation is implemented under
 pressure, and recoveries return Bounded jobs the model assumes do not come back
-— but the cyclical term is twice the size of the AI model's, so composition
+— but the cyclical term is roughly twice the size of the AI model's, whose own
+cyclical term no longer clears significance (+0.057, p = 0.062), so composition
 alone is the more cycle-dependent measure.
 
 **AI penetration adds a real, separable increment.** Composition-only shows no
-AI-era premium once the cycle is controlled (+0.093, p = 0.476), while the
-AI-penetration model does (+0.238, p = 0.021). So the AI-era signal is not
+AI-era premium once the cycle is controlled (+0.112, p = 0.349), while the
+AI-penetration model does (+0.272, p = 0.0052). So the AI-era signal is not
 merely the general mechanism running in a particular decade: penetration data
 carries information beyond composition, specifically after 2022.
 
@@ -557,17 +558,118 @@ Two things bound it. The DWS publishes no occupation × reason cross-tab, so the
 test runs on all-reasons displacement, of which only 44.4% is "position or shift
 abolished"; the rest is plant closings and insufficient work, which fall heavily
 on management and professional staff and plausibly explain much of the largest
-miss. And n = 10 groups from a single survey. See
-`docs/charts/dws_observed_vs_predicted_displacement.md`.
+miss. And n = 10 groups. This comparison uses the single newest survey as its
+headline, but the panel now holds ten biennial surveys (2008–2026), and the same
+comparison repeated against every one of them
+(`composition_model_displacement_validation_panel.csv`) gives composition
+Pearson +0.220 to +0.645 (median +0.387) and dynamic +0.261 to +0.618 (median
++0.567) — ten of ten positive for both models, only 1/10 individually
+significant at n=10. That uniform sign is not ten independent confirmations: the
+predicted vector is identical across every survey (it is 2025-derived), only the
+observed side varies, and consecutive biennial releases share overlapping
+three-year recall windows, so a sign test or an averaged r would be bogus. The
+consistent direction is noted as suggestive, not pooled into a claim of
+significance — this remains a null result under this project's asymmetric
+reading rule. See `docs/charts/dws_observed_vs_predicted_displacement.md`.
 
 **Does fit strength track the displacement rate itself?** The cycle decomposition
 uses the change in unemployment; the more direct question is whether periods of
-greater economy-wide displacement show stronger demand-type sorting. The DWS
-cannot answer it — one survey, one rate repeated across 2023–2025, no time
-variation — so smoothed productivity growth is the only annual D available.
-Composition fit strength correlates with it at +0.425 (p = 0.079, n = 18),
-trending in the predicted direction without reaching significance. A hypothesis
-check, not a result.
+greater economy-wide displacement show stronger demand-type sorting. Three D
+sources now have enough annual variation to test this
+(`historical_displacement.DISPLACEMENT_SOURCES`), and `correlate_with_displacement_rate`
+in `composition_era_validation.py` is parameterised over all three rather than
+hardcoded to one:
+
+This table is at sector level; `correlate_with_displacement_rate` is run at all
+three levels (sector, occupation, and the CPS instrument's ten groups), and each
+source is fetched from its own coverage floor — 1997 for `productivity` (widened
+past its 1947 start, for the centered-window reason given further below) and
+`DEFAULT_START_YEAR` (1981) for the other two, so `mlr_long_tenured`'s own
+1981–2000 coverage is never truncated (see the note after the table for why this
+matters and what an earlier version of this function got wrong).
+
+| Source | Coverage | `composition_net_change` fit strength |
+|---|---|---|
+| `productivity` | 1947–2025 (smoothed) | +0.298, p = 0.158, n = 24 |
+| `dws_long_tenured` | 2005–2025 (annual, from the ten-survey DWS panel) | +0.629, p = 0.004, n = 19 |
+| `mlr_long_tenured` | 1981–2000 (MLR articles' economy-wide rate) | skipped at sector and occupation level — only 1-2 usable periods overlap the OEWS-derived series, which starts in 1999; see below for the CPS level, where seventeen periods overlap |
+
+`dws_long_tenured` is significant at the sector level, and in the same direction
+for every model score tested (`net_employment_change` +0.226 p = 0.353,
+`occupation_exposure` +0.656 p = 0.002, `observed_exposure` +0.696 p = 0.001).
+That agreement across all four scores does not strengthen the finding — it
+undermines it. `observed_exposure` is raw Anthropic AI task coverage: it carries
+no demand-composition content at all, and it produces the *strongest* correlation
+of the four (+0.696, ahead of the composition score's own +0.629). If displacement
+sorting by demand type were driving this, the composition score should lead a
+measure that has no demand-type information in it, not trail it. Four unrelated
+scores moving together points to a shared confound in the test, not to
+displacement driving demand-type sorting — and `displacement_rate_time_trend`
+(`composition_era_validation.py`, printed by `correlate_with_displacement_rate`
+for every source) measures two confounds large enough to be that shared cause:
+
+- **The regressor has only 10 distinct values across the 21 years it spans.**
+  `dws_long_tenured` repeats each survey's rate across its whole 2-3-year window,
+  so the reported `n = 19` periods carry roughly 10 independent readings, not 19 —
+  the p-values above are correspondingly overstated versus what an effective n of
+  roughly 10 would justify. That is a direction, not a multiplier: a Pearson
+  p-value is a nonlinear function of n, so "overstated" does not mean overstated
+  by any fixed factor.
+- **`dws_long_tenured` is itself substantially a declining time trend.** Correlated
+  against calendar year alone: r = −0.684 (p = 0.0006) over 2005–2025, r = −0.772
+  (p = 0.0002) restricted to 2008–2025. A source this collinear with time cannot be
+  distinguished, by this test alone, from any other quantity that also moved over
+  2005–2025 — including each score's own fit strength, whatever drives it.
+- **The AI era sits in the low part of D's range, adjacent to its minimum.** From
+  `composition_model_era_comparison.csv`, `occupation_exposure`'s mean sector-level
+  fit strength goes −0.029 (pre-2022) to −0.274 (AI era) and `observed_exposure`'s
+  goes +0.076 to −0.212 — both flip negative in the AI era. `dws_long_tenured`'s
+  value for every AI-era period (2023–2025, one repeated survey window) is 0.69%,
+  the 4th-lowest of the source's 10 distinct values; the series' true minimum,
+  0.56%, falls in 2021–2022, the last pre-AI period immediately before it. D is
+  low precisely where these two scores' fit strength is also low (both negative),
+  so a positive D-tracking correlation for `occupation_exposure` and
+  `observed_exposure` substantially re-expresses the AI-era sign flip documented
+  elsewhere in this section, rather than being independent evidence that
+  displacement drives sorting strength.
+
+Put together: the correlation is real as computed, but between the collinearity
+with calendar year and the effective n of roughly 10, this test cannot currently
+distinguish "fit strength tracks displacement" from "fit strength changed over
+2005–2025 for some other reason, and displacement happens to have moved over the
+same span." It is reported, with these confounds attached, as a hypothesis check
+that the data on hand cannot settle — not as evidence for or against the
+displacement mechanism specifically.
+
+`mlr_long_tenured` cannot be tested at the sector or occupation level at all: it
+ends in 2000, a year before those OEWS-derived YoY series begin (1999→2000 is
+the first period, mapping to displacement year 2000, so at most one or two
+periods overlap — below the 5-period floor `correlate_with_displacement_rate`
+requires before reporting a source). That skip is a genuine coverage gap at
+those two levels, not evidence either way.
+
+At CPS level, where the ten occupation groups reach back to 1983, it is not a
+coverage gap: seventeen periods overlap `mlr_long_tenured`'s 1981–2000 coverage,
+comfortably above the 5-period floor. The result is a clean null:
+`composition_net_change` Pearson −0.170 (p = 0.513, n = 17),
+`net_employment_change` −0.212 (p = 0.414), `occupation_exposure` +0.138
+(p = 0.596), `observed_exposure` +0.060 (p = 0.818) — nothing reaches
+significance in either direction. Per this project's asymmetric reading rule
+this is uninformative, not disconfirming, in exactly the same way the
+sector-level `productivity` null above is. `mlr_long_tenured` also carries only
+6 distinct annual values across the 20 years it spans — thinner even than
+`dws_long_tenured`'s 10-in-21 — and is itself a declining time trend against
+calendar year (r = −0.490, p = 0.0283): the same two confounds discussed above
+for `dws_long_tenured` apply here too, for the same reason, so this null is
+additionally uninformative rather than a clean rejection.
+
+An earlier version of `correlate_with_displacement_rate` hardcoded
+`start_year=1997` for every source regardless of level. Since 1997 postdates
+`mlr_long_tenured`'s own 1981 floor, that genuinely truncated its usable range to
+four years at every level — not merely insufficient overlap — so the CPS-level
+result above was never computed rather than computed and found small; an earlier
+version of this document also described the skip as a coverage gap without
+qualifying it as sector/occupation-specific. Both corrected 2026-09-15.
 
 ### Limitations
 
@@ -592,14 +694,60 @@ is really a claim about its composition class. Relaxing this — plausibly by
 weighting with a Routine Task Intensity index built from the O\*NET data already
 on disk — is the first thing to try next.
 
-**One DWS survey.** BLS publishes no archive of prior Displaced Worker Supplement
-releases, so the panel holds only January 2026 (covering 2023–2025) and
-accumulates forward. This bounds the amplitude and time-variation work, not the
-correlations, which are invariant to `D`.
+**The DWS panel reaches 2008 as counts, not the spec's 1984 floor — extended back
+to 1981-82 as rates.** An earlier note here claimed BLS published no archive of
+prior Displaced Worker Supplement releases, so the panel held only the single
+January 2026 survey; that claim was wrong — see the correction in `CLAUDE.md`
+under `seeds/dws_displacement_panel.csv` — and the panel now holds ten biennial
+surveys, 2008–2026, as counts. The archive itself is the hard floor for that
+route: no BLS news-release archive exists for 2000–2006, so 2008 is as far back
+as counted releases go. Pre-2008 history instead comes from the Displaced Worker
+Supplement results BLS published in *Monthly Labor Review* articles rather than
+news releases — as displacement *rates* on the 1980-census occupational
+taxonomy, not counts, crosswalked to the ten modern DWS groups
+(`seeds/mlr_occupation_crosswalk.csv`, `mlr_displacement.py`). Two crosswalk rows
+sit below `high` confidence: `Handlers, equipment cleaners, helpers, and
+laborers` is flagged low-confidence because it genuinely splits across the
+modern production and transportation/material-moving groups, and the crosswalk
+sends the whole 1980-census bucket to one side as a judgement call, not a fact;
+`Other precision production occupations` is flagged medium-confidence for the
+same kind of reason, less severely — the 1980-census precision-production
+bucket does not map cleanly onto one modern group either. Combined coverage is 1981-82
+through 2023-25, with a hole at 2001-04: BLS published neither a news-release
+archive nor an MLR article for the 2002 or 2004 surveys. Because rates cannot be
+summed with counts, the two bases are kept distinguishable in the panel
+(`measurement_basis`, `source` columns) rather than blended, and every consumer
+that aggregates `displaced_thousands` filters to counts only — so this extension
+adds history without changing any existing correlation.
+
+That panel extension folds MLR rates in at the occupation level
+(`mlr_rows_for_panel`), but the panel itself was not, on its own, a route to a
+new *economy-wide* D: `dws_displacement_rate` filters to `measurement_basis ==
+"count_thousands"` and so never reads those rate rows. `historical_displacement.py`
+now reaches D back to 1981 by a second, independent path: `mlr_long_tenured`
+parses Table 2's own economy-wide "Total, 20 years and older" row directly out of
+the three MLR article PDFs (`mlr_displacement.parse_total_displacement_rate`,
+`historical_displacement.mlr_displacement_rate`) rather than going through the
+panel at all. Its annual values run 1.20%–1.95% over 1981–2000 — higher than
+`dws_long_tenured`'s 0.56–1.69%, because the two divide by different
+denominators (long-tenured workers *employed* for the MLR rate, versus *total*
+employment for the count-derived rate) and are two different quantities that
+happen to share units, not one series with a level break. `mlr_long_tenured` is
+therefore its own entry in `DISPLACEMENT_SOURCES`, never spliced onto
+`dws_long_tenured` or `dws_structural_long_tenured` — the same rule the project
+already applies to CPS-versus-OEWS employment. `DEFAULT_START_YEAR` moved from
+1984 to 1981 to match: `mlr_long_tenured` is now the binding floor on how far
+back D's time variation reaches, not the DWS count panel. The cross-sectional
+correlations remain invariant to which `D` source is chosen either way, since D
+is a scalar that cancels out of them; only D's amplitude and time variation
+differ by source.
 
 ### Future investigation: the business cycle
 
-Not pursued; recorded so the observation is not lost. Pairing each 2005→2025
+Recorded so the observation is not lost; the first half of it is now measured by
+`decompose_fit_strength` (see [Result: the signal is general, cyclical, and AI
+adds to it](#result-the-signal-is-general-cyclical-and-ai-adds-to-it) above), and
+the within-sector premium below remains untested. Pairing each 1999→2025
 period with the change in national unemployment suggests the demand-type
 composition fits sector growth best when unemployment is *rising* and worst in
 recoveries (2010→13, 2020→22), when cyclical rehiring returns Bounded jobs the
@@ -608,10 +756,54 @@ counter-cyclical (large in downturns, near zero in recoveries) while the
 Adversarial premium is roughly steady through the cycle and persists in
 recoveries. A plausible mechanism is that Adversarial spending — sales, legal,
 security — is defensive within the firm and needs no capital investment,
-whereas labor-saving adoption does. This rests on three rising-unemployment
-periods and 2025 task labels applied backwards, so it is a hypothesis only.
-The crosswalk harmonization now in `harmonize_soc.py` covers exactly this kind
-of code churn for 2005→2025 at occupation level; testing the hypothesis back to
-1960 would need the same treatment applied to the pre-2000 SOC classifications,
-plus per-year task reclassification against the occupational definitions of
-that era.
+whereas labor-saving adoption does. This now rests on nine rising-unemployment
+periods — the 2001 recession contributes 2000→01, 2001→02 and 2002→03, tripling
+the cyclical identification the earlier 2005-start series allowed — but still on
+2025 task labels applied backwards, so it remains a hypothesis.
+The crosswalk harmonization in `harmonize_soc.py` covers exactly this kind
+of code churn for 1999→2025 at occupation level. 1999 is a hard floor for OEWS:
+the 1997 and 1998 files use the pre-SOC five-digit OES coding system, and before
+1997 the survey was industry-based with no wage data. Reaching further back means
+switching instrument to the CPS — see
+`docs/superpowers/specs/2026-09-13-deep-history-extension-design.md`, which works
+the question through to a 1983 floor and records why 1960 is not defensible:
+per-year task reclassification against the occupational definitions of that era
+would still be required, and the decennial-only data before 1962 cannot support
+year-over-year periods at all.
+
+### A second instrument: CPS, 1983→2026
+
+The OEWS floor above has since been worked around, not lifted: `cps_historical_panel.py`
+adds annual CPS occupation-group employment — the ten `LNU0203220x` series fetched
+directly from the BLS historical timeseries API, the same underlying classification
+Table A-19 also draws from, but not the Table A-19 page itself, which this project
+already uses for a different, more recent chart (see `docs/cps_data_expansion.md`) —
+as a second, independent employment instrument covering ten occupation groups from
+1983 to 2026 — 43 year-over-year periods, more than double OEWS's 1999→2025 span. It
+is a separate instrument from OEWS, drawn as a separate series and never spliced onto
+it: CPS is a
+household survey that counts the self-employed and agriculture, so its totals
+(~101M in 1983 rising to ~163M in 2025) legitimately run above OEWS's 127–130M
+for the same years. Over the years both instruments cover, they agree only
+moderately (260 paired group-periods, Pearson r = 0.547, mean |difference| =
+0.0215) — enough to say the pre-1999 CPS-only stretch is not contradicted by
+the one check available, not enough to call it validated to OEWS precision. Ten
+groups also means less power than 22 sectors: significance needs |r| ≈ 0.63
+here against ≈ 0.42 at sector level, so figures at the two levels are not
+comparable in magnitude.
+
+Run through the same era comparison and cycle decomposition as the sector-level
+result above, `composition_net_change` on the CPS instrument is a null: the
+AI-era mean r (+0.256, n=4 periods) is not distinguishable from the pre-2022
+mean (+0.425, n=37 periods; Welch p = 0.445), and the cycle decomposition's
+`ai_era` term is negative and non-significant (n=41 periods, R² = 0.023). Under
+this project's anachronism rule — 2025 O\*NET labels are strong evidence when
+they still produce a positive result, but uninformative rather than
+disconfirming when they do not — this null says nothing against the taxonomy.
+One divergence is worth flagging rather than burying: the business-cycle term
+that is significant at sector level (+0.137, p = 0.002) vanishes at CPS level
+(+0.030, p = 0.692), and the data on hand do not distinguish between candidate
+explanations (ten-group aggregation, genuinely different pre-1999 cyclical
+behaviour, and instrument differences). Full numbers, the two internal
+comparability breaks the CPS series carries, and the composition-stability
+sensitivity check are in `docs/charts/composition_model_signal_over_time_cps.md`.

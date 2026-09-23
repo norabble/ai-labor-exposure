@@ -1,0 +1,15 @@
+mlr_occupation,dws_group,mapping_confidence,note
+"Executive, administrative, and managerial","management, business, and financial operations occupations",high,1980-census executive/administrative/managerial maps directly onto the modern management and business/financial operations group.
+Professional specialty,professional and related occupations,high,1980-census professional specialty maps directly onto the modern professional and related group.
+Technicians and related support,professional and related occupations,high,Technicians are grouped with professional and related occupations in the modern ten-group scheme.
+Sales occupations,sales and related occupations,high,Direct correspondence.
+"Administrative support, including clerical",office and administrative support occupations,high,Direct correspondence.
+Protective services,service occupations,high,Protective service is a subset of the modern service occupations group.
+Other service occupations,service occupations,high,Direct correspondence.
+Mechanics and repairers,"installation, maintenance, and repair occupations",high,Direct correspondence.
+Construction trades,construction and extraction occupations,high,Direct correspondence.
+Other precision production occupations,production occupations,medium,The 1980-census precision production bucket does not map cleanly onto one modern group; production occupations is the closest single target but the boundary is judgement rather than a clean crosswalk.
+"Machine operators, assemblers, and inspectors",production occupations,high,Direct correspondence.
+Transportation and material-moving occupations,transportation and material moving occupations,high,Direct correspondence (spelling differs only in the hyphen carried from the 1999 article).
+"Handlers, equipment cleaners, helpers, and laborers",transportation and material moving occupations,low,"Genuinely splits across production and transportation/material-moving occupations in the modern scheme; this assignment sends the whole 1980-census bucket to one side and is a judgement call, not a fact."
+"Farming, forestry, and fishing","farming, fishing, and forestry occupations",high,Direct correspondence (word order differs only cosmetically).

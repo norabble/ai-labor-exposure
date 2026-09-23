@@ -4,7 +4,7 @@ composition_era_validation.py
 The headline test of the demand composition model: is the Bounded/Unbounded/
 Adversarial signal era-invariant, or does it only appear after AI?
 
-Runs the sector-level validation for every year-over-year period 2005→2025 for
+Runs the sector-level validation for every year-over-year period 1999→2025 for
 four scores side by side, then compares the pre-2022 and AI-era means:
 
   composition_net_change   demand composition only — no technology data at all
@@ -41,12 +41,12 @@ Two caveats that bound every number here
 ─────────────────────────────────────────
 **The demand-type labels are from 2025 O*NET task statements, applied
 backwards.** docs/framework.md already flags this. Occupational task content
-genuinely changed over 2005-2025, so the further back a period sits, the more
+genuinely changed over 1999-2025, so the further back a period sits, the more
 anachronistic its labels. Reaching further back buys statistical power at the
 cost of construct validity.
 
 **The era test is badly under-powered on the AI side.** There are only three
-AI-era YoY periods against sixteen pre-AI ones, and the periods are
+AI-era YoY periods against twenty-one pre-AI ones, and the periods are
 autocorrelated, so the Welch test on Fisher-z transformed correlations reported
 here should be read as a descriptive comparison rather than an inferential
 result. A non-significant difference is the expected outcome either way and is
@@ -80,6 +80,15 @@ ANTHROPIC_EXPOSURE_PATH = "data/raw/anthropic_job_exposure.csv"
 OUTPUT_PATH = "data/output/composition_model_era_comparison.csv"
 CHART_NAME = "composition_model_signal_over_time.png"
 
+# Occupation-level twin of every sector output. Written to separate files rather
+# than adding a `level` column, so the sector outputs stay byte-identical and no
+# doc can quote a figure without saying which level it came from.
+HARMONIZED_TRENDS_PATH = "data/output/bls_harmonized_trends.csv"
+UNIT_MEMBERSHIP_PATH = "data/output/soc_harmonization_units.csv"
+OCCUPATION_OUTPUT_PATH = "data/output/composition_model_era_comparison_occupation.csv"
+OCCUPATION_CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition_occupation.csv"
+OCCUPATION_CHART_NAME = "composition_model_signal_over_time_occupation.png"
+
 COMPOSITION_SCORE_COLUMN = "composition_net_change"
 
 # Sign convention differs by score: the gross exposure measures validate with
@@ -92,13 +101,15 @@ SCORE_CONFIGS: list[tuple[str, str, str, str]] = [
     ("observed_exposure", "Observed AI coverage (−r = correct)", "seagreen", "^"),
 ]
 
-# Periods whose later year is <= 22 carry the hist_ prefix; see analyze_bls.py.
-AI_ERA_FIRST_PERIOD = "22_23"
+# Periods whose later year is <= 2022 carry the hist_ prefix; see analyze_bls.py.
+AI_ERA_FIRST_PERIOD = "2022_2023"
 
 MINIMUM_SECTORS = 5
 MINIMUM_OCCUPATIONS = 10
+# Occupation level has hundreds of units; require enough that a correlation means something.
+MINIMUM_UNITS = 20
 
-COVID_PERIODS = ("19_20", "20_21")
+COVID_PERIODS = ("2019_2020", "2020_2021")
 
 OUTPUT_COLUMNS = [
     "score",
@@ -115,14 +126,14 @@ OUTPUT_COLUMNS = [
 
 
 def period_key(growth_column: str) -> str:
-    """Strip the prefix from a growth column, leaving e.g. '18_19'."""
+    """Strip the prefix from a growth column, leaving e.g. '2018_2019'."""
     return growth_column.replace("hist_emp_growth_", "").replace("emp_growth_", "")
 
 
 def _period_sort_key(growth_column: str) -> tuple[int, int]:
     key = period_key(growth_column)
-    if key in ("composite", "pre_ai"):
-        return (99, 0)
+    if key == "composite" or key.startswith("pre_ai"):
+        return (9999, 9999)
     start_year, end_year = key.split("_")
     return (int(start_year), int(end_year))
 
@@ -202,6 +213,58 @@ def sector_correlation(
     return correlation, p_value, len(sector_means_df)
 
 
+def load_harmonized_inputs() -> tuple[pd.DataFrame, pd.DataFrame] | None:
+    """The harmonized unit trend series and unit membership, or None with a warning if absent.
+
+    Both files are written by analyze_bls.py via harmonize_soc.py. They are
+    optional here for the same reason the sector growth table is: a missing file
+    degrades the occupation-level pass rather than failing the whole stage.
+    """
+    missing = [path for path in (HARMONIZED_TRENDS_PATH, UNIT_MEMBERSHIP_PATH) if not os.path.exists(path)]
+    if missing:
+        warnings.warn(f"Occupation-level pass skipped; missing {missing}", stacklevel=2)
+        return None
+    harmonized_trends_df = pd.read_csv(HARMONIZED_TRENDS_PATH)
+    unit_membership_df = pd.read_csv(UNIT_MEMBERSHIP_PATH, dtype={"year": str})
+    return harmonized_trends_df, unit_membership_df
+
+
+def occupation_correlation(
+    scored_df: pd.DataFrame,
+    score_col: str,
+    growth_col: str,
+    employment_col: str,
+    harmonized_trends_df: pd.DataFrame,
+    unit_membership_df: pd.DataFrame,
+) -> tuple[float, float, int] | None:
+    """Occupation-level Pearson r on harmonized SOC units, or None if too thin.
+
+    The unit is the unit of observation, not the OEWS code: scores are the
+    employment-weighted mean over a unit's 2022 members, so the same occupation
+    definitions carry every period instead of moving with SOC survivorship.
+
+    Returns None when fewer than MINIMUM_UNITS units carry both a score and a
+    growth value, and when the score has no variance across units — the demand
+    composition score is a function of composition alone, so a period can
+    legitimately arrive with every unit tied.
+    """
+    from validate_bls import build_unit_scores
+
+    if growth_col not in harmonized_trends_df.columns:
+        return None
+
+    unit_scores_df = build_unit_scores(scored_df, unit_membership_df, employment_col, [score_col])
+    paired_df = unit_scores_df.merge(harmonized_trends_df[["unit_id", growth_col]], on="unit_id", how="inner")
+    paired_df = paired_df[[score_col, growth_col]].dropna()
+    if len(paired_df) < MINIMUM_UNITS:
+        return None
+    if paired_df[score_col].nunique() < 2 or paired_df[growth_col].nunique() < 2:
+        return None
+
+    correlation, p_value = stats.pearsonr(paired_df[score_col], paired_df[growth_col])
+    return correlation, p_value, len(paired_df)
+
+
 def build_period_correlations(
     scored_df: pd.DataFrame,
     employment_col: str,
@@ -220,9 +283,128 @@ def build_period_correlations(
                 {
                     "period": period_key(growth_col),
                     "score": score_col,
-                    "sector_r": correlation,
-                    "sector_p": p_value,
-                    "n_sectors": n_sectors,
+                    "fit_r": correlation,
+                    "fit_p": p_value,
+                    "n_units": n_sectors,
+                    "era": "ai" if is_ai_era(growth_col) else "pre_ai",
+                    "is_covid": period_key(growth_col) in COVID_PERIODS,
+                }
+            )
+    return pd.DataFrame(correlation_rows)
+
+
+def build_occupation_period_correlations(
+    scored_df: pd.DataFrame,
+    employment_col: str,
+    harmonized_trends_df: pd.DataFrame,
+    unit_membership_df: pd.DataFrame,
+    score_columns: list[str],
+) -> pd.DataFrame:
+    """One row per (period, score) with the occupation-level r, p and unit count.
+
+    Same frame shape as build_period_correlations, so summarise_eras,
+    decompose_fit_strength and correlate_with_displacement_rate consume it
+    unchanged. Periods are discovered from the harmonized trend file, whose
+    growth columns carry the same names as the occupation-level trend file.
+    """
+    correlation_rows = []
+    for growth_col in discover_period_columns(harmonized_trends_df):
+        for score_col in score_columns:
+            result = occupation_correlation(scored_df, score_col, growth_col, employment_col, harmonized_trends_df, unit_membership_df)
+            if result is None:
+                continue
+            correlation, p_value, n_units = result
+            correlation_rows.append(
+                {
+                    "period": period_key(growth_col),
+                    "score": score_col,
+                    "fit_r": correlation,
+                    "fit_p": p_value,
+                    "n_units": n_units,
+                    "era": "ai" if is_ai_era(growth_col) else "pre_ai",
+                    "is_covid": period_key(growth_col) in COVID_PERIODS,
+                }
+            )
+    return pd.DataFrame(correlation_rows)
+
+
+CPS_GROUP_TRENDS_PATH = "data/output/cps_group_trends.csv"
+# Ten groups total; require most of them present before a correlation means anything.
+MINIMUM_CPS_GROUPS = 8
+
+# CPS-level twin of every sector/occupation output. Written to separate files rather
+# than adding a `level` column, so the sector outputs stay byte-identical.
+CPS_OUTPUT_PATH = "data/output/composition_model_era_comparison_cps.csv"
+CPS_CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition_cps.csv"
+CPS_CHART_NAME = "composition_model_signal_over_time_cps.png"
+
+
+def cps_group_correlation(
+    scored_df: pd.DataFrame,
+    score_col: str,
+    growth_col: str,
+    employment_col: str,
+    cps_trends_df: pd.DataFrame,
+) -> tuple[float, float, int] | None:
+    """Pearson r between a model score and CPS growth across the ten occupation groups.
+
+    Model scores are aggregated to the CPS groups employment-weighted, using the
+    same SOC-major lookup the DWS displacement validation uses, so the taxonomy is
+    shared rather than re-derived. Returns None when fewer than MINIMUM_CPS_GROUPS
+    groups carry both a score and a growth value.
+    """
+    from composition_displacement_validation import soc_major_to_dws_group
+
+    if growth_col not in cps_trends_df.columns:
+        return None
+
+    group_lookup = soc_major_to_dws_group()
+    aggregation_df = scored_df.dropna(subset=[score_col, employment_col]).copy()
+    aggregation_df["cps_group"] = aggregation_df["OCC_CODE"].astype(str).str[:2].map(group_lookup)
+    aggregation_df = aggregation_df.dropna(subset=["cps_group"])
+    if aggregation_df.empty:
+        return None
+
+    weighted_df = aggregation_df.assign(weighted_score=aggregation_df[score_col] * aggregation_df[employment_col])
+    group_scores_df = (
+        weighted_df.groupby("cps_group")
+        .agg(weighted_score=("weighted_score", "sum"), group_employment=(employment_col, "sum"))
+        .reset_index()
+    )
+    group_scores_df["group_score"] = group_scores_df["weighted_score"] / group_scores_df["group_employment"]
+
+    paired_df = group_scores_df.merge(cps_trends_df[["cps_group", growth_col]], on="cps_group", how="inner")
+    paired_df = paired_df[["group_score", growth_col]].dropna()
+    if len(paired_df) < MINIMUM_CPS_GROUPS:
+        return None
+    if paired_df["group_score"].nunique() < 2 or paired_df[growth_col].nunique() < 2:
+        return None
+
+    correlation, p_value = stats.pearsonr(paired_df["group_score"], paired_df[growth_col])
+    return correlation, p_value, len(paired_df)
+
+
+def build_cps_period_correlations(
+    scored_df: pd.DataFrame,
+    employment_col: str,
+    cps_trends_df: pd.DataFrame,
+    score_columns: list[str],
+) -> pd.DataFrame:
+    """One row per (period, score) on the CPS instrument, in the shared frame shape."""
+    correlation_rows = []
+    for growth_col in discover_period_columns(cps_trends_df):
+        for score_col in score_columns:
+            result = cps_group_correlation(scored_df, score_col, growth_col, employment_col, cps_trends_df)
+            if result is None:
+                continue
+            correlation, p_value, n_groups = result
+            correlation_rows.append(
+                {
+                    "period": period_key(growth_col),
+                    "score": score_col,
+                    "fit_r": correlation,
+                    "fit_p": p_value,
+                    "n_units": n_groups,
                     "era": "ai" if is_ai_era(growth_col) else "pre_ai",
                     "is_covid": period_key(growth_col) in COVID_PERIODS,
                 }
@@ -246,8 +428,8 @@ def summarise_eras(period_correlation_df: pd.DataFrame, exclude_covid: bool = Tr
     summary_rows = []
     for score_col in comparison_df["score"].unique():
         score_df = comparison_df[comparison_df["score"] == score_col]
-        pre_ai_r = score_df.loc[score_df["era"] == "pre_ai", "sector_r"]
-        ai_era_r = score_df.loc[score_df["era"] == "ai", "sector_r"]
+        pre_ai_r = score_df.loc[score_df["era"] == "pre_ai", "fit_r"]
+        ai_era_r = score_df.loc[score_df["era"] == "ai", "fit_r"]
 
         era_difference = welch_t = welch_p = np.nan
         if len(pre_ai_r) >= 2 and len(ai_era_r) >= 2:
@@ -258,7 +440,7 @@ def summarise_eras(period_correlation_df: pd.DataFrame, exclude_covid: bool = Tr
         for era_name, era_r in (("pre_ai", pre_ai_r), ("ai", ai_era_r)):
             if era_r.empty:
                 continue
-            era_p = score_df.loc[score_df["era"] == era_name, "sector_p"]
+            era_p = score_df.loc[score_df["era"] == era_name, "fit_p"]
             summary_rows.append(
                 {
                     "score": score_col,
@@ -279,22 +461,23 @@ def summarise_eras(period_correlation_df: pd.DataFrame, exclude_covid: bool = Tr
 
 
 UNEMPLOYMENT_SERIES_ID = "LNS14000000"
+UNEMPLOYMENT_SERIES_START_YEAR = 1948  # LNS14000000's own start; never needs revisiting if the series extends further back.
 
 CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition.csv"
 CYCLE_OUTPUT_COLUMNS = ["score", "term", "coefficient", "std_error", "t_statistic", "p_value", "n_periods", "r_squared"]
 
 
 def unemployment_change_by_period(period_keys: list[str]) -> pd.Series | None:
-    """Change in the annual mean unemployment rate across each period, e.g. '07_08' → +1.18."""
+    """Change in the annual mean unemployment rate across each period, e.g. '2007_2008' → +1.18."""
     from historical_displacement import fetch_annual_means
 
-    unemployment_rate = fetch_annual_means(UNEMPLOYMENT_SERIES_ID, 2005, 2026)
+    unemployment_rate = fetch_annual_means(UNEMPLOYMENT_SERIES_ID, UNEMPLOYMENT_SERIES_START_YEAR, 2026)
     if unemployment_rate is None:
         return None
 
     change_by_period = {}
     for key in period_keys:
-        start_year, end_year = (2000 + int(part) for part in key.split("_"))
+        start_year, end_year = (int(part) for part in key.split("_"))
         if start_year in unemployment_rate.index and end_year in unemployment_rate.index:
             change_by_period[key] = unemployment_rate[end_year] - unemployment_rate[start_year]
     return pd.Series(change_by_period, name="unemployment_change")
@@ -331,13 +514,13 @@ def decompose_fit_strength(
     for score_col in comparison_df["score"].unique():
         score_df = comparison_df[comparison_df["score"] == score_col].copy()
         score_df["unemployment_change"] = score_df["period"].map(unemployment_change)
-        score_df = score_df.dropna(subset=["unemployment_change", "sector_r"])
+        score_df = score_df.dropna(subset=["unemployment_change", "fit_r"])
 
         term_names = ["intercept", "unemployment_change", "ai_era"]
         if len(score_df) <= len(term_names):
             continue
 
-        fit_strength = np.arctanh(score_df["sector_r"].to_numpy())
+        fit_strength = np.arctanh(score_df["fit_r"].to_numpy())
         design_matrix = np.column_stack(
             [
                 np.ones(len(score_df)),
@@ -385,56 +568,165 @@ def decompose_fit_strength(
     return pd.DataFrame(coefficient_rows, columns=CYCLE_OUTPUT_COLUMNS)
 
 
-def correlate_with_displacement_rate(period_correlation_df: pd.DataFrame, exclude_covid: bool = True) -> pd.DataFrame:
+DISPLACEMENT_RATE_TRACKING_SOURCES = ("productivity", "dws_long_tenured", "mlr_long_tenured")
+
+TRACKING_OUTPUT_COLUMNS = [
+    "score",
+    "pearson_r",
+    "pearson_p",
+    "n_periods",
+    "n_distinct_displacement_values",
+    "displacement_vs_year_r",
+    "displacement_vs_year_p",
+]
+
+
+def displacement_rate_time_trend(displacement_rate: pd.Series) -> tuple[int, float, float]:
+    """Measure, rather than assert, how much of a displacement-rate source is just calendar time.
+
+    Returns `(n_distinct_values, year_trend_r, year_trend_p)`: how many distinct
+    annual values the series actually carries (a DWS or MLR source repeats one
+    survey-window or article-period average across every year it covers, so a
+    21-year series can carry far fewer independent readings than its length
+    suggests — the effective sample size `correlate_with_displacement_rate`'s own
+    p-values assume is overstated by roughly that ratio), and the Pearson
+    correlation of the series against its own calendar year (a source that is
+    largely monotonic in time is not distinguishable, by this test alone, from "fit
+    strength changed over time" for any other reason — including the AI-era
+    boundary, which is itself a fixed point in calendar time). `year_trend_r`/`_p`
+    are `nan` when fewer than 3 points are available, since a two-point
+    correlation is undefined in any informative sense.
+
+    This is the same measure-and-disclose treatment `cps_historical_panel.py`'s
+    `measure_comparability_breaks` already gives the CPS series' two classification
+    breaks: quantified and attached to the output, not just described in prose.
+    """
+    n_distinct_values = int(displacement_rate.nunique())
+    if len(displacement_rate) < 3:
+        return n_distinct_values, float("nan"), float("nan")
+    year_trend_r, year_trend_p = stats.pearsonr(displacement_rate.index.values.astype(float), displacement_rate.values)
+    return n_distinct_values, float(year_trend_r), float(year_trend_p)
+
+
+def correlate_with_displacement_rate(
+    period_correlation_df: pd.DataFrame, exclude_covid: bool = True, source: str = "productivity"
+) -> pd.DataFrame:
     """Does each model's fit strength track the economy-wide displacement rate itself?
 
     The prediction from docs/framework.md § Future investigation: the business
     cycle is that periods of greater displacement show stronger demand-type
-    sorting. The DWS cannot answer this — BLS publishes no archive of prior
-    releases, so the panel holds a single survey whose one rate is repeated across
-    2023-2025, giving no time variation at all. Smoothed productivity growth is
-    the only displacement estimate with annual coverage back to 2005, so it is
-    what this test uses.
+    sorting. Three D sources are available now (historical_displacement.DISPLACEMENT_SOURCES):
+    smoothed productivity growth has annual coverage back to 1947; dws_long_tenured
+    varies annually across 2005-2025 now that the DWS panel holds ten archived
+    surveys rather than one repeated rate; and mlr_long_tenured, built from the
+    pre-2008 Monthly Labor Review articles, varies across 1981-2000. `source` selects
+    which of the three this call uses — `productivity` is the default so existing
+    callers see no change in behaviour. dws_long_tenured and mlr_long_tenured are
+    never combined into one series (see historical_displacement.mlr_displacement_rate);
+    each is tested separately, one call per source.
 
-    This is a weak test by construction: roughly 18 usable periods, autocorrelated,
-    against a smoothed regressor. It is reported as a hypothesis check.
+    This is a weak test by construction, and not only for the "few autocorrelated
+    periods" reason stated below: for the DWS/MLR sources, the regressor itself
+    repeats one survey-window or article-period average across every year the
+    window covers, so the number of *periods* this function reports is not the
+    number of *independent* displacement readings — `displacement_rate_time_trend`
+    measures that gap directly (`n_distinct_displacement_values` in the output) so
+    a reader does not have to take "roughly two dozen usable periods" at face
+    value. The same helper also reports `displacement_vs_year_r`/`_p`: the
+    correlation of the source against calendar year alone. Where that is large,
+    a fit-strength correlation against the source cannot be distinguished from a
+    fit-strength trend against time itself — see docs/framework.md § Demand
+    Composition Model for what this means for `dws_long_tenured` specifically,
+    where the confound is large enough to make the test's own significant result
+    uninformative about displacement rather than merely weak evidence for it.
+
+    It is reported as a hypothesis check; a null result is expected and
+    uninformative, not disconfirming, per this project's asymmetric reading rule —
+    and, as the above makes explicit, so is a positive result confounded with time.
     """
-    from historical_displacement import productivity_displacement_rate
+    from historical_displacement import DEFAULT_START_YEAR, economy_displacement_rate
 
-    displacement_rate = productivity_displacement_rate()
-    if displacement_rate is None:
-        return pd.DataFrame(columns=["score", "pearson_r", "pearson_p", "n_periods"])
+    # PRS85006092 (productivity) begins in 1947, so fetching from 1997 costs nothing
+    # and gives the earliest period this test uses (1999_2000, which maps to
+    # displacement year 2000) a full centered 3-year rolling window instead of an
+    # edge-truncated one. It also matches the unemployment lookup's own widening
+    # (LNS14000000, see UNEMPLOYMENT_SERIES_START_YEAR above) so both business-cycle
+    # covariates see the same 1999-2025 span. dws_long_tenured's own coverage
+    # (2005+) starts after 1997 regardless, so widening it further changes nothing.
+    # mlr_long_tenured's coverage (1981-2000) starts BEFORE 1997, so the same floor
+    # would TRUNCATE rather than widen it — cutting its usable range to four years,
+    # below this function's own five-period floor below, and silently suppressing
+    # the source at every level regardless of how many periods actually overlap it.
+    # Each source is therefore fetched from whichever start year is its own: 1997
+    # for productivity, DEFAULT_START_YEAR (1981, at or before every other source's
+    # true floor) for the rest.
+    displacement_rate_start_year = 1997 if source == "productivity" else DEFAULT_START_YEAR
+    displacement_rate = economy_displacement_rate(source, start_year=displacement_rate_start_year)
+    if displacement_rate is None or displacement_rate.empty:
+        return pd.DataFrame(columns=TRACKING_OUTPUT_COLUMNS)
+
+    n_distinct_displacement_values, displacement_vs_year_r, displacement_vs_year_p = displacement_rate_time_trend(displacement_rate)
 
     comparison_df = period_correlation_df[~period_correlation_df["is_covid"]] if exclude_covid else period_correlation_df
 
     correlation_rows = []
     for score_col in comparison_df["score"].unique():
         score_df = comparison_df[comparison_df["score"] == score_col].copy()
-        score_df["displacement_rate"] = score_df["period"].map(
-            lambda key: displacement_rate.get(2000 + int(key.split("_")[1]), float("nan"))
-        )
-        score_df = score_df.dropna(subset=["displacement_rate", "sector_r"])
+        score_df["displacement_rate"] = score_df["period"].map(lambda key: displacement_rate.get(int(key.split("_")[1]), float("nan")))
+        score_df = score_df.dropna(subset=["displacement_rate", "fit_r"])
         if len(score_df) < 5:
             continue
-        correlation, p_value = stats.pearsonr(np.arctanh(score_df["sector_r"]), score_df["displacement_rate"])
+        correlation, p_value = stats.pearsonr(np.arctanh(score_df["fit_r"]), score_df["displacement_rate"])
         correlation_rows.append(
-            {"score": score_col, "pearson_r": float(correlation), "pearson_p": float(p_value), "n_periods": len(score_df)}
+            {
+                "score": score_col,
+                "pearson_r": float(correlation),
+                "pearson_p": float(p_value),
+                "n_periods": len(score_df),
+                "n_distinct_displacement_values": n_distinct_displacement_values,
+                "displacement_vs_year_r": displacement_vs_year_r,
+                "displacement_vs_year_p": displacement_vs_year_p,
+            }
         )
 
-    return pd.DataFrame(correlation_rows, columns=["score", "pearson_r", "pearson_p", "n_periods"])
+    return pd.DataFrame(correlation_rows, columns=TRACKING_OUTPUT_COLUMNS)
 
 
-def print_displacement_rate_tracking(tracking_df: pd.DataFrame) -> None:
-    """Print whether fit strength tracks the economy-wide displacement rate."""
+def print_displacement_rate_tracking(tracking_df: pd.DataFrame, source: str) -> None:
+    """Print whether fit strength tracks the named economy-wide displacement rate source.
+
+    Prints a skip message, rather than nothing, when a source could not be tested —
+    either because the source itself is entirely unavailable, or because fewer than
+    5 usable periods overlap it — so an absent source is visibly accounted for
+    rather than silently missing from the output.
+
+    Prints the source's own time-trend diagnostic (`displacement_rate_time_trend`,
+    carried on every row as `n_distinct_displacement_values` /
+    `displacement_vs_year_r` / `_p`) right beside the correlation it qualifies,
+    rather than leaving a reader to take the reported `n_periods` at face value or
+    to rediscover separately that a source is highly correlated with calendar year.
+    """
+    print(f"\n── Does fit strength track the economy-wide displacement rate? ({source}) ──")
     if tracking_df.empty:
+        print(f"  Skipped: {source} has fewer than 5 usable periods overlapping this level's data.")
         return
-    print("\n── Does fit strength track the economy-wide displacement rate? (smoothed productivity) ──")
+    diagnostic_row = tracking_df.iloc[0]
+    print(
+        f"  D itself: {int(diagnostic_row['n_distinct_displacement_values'])} distinct annual values "
+        f"(effective n is that, not the period count below); D vs. calendar year "
+        f"r={diagnostic_row['displacement_vs_year_r']:+.3f} (p={diagnostic_row['displacement_vs_year_p']:.4f})"
+    )
     for _, tracking_row in tracking_df.iterrows():
         print(
             f"  {tracking_row['score']:<26} Pearson {tracking_row['pearson_r']:+.3f} "
             f"(p={tracking_row['pearson_p']:.3f}, n={int(tracking_row['n_periods'])})"
         )
-    print("  Hypothesis check only: the DWS has one survey, so productivity is the only annual D available.")
+    print(
+        "  Hypothesis check only, few and autocorrelated periods, with the regressor itself repeating across "
+        "each survey/article window: a null result here is uninformative, not disconfirming, and a positive "
+        "result confounded with the calendar-year trend above is equally uninformative about displacement "
+        "specifically (see docs/framework.md § Demand Composition Model)."
+    )
 
 
 def print_cycle_decomposition(cycle_decomposition_df: pd.DataFrame) -> None:
@@ -453,8 +745,27 @@ def print_cycle_decomposition(cycle_decomposition_df: pd.DataFrame) -> None:
             )
 
 
-def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) -> None:
-    """Sector-level r by period for every model, with the AI boundary and COVID marked."""
+def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, level: str = "sector") -> None:
+    """Fit strength by period for every model, with the AI boundary and COVID marked.
+
+    level selects which of the three passes is being drawn — "sector" (n=22 major
+    groups), "occupation" (harmonized SOC units), or "cps_group" (ten CPS
+    occupation groups). The charts are deliberately identical in layout so they
+    read as a set.
+    """
+    is_occupation_level = level == "occupation"
+    is_cps_level = level == "cps_group"
+    unit_counts = period_correlation_df["n_units"].dropna()
+    if is_cps_level and not unit_counts.empty:
+        minimum_units, maximum_units = int(unit_counts.min()), int(unit_counts.max())
+        group_range = str(minimum_units) if minimum_units == maximum_units else f"{minimum_units}-{maximum_units}"
+        unit_label = f"n={group_range} CPS occupation groups"
+    elif is_occupation_level and not unit_counts.empty:
+        unit_label = f"n={int(unit_counts.min())}-{int(unit_counts.max())} harmonized units"
+    elif is_cps_level:
+        unit_label = f"n={MINIMUM_CPS_GROUPS}-10 CPS occupation groups"
+    else:
+        unit_label = "n=22 sectors"
     ordered_periods = sorted(period_correlation_df["period"].unique(), key=lambda key: _period_sort_key(f"emp_growth_{key}"))
     if len(ordered_periods) < 2:
         return
@@ -481,7 +792,7 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) 
         score_df = score_df.assign(position=score_df["period"].map(period_positions)).sort_values("position")
         axis.plot(
             score_df["position"],
-            score_df["sector_r"],
+            score_df["fit_r"],
             marker=marker,
             linestyle="-",
             color=color,
@@ -491,10 +802,10 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) 
             alpha=1.0 if score_col == COMPOSITION_SCORE_COLUMN else 0.75,
             zorder=5 if score_col == COMPOSITION_SCORE_COLUMN else 3,
         )
-        significant_df = score_df[score_df["sector_p"] < 0.05]
+        significant_df = score_df[score_df["fit_p"] < 0.05]
         axis.scatter(
             significant_df["position"],
-            significant_df["sector_r"],
+            significant_df["fit_r"],
             s=110,
             facecolors="none",
             edgecolors=color,
@@ -503,11 +814,13 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) 
         )
 
     axis.set_xticks(list(period_positions.values()))
-    axis.set_xticklabels([f"20{p.split('_')[0]}→\n20{p.split('_')[1]}" for p in ordered_periods], fontsize=8)
-    axis.set_ylabel("Sector-level Pearson r vs. employment growth")
+    axis.set_xticklabels([f"{p.split('_')[0]}→\n{p.split('_')[1]}" for p in ordered_periods], fontsize=8)
+    level_word = {"occupation": "Occupation", "cps_group": "CPS group"}.get(level, "Sector")
+    axis.set_ylabel(f"{level_word}-level Pearson r vs. employment growth")
     axis.set_title(
         "Is the demand-type signal era-invariant?\n"
-        "Sector-level correlation by year-over-year period, n=22 sectors. Ringed markers are p < 0.05.",
+        f"{level_word}-level correlation by year-over-year period, "
+        f"{unit_label}. Ringed markers are p < 0.05.",
         fontsize=11,
     )
     axis.legend(fontsize=8, loc="best", framealpha=0.9)
@@ -515,7 +828,13 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) 
         0.5,
         -0.02,
         "Demand-type labels come from 2025 O*NET task statements applied backwards; earlier periods are more anachronistic. "
-        "Red bands are COVID periods, excluded from the era comparison.",
+        "Red bands are COVID periods, excluded from the era comparison."
+        + (
+            " The composition score is a function of demand-type mix alone, so many units share one value; "
+            "Pearson r is bounded by that tie structure."
+            if is_occupation_level
+            else ""
+        ),
         ha="center",
         fontsize=7.5,
         style="italic",
@@ -523,9 +842,10 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str) 
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    figure.savefig(os.path.join(output_dir, CHART_NAME), dpi=150, bbox_inches="tight")
+    chart_name = {"occupation": OCCUPATION_CHART_NAME, "cps_group": CPS_CHART_NAME}.get(level, CHART_NAME)
+    figure.savefig(os.path.join(output_dir, chart_name), dpi=150, bbox_inches="tight")
     plt.close(figure)
-    print(f"  Saved {os.path.join(output_dir, CHART_NAME)}")
+    print(f"  Saved {os.path.join(output_dir, chart_name)}")
 
 
 def print_era_summary(era_summary_df: pd.DataFrame) -> None:
@@ -546,7 +866,47 @@ def print_era_summary(era_summary_df: pd.DataFrame) -> None:
                 f"  {'':<26}difference {score_df['era_difference_r'].iloc[0]:+.3f}  "
                 f"Welch t={score_df['welch_t'].iloc[0]:+.2f}, p={score_df['welch_p'].iloc[0]:.3f}"
             )
-    print("  Only 3 AI-era periods against 16 pre-AI, autocorrelated — descriptive, not inferential.")
+    period_counts = era_summary_df.drop_duplicates(subset=["score", "era"]).groupby("era")["n_periods"].max()
+    ai_periods = int(period_counts.get("ai", 0))
+    pre_ai_periods = int(period_counts.get("pre_ai", 0))
+    print(f"  Only {ai_periods} AI-era periods against {pre_ai_periods} pre-AI, autocorrelated — descriptive, not inferential.")
+
+
+def _summarise_one_level(
+    period_correlation_df: pd.DataFrame,
+    output_dir: str,
+    level: str,
+    era_output_path: str,
+    cycle_output_path: str,
+) -> pd.DataFrame:
+    """Era comparison, cycle decomposition, displacement tracking and chart for one level.
+
+    Both levels run identical logic on identically shaped frames; only the output
+    paths and the chart's labelling differ. Keeping this in one place is what stops
+    the two passes drifting apart.
+    """
+    print(f"\n── Demand composition model, {level} level ──")
+    era_summary_df = summarise_eras(period_correlation_df)
+    os.makedirs(os.path.dirname(era_output_path), exist_ok=True)
+    era_summary_df.to_csv(era_output_path, index=False)
+    print_era_summary(era_summary_df)
+
+    unemployment_change = unemployment_change_by_period(sorted(period_correlation_df["period"].unique()))
+    if unemployment_change is None:
+        print("  ⚠ No unemployment series available; skipping the cycle decomposition.")
+    else:
+        cycle_decomposition_df = decompose_fit_strength(period_correlation_df, unemployment_change)
+        cycle_decomposition_df.to_csv(cycle_output_path, index=False)
+        print_cycle_decomposition(cycle_decomposition_df)
+        print(f"  ✓ {cycle_output_path}")
+
+    for displacement_source in DISPLACEMENT_RATE_TRACKING_SOURCES:
+        tracking_df = correlate_with_displacement_rate(period_correlation_df, source=displacement_source)
+        print_displacement_rate_tracking(tracking_df, displacement_source)
+
+    plot_signal_over_time(period_correlation_df, output_dir, level=level)
+    print(f"  ✓ {era_output_path}")
+    return era_summary_df
 
 
 def run(output_dir: str = "data/output/visualizations") -> pd.DataFrame | None:
@@ -561,24 +921,35 @@ def run(output_dir: str = "data/output/visualizations") -> pd.DataFrame | None:
         print("  ⚠ No period correlations could be computed.")
         return None
 
-    era_summary_df = summarise_eras(period_correlation_df)
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    era_summary_df.to_csv(OUTPUT_PATH, index=False)
-    print_era_summary(era_summary_df)
+    era_summary_df = _summarise_one_level(period_correlation_df, output_dir, "sector", OUTPUT_PATH, CYCLE_OUTPUT_PATH)
 
-    unemployment_change = unemployment_change_by_period(sorted(period_correlation_df["period"].unique()))
-    if unemployment_change is None:
-        print("  ⚠ No unemployment series available; skipping the cycle decomposition.")
+    harmonized_inputs = load_harmonized_inputs()
+    if harmonized_inputs is not None:
+        harmonized_trends_df, unit_membership_df = harmonized_inputs
+        occupation_correlation_df = build_occupation_period_correlations(
+            scored_df, employment_col, harmonized_trends_df, unit_membership_df, score_columns
+        )
+        if occupation_correlation_df.empty:
+            print("  ⚠ No occupation-level period correlations could be computed.")
+        else:
+            _summarise_one_level(
+                occupation_correlation_df,
+                output_dir,
+                "occupation",
+                OCCUPATION_OUTPUT_PATH,
+                OCCUPATION_CYCLE_OUTPUT_PATH,
+            )
+
+    if os.path.exists(CPS_GROUP_TRENDS_PATH):
+        cps_trends_df = pd.read_csv(CPS_GROUP_TRENDS_PATH)
+        cps_correlation_df = build_cps_period_correlations(scored_df, employment_col, cps_trends_df, score_columns)
+        if cps_correlation_df.empty:
+            print("  ⚠ No CPS-level period correlations could be computed.")
+        else:
+            _summarise_one_level(cps_correlation_df, output_dir, "cps_group", CPS_OUTPUT_PATH, CPS_CYCLE_OUTPUT_PATH)
     else:
-        cycle_decomposition_df = decompose_fit_strength(period_correlation_df, unemployment_change)
-        cycle_decomposition_df.to_csv(CYCLE_OUTPUT_PATH, index=False)
-        print_cycle_decomposition(cycle_decomposition_df)
-        print(f"  ✓ {CYCLE_OUTPUT_PATH}")
+        warnings.warn(f"{CPS_GROUP_TRENDS_PATH} absent; CPS level skipped", stacklevel=2)
 
-    print_displacement_rate_tracking(correlate_with_displacement_rate(period_correlation_df))
-
-    plot_signal_over_time(period_correlation_df, output_dir)
-    print(f"  ✓ {OUTPUT_PATH}")
     return era_summary_df
 
 

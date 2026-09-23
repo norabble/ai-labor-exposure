@@ -1,4 +1,4 @@
-# Model Signal Over Time: Occupation-Level Baseline (2005→2025)
+# Model Signal Over Time: Occupation-Level Baseline (1999→2025)
 
 **File:** `model_signal_over_time_occupation.png`
 
@@ -7,7 +7,7 @@
 ## What this chart shows
 
 Occupation-level Pearson r between each model score and YoY BLS employment growth,
-plotted as a time series spanning 2005→2025. Unlike the sector-level version
+plotted as a time series spanning 1999→2025. Unlike the sector-level version
 (`model_signal_over_time.png`), no sector aggregation step is applied — each
 harmonized SOC unit is one data point. n is annotated along the bottom of the
 chart and is now close to constant across periods (see *Harmonized units* below).
@@ -20,13 +20,16 @@ chart and is now close to constant across periods (see *Harmonized units* below)
 
 Red shading marks COVID-disrupted periods (2019→20, 2020→21); blue shading marks
 the AI era (2022→23 onward); significant periods (p < 0.05) are annotated with r, p, and n.
+Periods before 2005 come from OEWS files with an annual rather than May
+reference period before 2003, so the 2002→03 interval is not a clean twelve
+months.
 
 ## Relationship to the sector-level chart
 
 The sector-level chart (`model_signal_over_time.png`) aggregates occupations to 22
 SOC major groups first and correlates those 22 group means. That version has low
 power (n=22) but suppresses within-group noise by averaging. This chart operates on
-harmonized occupation units (n ≈ 695 in every period), giving much higher statistical
+harmonized occupation units (n = 664-741 per period, median 739), giving much higher statistical
 power — a much smaller |r| is detectable — but also more noise from individual
 occupation volatility.
 
@@ -37,7 +40,7 @@ The two charts are complementary:
 ## What the chart shows
 
 **The dynamic model's occupation-level signal is positive throughout the whole
-2005→2025 span.** The orange line stays above zero in all 20 periods and is
+1999→2025 span.** The orange line stays above zero in all 26 periods and is
 significant in most of them, both before and after 2022 — peaking at r=+0.23
 (p<0.001) in 2008→09 and holding at r=+0.09 to +0.14 (p<0.05) across all three
 AI-era periods. Individual occupation employment growth is still driven by many
@@ -65,7 +68,7 @@ crosswalks (SOC 2000 → SOC 2010 → SOC 2018) plus the OEWS hybrid structure,
 built by `harmonize_soc.py` and written to
 `data/output/soc_harmonization_units.csv`. Where a revision split one
 occupation into three, or merged three into one, all of those codes land in the
-same unit, so the unit means the same thing in 2005 as it does in 2025.
+same unit, so the unit means the same thing in 1999 as it does in 2025.
 
 **Why this is necessary.** Anchoring on the 2022 code set and left-joining
 earlier years keeps only the codes that happened to survive each revision —
@@ -74,7 +77,7 @@ sector. SOC 2018 renumbered every computer code, so Computer and Mathematical
 kept four maths occupations, roughly 3% of its employment, before 2019. Pre-2019
 points computed that way silently under-represented exactly the sectors the
 models care most about. Correlating on units removes that selection: the same
-occupation definitions carry the whole 2005→2025 span.
+occupation definitions carry the whole 1999→2025 span.
 
 **What n is.** The unit file holds 762 unit ids, 751 of which have a 2022
 member, and 706 of those have at least one 2022 member with a model score,
@@ -84,7 +87,7 @@ unevenly by sector; it is now essentially flat, so movement in the lines is
 signal rather than a changing sample. The trade-off is power: AI-era periods
 previously used all 830 detailed 2022 codes and now use about 698 units, so
 this chart has somewhat less power in 2022→2025 than before, in exchange for a
-consistent series back to 2005.
+consistent series back to 1999.
 
 A unit's score is the 2025-employment-weighted mean over its scored 2022
 members, with weights renormalised over the members that actually have the
@@ -114,4 +117,4 @@ holds eight SOC 2018 computer codes and 16 units span more than one SOC major
 group. Each unit's score is the employment-weighted average across the
 occupations it fuses, so a unit like that cannot separate electricians from
 roofers — granularity the chart gives up in exchange for a series that means
-the same thing in 2005 as in 2025.
+the same thing in 1999 as in 2025.

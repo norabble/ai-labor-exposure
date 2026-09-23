@@ -24,14 +24,15 @@ from validate_bls import _clean, _compute_shift_share_residuals, _correlations, 
 
 
 class TestLabel:
-    def test_year_over_year_period_expands_to_four_digit_years(self):
-        assert _label("22_23") == "2022→2023"
+    def test_year_over_year_period_renders_its_four_digit_years(self):
+        assert _label("2022_2023") == "2022→2023"
 
-    def test_historical_period_expands_the_same_way(self):
-        assert _label("05_06") == "2005→2006"
+    def test_twentieth_century_period_is_not_prefixed_with_20(self):
+        """Keys carry four digits, so 1999 must not become 201999."""
+        assert _label("1999_2000") == "1999→2000"
 
     def test_composite_is_named_rather_than_expanded(self):
-        assert _label("composite") == "Composite (2022→latest)"
+        assert _label("composite") == "Composite"
 
 
 class TestClean:

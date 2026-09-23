@@ -49,6 +49,9 @@ def _panel(survey_year=2026, counts=None):
                 "displaced_thousands": count,
                 "reason": "all",
                 "tenure_class": "long_tenured",
+                # _count_measured_rows REQUIRES this column — every real panel producer
+                # sets it, so a fixture that omits it is not representative.
+                "measurement_basis": "count_thousands",
             }
             for group_name, count in counts.items()
         ]
@@ -60,8 +63,8 @@ def _scored_frame():
     rows = []
     for group_name, soc_majors in DWS_TO_SOC_MAJOR.items():
         soc_major = soc_majors[0]
-        rows.append({"OCC_CODE": f"{soc_major}-1001", "gross_displacement": 0.02, "TOT_EMP_25": 1_000_000.0})
-        rows.append({"OCC_CODE": f"{soc_major}-1002", "gross_displacement": 0.01, "TOT_EMP_25": 500_000.0})
+        rows.append({"OCC_CODE": f"{soc_major}-1001", "gross_displacement": 0.02, "TOT_EMP_2025": 1_000_000.0})
+        rows.append({"OCC_CODE": f"{soc_major}-1002", "gross_displacement": 0.01, "TOT_EMP_2025": 500_000.0})
     return pd.DataFrame(rows)
 
 
@@ -116,27 +119,53 @@ class TestObservedDisplacementByGroup:
 
         assert observed_displacement_by_group(reason_only_panel).empty
 
+    def test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_observed_total(self):
+        """Mutation-proof: this is the property test_rates_and_counts_are_never_summed_together
+        (tests/test_dws_panel.py) claimed to cover but did not — that test only asserted the
+        committed seed happens to keep one measurement_basis per survey_year, which says
+        nothing about what observed_displacement_by_group does if a panel ever mixes bases.
+        Here a rate-basis row shares the real row's survey_year and source_table
+        ("table_5_occupation", what this function reads) with a large, non-NaN
+        displaced_thousands — the exact shape a pre-2008 MLR row has, except stamped as a
+        rate. build_displacement_comparison normalises every group's share against the sum
+        of this column, so an uncaught rate row here would corrupt every group's share, not
+        just its own. If the required `measurement_basis == "count_thousands"` filter in
+        _count_measured_rows were ever weakened back to `if "measurement_basis" in
+        ...columns` or deleted outright, the total below would jump from ~1,000 to
+        ~1,000,999 and the assertion would fail."""
+        clean_panel = _panel()
+        contaminating_row = clean_panel.iloc[[0]].copy()
+        assert contaminating_row["source_table"].iloc[0] == "table_5_occupation"
+        contaminating_row["displaced_thousands"] = 999_999.0
+        contaminating_row["measurement_basis"] = "rate_percent"
+        contaminated_panel = pd.concat([clean_panel, contaminating_row], ignore_index=True)
+
+        clean_total = observed_displacement_by_group(clean_panel)["observed_displaced_thousands"].sum()
+        contaminated_total = observed_displacement_by_group(contaminated_panel)["observed_displaced_thousands"].sum()
+
+        assert contaminated_total == pytest.approx(clean_total)
+
 
 class TestPredictedDisplacementByGroup:
     def test_rates_become_worker_counts_before_summing(self):
         """0.02 × 1,000,000 + 0.01 × 500,000 = 25,000 — not the mean of the two rates."""
-        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_25").set_index("dws_group")
+        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_2025").set_index("dws_group")
 
         assert predicted_df.loc["production occupations", "predicted_displaced_workers"] == pytest.approx(25_000.0)
         assert predicted_df.loc["production occupations", "group_employment"] == pytest.approx(1_500_000.0)
 
     def test_every_group_is_represented(self):
-        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_25")
+        predicted_df = predicted_displacement_by_group(_scored_frame(), "gross_displacement", "TOT_EMP_2025")
 
         assert set(predicted_df["dws_group"]) == set(DWS_TO_SOC_MAJOR)
 
     def test_occupations_outside_the_mapping_are_dropped(self):
         scored_df = pd.concat(
-            [_scored_frame(), pd.DataFrame([{"OCC_CODE": "55-1001", "gross_displacement": 9.0, "TOT_EMP_25": 1e9}])],
+            [_scored_frame(), pd.DataFrame([{"OCC_CODE": "55-1001", "gross_displacement": 9.0, "TOT_EMP_2025": 1e9}])],
             ignore_index=True,
         )
 
-        predicted_df = predicted_displacement_by_group(scored_df, "gross_displacement", "TOT_EMP_25")
+        predicted_df = predicted_displacement_by_group(scored_df, "gross_displacement", "TOT_EMP_2025")
 
         assert predicted_df["predicted_displaced_workers"].max() < 1e8
 
@@ -219,3 +248,89 @@ class TestCorrelateWithLeaveOneOut:
         correlations = correlate_with_leave_one_out(comparison_df, "composition_predicted_share")
 
         assert correlations["n_groups"] == 5
+
+
+class TestDisplacementPanel:
+    @pytest.fixture(autouse=True)
+    def _synthetic_model_reports(self, tmp_path, monkeypatch):
+        """
+        Point the builder at small synthetic model reports instead of the real
+        pipeline outputs, which CI never generates — without this the builder
+        returns None on a fresh checkout and every test here fails on it. One
+        occupation per mapped SOC major, with composition and dynamic
+        displacement ordered differently so the two models are distinguishable.
+        """
+        import composition_displacement_validation
+        from composition_displacement_validation import soc_major_to_dws_group
+
+        soc_majors = sorted(soc_major_to_dws_group())
+        report_paths = {}
+        for model_name, displacement_step in (("composition", 0.01), ("dynamic", -0.005)):
+            report_df = pd.DataFrame(
+                {
+                    "OCC_CODE": [f"{soc_major}-1011" for soc_major in soc_majors],
+                    "gross_displacement": [0.1 + displacement_step * index for index in range(len(soc_majors))],
+                    "TOT_EMP_2025": [1000.0 + 100.0 * index for index in range(len(soc_majors))],
+                }
+            )
+            report_paths[model_name] = tmp_path / f"{model_name}_report.csv"
+            report_df.to_csv(report_paths[model_name], index=False)
+
+        monkeypatch.setattr(composition_displacement_validation, "COMPOSITION_REPORT_PATH", str(report_paths["composition"]))
+        monkeypatch.setattr(composition_displacement_validation, "DYNAMIC_REPORT_PATH", str(report_paths["dynamic"]))
+
+    @staticmethod
+    def _multi_survey_panel():
+        from composition_displacement_validation import soc_major_to_dws_group
+
+        groups = sorted(set(soc_major_to_dws_group().values()))
+        rows = []
+        for survey_year in (2018, 2020, 2022):
+            for index, group in enumerate(groups):
+                rows.append(
+                    {
+                        "survey_year": survey_year,
+                        "source_table": "table_5_occupation",
+                        "group_name": group,
+                        # Every real panel row carries this — a bare bracket
+                        # selection in observed_displacement_by_group raises
+                        # KeyError without it, and that KeyError is deliberate:
+                        # a silently missing crosswalk field must fail loudly,
+                        # not degrade into a NaN column.
+                        "soc_majors": "|".join(DWS_TO_SOC_MAJOR[group]),
+                        "displaced_thousands": 100.0 + index * 10,
+                        "tenure_class": "long_tenured",
+                        "reason": None,
+                        # _count_measured_rows REQUIRES this column — every real panel
+                        # producer sets it, so a fixture that omits it is unrepresentative.
+                        "measurement_basis": "count_thousands",
+                    }
+                )
+        return pd.DataFrame(rows)
+
+    def test_one_row_per_survey_and_model(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
+        assert set(panel_df["survey_year"]) == {2018, 2020, 2022}
+        assert panel_df.groupby("survey_year")["model"].nunique().eq(2).all()
+
+    def test_n_groups_counts_groups_not_rows(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
+        assert (panel_df["n_groups"] == 10).all()
+
+    def test_a_survey_with_too_few_groups_is_skipped(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        thin_df = self._multi_survey_panel()
+        thin_df = thin_df[~((thin_df.survey_year == 2018) & (thin_df.group_name != "service occupations"))]
+        panel_df = build_displacement_comparison_panel(thin_df)
+        assert 2018 not in set(panel_df["survey_year"])
+
+    def test_both_models_are_scored(self):
+        from composition_displacement_validation import build_displacement_comparison_panel
+
+        panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
+        assert set(panel_df["model"]) == {"composition", "dynamic"}

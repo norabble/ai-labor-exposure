@@ -23,7 +23,7 @@ For each major group:
 group_score = Σ(model_score × BLS_employment) / Σ(BLS_employment)
 ```
 
-Employment weights come from the most recent OEWS annual data (the latest `TOT_EMP_*` column, currently `TOT_EMP_25`).
+Employment weights come from the most recent OEWS annual data (the latest `TOT_EMP_*` column, currently `TOT_EMP_2025`).
 
 ## Current results
 

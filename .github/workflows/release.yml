@@ -75,6 +75,8 @@ jobs:
       # the pipefail default above, a failed pipeline would exit 0 here and go on to
       # package and publish a release from whatever partial output survived.
       - name: Run analysis pipeline
+        env:
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
         run: uv run main.py 2>&1 | tee pipeline_run.txt
 
       - name: Package visualizations

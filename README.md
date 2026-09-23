@@ -31,7 +31,7 @@ Administrative Support leaves r = +0.34 (p = 0.13), so quote the leave-one-out
 range (+0.34 to +0.59) beside the headline. Raw "AI can do this task" coverage
 shows no comparable sector signal (Eloundou r = +0.02, n.s.), confirming that the
 demand-type stratification is doing work. **Caveat:** extending the historical
-baseline back to 2005 reveals that the dynamic model's sector signal was already
+baseline back to 1999 reveals that the dynamic model's sector signal was already
 present pre-2022 (r = +0.40 to +0.50 in 2006→09, +0.37 in 2017→18) — sectors
 with Unbounded and Adversarial demand have long grown faster, under earlier
 waves of automation as well. The AI-era values sit inside that pre-AI range, not
@@ -186,13 +186,13 @@ net_employment_change = K × absorption_capacity − gross_displacement
 
 Because `K = D·κ` with `κ` a pure composition constant, the whole score vector scales with `D` and **`D` cancels out of every cross-sectional correlation**. That is what keeps the test non-circular: a single economy-wide scalar cannot manufacture a pattern across 22 sectors or 770 occupations, so `D` sets the amplitude and the taxonomy sets the shape.
 
-Regressing each model's per-period sector-level fit strength on the change in unemployment plus an AI-era indicator (n = 18 periods, COVID excluded) gives:
+Regressing each model's per-period sector-level fit strength on the change in unemployment plus an AI-era indicator (n = 24 periods, COVID excluded) gives:
 
 | Term | Composition only | Dynamic, AI penetration |
 |---|---|---|
-| general baseline (intercept) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
-| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
-| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
+| general baseline (intercept) | **+0.224, p < 0.0001** | +0.208, p < 0.0001 |
+| change in unemployment | **+0.137, p = 0.0020** | +0.057, p = 0.062 |
+| AI era | +0.112, p = 0.349 | **+0.272, p = 0.0052** |
 
 The taxonomy has a real sector-level signal before AI, from a predictor carrying no technology data at all; its strength is strongly cyclical; and AI penetration adds a separable increment that composition alone does not. See [docs/framework.md](docs/framework.md) § Demand Composition Model.
 

@@ -31,7 +31,7 @@ Outputs (saved to data/output/visualizations/):
   • cps_2026_direction.png                    — CPS employment direction by major group, since-OEWS and year-over-year windows
   • cps_rebound_model_vs_actual.png           — scatter: employment-weighted rebound-adjusted exposure vs. CPS growth, major group level
   • cps_dynamic_model_vs_actual.png           — scatter: employment-weighted dynamic net employment change vs. CPS growth, major group level
-  • model_signal_over_time.png                — sector-level Pearson r by YoY period (2005→2025) for all three models;
+  • model_signal_over_time.png                — sector-level Pearson r by YoY period (1999→2025) for all three models;
                                                 2022 boundary marked to distinguish pre-AI baseline from AI era
 """
 
@@ -72,11 +72,26 @@ from synthesize_impacts import attach_dominant_demand
 
 
 def _label(period: str) -> str:
-    """Convert a period key like '22_23' or 'composite' to a readable label."""
+    """Convert a period key like '2022_2023' or 'composite' to a readable label."""
     if period == "composite":
-        return "Composite (2022→latest)"
+        return "Composite"
     parts = period.split("_")
-    return f"20{parts[0]}→20{parts[1]}"
+    return f"{parts[0]}→{parts[1]}"
+
+
+def _sort_period(col_name: str) -> tuple[int, int]:
+    """Sort key for a growth column name, with composite and any pre_ai-prefixed key sorted last.
+
+    The sentinel (9999, 9999) must stay out of the range of real years so a
+    twentieth-century period (e.g. '1983_1984') never collides with it, and
+    `.startswith("pre_ai")` rather than exact equality so a span-carrying key
+    like 'pre_ai_2005_2022' is tolerated instead of raising on int('pre').
+    """
+    key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
+    if key == "composite" or key.startswith("pre_ai"):
+        return (9999, 9999)
+    parts = key.split("_")
+    return (int(parts[0]), int(parts[1]))
 
 
 def _clean(merged_df: pd.DataFrame, growth_col: str, is_composite: bool, score_col: str = "occupation_exposure") -> pd.DataFrame:
@@ -320,7 +335,7 @@ def plot_model_signal_over_time(
 ) -> None:
     """
     Sector-level Pearson r between each model score and YoY employment growth,
-    plotted as a time series spanning 2015→2025. The 2022 boundary is marked to
+    plotted as a time series spanning every available period (1999→2025). The 2022 boundary is marked to
     separate pre-AI and AI-era periods. COVID-affected periods are shaded.
 
     Three model lines:
@@ -346,13 +361,6 @@ def plot_model_signal_over_time(
     latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
 
     # Collect all YoY growth columns in chronological order
-    def _sort_period(col_name: str) -> tuple[int, int]:
-        key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
-        if key == "composite" or key == "pre_ai":
-            return (99, 0)
-        parts = key.split("_")
-        return (int(parts[0]), int(parts[1]))
-
     hist_yoy = sorted(
         [c for c in merged_validation_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
         key=_sort_period,
@@ -434,7 +442,7 @@ def plot_model_signal_over_time(
     for col in all_period_cols:
         key = col.replace("hist_emp_growth_", "").replace("emp_growth_", "")
         parts = key.split("_")
-        period_labels.append(f"20{parts[0]}→\n20{parts[1]}")
+        period_labels.append(f"{parts[0]}→\n{parts[1]}")
 
     r_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
     p_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
@@ -495,7 +503,7 @@ def plot_model_signal_over_time(
     x = list(range(len(all_period_cols)))
 
     # Shade COVID-affected periods (2019→20 and 2020→21)
-    covid_cols = ["hist_emp_growth_19_20", "hist_emp_growth_20_21"]
+    covid_cols = ["hist_emp_growth_2019_2020", "hist_emp_growth_2020_2021"]
     for i, col in enumerate(all_period_cols):
         if col in covid_cols:
             ax.axvspan(i - 0.4, i + 0.4, alpha=0.12, color="red", zorder=0)
@@ -648,7 +656,7 @@ def plot_model_signal_over_time_occupation(
 ) -> None:
     """
     Occupation-level Pearson r between each model score and YoY employment growth,
-    plotted as a time series spanning 2005→2025. Unlike the sector-level version,
+    plotted as a time series spanning 1999→2025. Unlike the sector-level version,
     no sector aggregation step is applied — each occupation, or each harmonized
     SOC unit, is one data point. n counts harmonized units when
     bls_harmonized_trends.csv is present, else surviving 2022 codes. Significant
@@ -656,13 +664,6 @@ def plot_model_signal_over_time_occupation(
     """
 
     # Collect all YoY growth columns in chronological order
-    def _sort_period(col_name: str) -> tuple[int, int]:
-        key = col_name.replace("hist_emp_growth_", "").replace("emp_growth_", "")
-        if key in ("composite", "pre_ai"):
-            return (99, 0)
-        parts = key.split("_")
-        return (int(parts[0]), int(parts[1]))
-
     hist_yoy = sorted(
         [c for c in merged_validation_df.columns if c.startswith("hist_emp_growth_") and "_pre_ai" not in c],
         key=_sort_period,
@@ -731,7 +732,7 @@ def plot_model_signal_over_time_occupation(
     for col in all_period_cols:
         key = col.replace("hist_emp_growth_", "").replace("emp_growth_", "")
         parts = key.split("_")
-        period_labels.append(f"20{parts[0]}→\n20{parts[1]}")
+        period_labels.append(f"{parts[0]}→\n{parts[1]}")
 
     r_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
     p_series: dict[str, list[float | None]] = {cfg[0]: [] for cfg in score_configs}
@@ -754,7 +755,7 @@ def plot_model_signal_over_time_occupation(
 
     x = list(range(len(all_period_cols)))
 
-    covid_cols = ["hist_emp_growth_19_20", "hist_emp_growth_20_21"]
+    covid_cols = ["hist_emp_growth_2019_2020", "hist_emp_growth_2020_2021"]
     for i, col in enumerate(all_period_cols):
         if col in covid_cols:
             ax.axvspan(i - 0.4, i + 0.4, alpha=0.12, color="red", zorder=0)
@@ -810,8 +811,9 @@ def plot_model_signal_over_time_occupation(
         "Significant periods annotated with r and p-value."
     )
     # Off units, n is whatever survived the SOC revisions; on units it is the unit count.
+    unit_span = f"{_sort_period(all_period_cols[0])[0]}→{_sort_period(all_period_cols[-1])[1]}"
     chart_title += (
-        "\n(harmonized SOC units — consistent occupation definitions 2005→2025)"
+        f"\n(harmonized SOC units — consistent occupation definitions {unit_span})"
         if use_units
         else " n varies with historical SOC survivorship."
     )
@@ -1108,13 +1110,13 @@ def build_unit_scores(
     unit_membership_df: pd.DataFrame,
     employment_col: str,
     score_cols: list[str],
-    anchor_year: str = "22",
+    anchor_year: str = "2022",
 ) -> pd.DataFrame:
     """
     Employment-weighted mean of each model score over a unit's anchor-year OEWS codes.
 
     merged_validation_df is keyed on the 2022 OEWS code set, so a unit's score is
-    the weighted mean over its year-22 members that were scored. Weights are
+    the weighted mean over its 2022 members that were scored. Weights are
     renormalised over members with a non-missing score, and units with no scored
     member are omitted.
     """
@@ -1180,8 +1182,8 @@ def analyse_wage_censoring_sensitivity(
         print("\n  Skipping wage censoring sensitivity — no censoring metadata available.")
         return None
 
-    censoring_df = pd.read_csv(censoring_path, dtype={"year_suffix": str})
-    anchor_rows = censoring_df[censoring_df["year_suffix"] == anchor_year]
+    censoring_df = pd.read_csv(censoring_path, dtype={"year": str})
+    anchor_rows = censoring_df[censoring_df["year"] == anchor_year]
     if anchor_rows.empty or pd.isna(anchor_rows["censoring_floor"].iloc[0]):
         print("\n  Skipping wage censoring sensitivity — no censored wages in the anchor year.")
         return None
@@ -1203,8 +1205,8 @@ def analyse_wage_censoring_sensitivity(
     # the wage would have fallen in nominal terms across the window.
     sensitivity_df["wage_growth_ceiling"] = sensitivity_df["wage_growth_composite"].where(~boundable, 0.0)
 
-    print(f"\n── Wage Censoring Sensitivity (composite 20{anchor_year}→20{latest_year}) ──")
-    print(f"   Censored in 20{anchor_year}: {int(anchor_censored.sum())} occupations | floor ${censoring_floor:,.0f}")
+    print(f"\n── Wage Censoring Sensitivity (composite {anchor_year}→{latest_year}) ──")
+    print(f"   Censored in {anchor_year}: {int(anchor_censored.sum())} occupations | floor ${censoring_floor:,.0f}")
     print(f"   Boundable (latest year observed): {int(boundable.sum())} | unboundable (both censored): {int(unboundable.sum())}")
     if boundable.any():
         widest = sensitivity_df.loc[boundable, "wage_growth_floor"].max()
@@ -1312,7 +1314,7 @@ def main():
     emp_growth_cols = _growth_period_columns("emp_growth_")
     wage_growth_cols = _growth_period_columns("wage_growth_")
 
-    # Extract period keys (e.g. "22_23", "23_24", "composite"), sorted with composite last
+    # Extract period keys (e.g. "2022_2023", "2023_2024", "composite"), sorted with composite last
     def _sort_key(col: str) -> tuple:
         period = col.split("growth_", 1)[1]
         return (1, period) if period == "composite" else (0, period)
@@ -1599,7 +1601,7 @@ def main():
     analyse_wage_censoring_sensitivity(
         merged_validation_df,
         dynamic_validation_df,
-        anchor_year="22",
+        anchor_year="2022",
         latest_year=latest_emp_col.replace("TOT_EMP_", ""),
         employment_col=latest_emp_col,
         soc_major_col="soc_major",
@@ -2107,8 +2109,8 @@ def main():
 
     # ── Employment trajectories for top-risk occupations ─────────────────────
     top_risk_df = aggregated_exposure_df.nlargest(10, "occupation_exposure")[["OCC_CODE", "Title", "occupation_exposure"]]
-    trajectory_emp_cols = [c for c in ["TOT_EMP_22", "TOT_EMP_23", "TOT_EMP_24", "TOT_EMP_25"] if c in bls_trends_df.columns]
-    trajectory_years = [int("20" + c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
+    trajectory_emp_cols = [c for c in ["TOT_EMP_2022", "TOT_EMP_2023", "TOT_EMP_2024", "TOT_EMP_2025"] if c in bls_trends_df.columns]
+    trajectory_years = [int(c.replace("TOT_EMP_", "")) for c in trajectory_emp_cols]
     trajectory_df = top_risk_df.merge(bls_trends_df[["OCC_CODE"] + trajectory_emp_cols], on="OCC_CODE", how="inner")
 
     fig, ax_traj = plt.subplots(figsize=(14, 9))

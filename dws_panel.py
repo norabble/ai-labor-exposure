@@ -15,12 +15,19 @@ this project cares about: it is technological and organisational displacement
 with the cyclical and demand-shock reasons already separated out, which no
 employment or unemployment series achieves without statistical purging.
 
-Like CPS Table A-19, the release is a rolling web page — BLS replaces it in place
-with each new survey and publishes no archive of prior releases (checked
-2026-09-12: /news.release/archives/disp_*.htm, /bls/news-release/disp.htm and
-/data/archived.htm all 404, and web.archive.org is unreachable from CI). History
-therefore exists only in the committed seed panel, which accumulates forward one
-survey at a time, exactly as seeds/cps_a19_panel.csv does.
+Like CPS Table A-19, the current release is a rolling web page — BLS replaces it
+in place with each new survey, carrying only the latest survey at any time. Nine
+archives of prior releases do exist, at
+https://www.bls.gov/news.release/archives/disp_<MMDDYYYY>.htm for survey years
+2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022, and 2024 (verified 2026-09-14; an
+earlier note here claiming no archive existed was wrong — it probed the wrong
+release dates). Surveys 2000-2006 genuinely have no archive. History before 2008
+therefore comes from the Monthly Labor Review displaced-worker article series
+instead (see mlr_displacement.py), as displacement *rates* rather than counts.
+Even with the archive, the rolling current-release page is still replaced in
+place each cycle, so history overall exists only in the committed seed panel,
+which accumulates forward one survey at a time, exactly as seeds/cps_a19_panel.csv
+does.
 
 Three tables are parsed:
   • Table 2 — long-tenured displaced workers by reason for job loss
@@ -32,25 +39,84 @@ Inputs:
   • data/raw/dws/disp_t02.html        (optional — latest release, from download_dws.py)
   • data/raw/dws/disp_t05.html
   • data/raw/dws/disp_t08.html
+  • data/raw/dws/archives/disp_<year>.html  (optional — archived releases, for
+    rebuild_historical_panel_from_raw; from download_dws.py)
+  • mlr_displacement.parse_displacement_rate_table output  (via mlr_rows_for_panel,
+    consumed by rebuild_historical_panel_from_raw below, this module's own
+    committed rebuild entry point — `python dws_panel.py`)
 
 Outputs:
   • data/output/dws_displacement_panel.csv  (seed panel merged with the latest release)
+  • data/output/dws_historical_panel_rebuilt.csv  (rebuild_historical_panel_from_raw's
+    output, via `python dws_panel.py` — for comparison against the seed, not
+    auto-promoted)
+
+The panel carries two measurement bases, distinguished by the `measurement_basis`
+column (`count_thousands` or `rate_percent`) and the `source` column
+(`news_release`, `news_release_archive`, or `mlr_article`): counted DWS releases
+for survey years 2008 onward, and rates read off the pre-2008 Monthly Labor
+Review article series (see mlr_displacement.py) for 1983 through 2001. The two
+bases are never blended — a rate and a count cannot be summed — so every
+consumer that aggregates `displaced_thousands` must filter to
+`measurement_basis == "count_thousands"` first; `mlr_rows_for_panel` is the
+function that reshapes the MLR rate table into this panel's row shape, one row
+per (period, MLR occupation leaf) rather than per (period, DWS group), because
+four DWS groups each receive two MLR leaves and rates cannot be collapsed into
+one without employment weights the MLR tables never published.
 
 Table 5 publishes ten leaf occupation groups nested under five broad ones. Only
 the leaves are kept, and together they cover all 22 SOC major groups exactly
 once — but the mapping is one-to-many ("Professional and related occupations"
 spans SOC 15 through 29), so it cannot reuse CPS_TO_SOC_MAJOR from cps_panel.py,
 whose A-19 groups are already one per major group.
+
+`parse_archived_release` extends the panel further back using the nine archived
+releases `download_dws.download_archived_releases` fetches from
+/news.release/archives/disp_<MMDDYYYY>.htm, and all three tables — occupation,
+reason, and the all-tenures total analogous to Table 8 — are recovered from
+every one of the nine. Unlike the current release, an archived page carries
+every table inline on one page rather than split across three files, so the
+occupation and reason tables are selected by their heading text rather than by
+a fixed index — ordering is not guaranteed stable across sixteen years of
+releases. Table 8 cannot be selected by heading text on the HTML-table archives
+(2018-2024): it shares its column signature with two other tables on the page
+and no heading distinguishes any of the three, so `_select_total_table` picks
+it out instead by a semantic invariant — its total must exceed Table 5's own
+published long-tenured total, which the other same-signature tables merely
+repeat — and skips it with a warning, rather than guessing, when that
+invariant fails to single out exactly one candidate. On the plain-text
+archives (2008-2016) Table 8's caption is unique among the page's `<PRE>`
+captions, so it is found directly by `_select_pre_block`, the same way the
+occupation and reason blocks already are.
+
+Of the nine archives, 2018, 2020, 2022, and 2024 render their tables as HTML
+`<table>` elements that `pandas.read_html` can parse directly; 2008–2016 lay
+theirs out as plain-text `<PRE>` blocks instead, with dot-leader-padded labels
+and fixed-width-aligned (not delimited) numeric columns. `parse_archived_release`
+detects which layout a page uses — no inline `<table>` at all means `<PRE>` —
+and dispatches to `parse_archived_text_release`, which reconstructs the same
+column shape `_occupation_rows`, `_reason_rows`, and `_total_rows` already
+expect out of the plain text, rather than duplicating their leaf-selection,
+dash-to-NaN, SOC mapping, and coverage-check logic.
 """
 
+import html
+import io
 import os
 import re
 
 import pandas as pd
 
+from mlr_displacement import mlr_to_dws_group, parse_displacement_rate_table
+
 SEED_PANEL_PATH = "seeds/dws_displacement_panel.csv"
 RAW_RELEASE_DIR = "data/raw/dws"
 OUTPUT_PANEL_PATH = "data/output/dws_displacement_panel.csv"
+
+# The two measurement bases a panel row can carry. Rates and counts must never be
+# summed together — see mlr_rows_for_panel and the module docstring.
+COUNT_MEASUREMENT_BASIS = "count_thousands"
+RATE_MEASUREMENT_BASIS = "rate_percent"
 
 PANEL_COLUMNS = [
     "survey_year",
@@ -59,10 +125,14 @@ PANEL_COLUMNS = [
     "period_years",
     "source_table",
     "group_name",
+    "mlr_occupation",
     "soc_majors",
     "displaced_thousands",
+    "displacement_rate_percent",
     "reason",
     "tenure_class",
+    "measurement_basis",
+    "source",
 ]
 
 # Ten leaf occupation groups from Table 5, each mapped to the SOC major groups it
@@ -95,6 +165,30 @@ STRUCTURAL_REASON = "position or shift abolished"
 # sum exactly to the published total. Anything beyond this gap means the leaf set
 # has drifted and the parser is silently dropping a group.
 LEAF_COVERAGE_TOLERANCE = 0.05
+
+# Patterns used to recover tabular rows from a plain-text <PRE> block (2008-2016
+# archives). Dot leaders pad a row label out to its numbers column
+# ("Service occupations............."); numeric columns are aligned with runs of
+# plain whitespace rather than a delimiter, so rows are split on those runs, never
+# a fixed character offset.
+_DOT_LEADER_PATTERN = re.compile(r"\.{2,}")
+_WHITESPACE_RUN_PATTERN = re.compile(r"\s{2,}")
+_PRE_TABLE_NUMERIC_TOKEN_PATTERN = re.compile(r"-|[\d,]+(?:\.\d+)?")
+
+# An archived HTML release's Table 8 (all-tenures total) shares this six-column
+# "Characteristic" plus employment-status-breakdown signature with two other
+# tables on the page — Table 1 (long-tenured, by age/sex/race) and Table 3
+# (long-tenured, by advance notice) — so no heading text picks it out alone; see
+# _select_total_table. The reason and area-of-residence tables carry different
+# breakdown columns (by reason for job loss, by census region) and never match.
+_TOTAL_TABLE_SIGNATURE_PATTERNS = (r"^characteristic", r"^total$", r"employed", r"unemployed", r"not in (?:the )?labor force")
+
+# Table 8 has always carried this many rows (one "Total, 20 years and over" row
+# plus its age/sex/race/ethnicity breakdown) in every archived and current
+# release checked so far. Corroborating evidence only, per _select_total_table —
+# never the primary selector, since a row-count match alone cannot distinguish
+# Table 8 from the other same-signature tables.
+_EXPECTED_TOTAL_TABLE_ROW_COUNT = 59
 
 
 def verify_soc_coverage() -> None:
@@ -149,15 +243,223 @@ def parse_survey_period(release_html_path: str) -> tuple[int, int, int]:
     return int(survey_match.group(1)), int(window_match.group(1)), int(window_match.group(2))
 
 
-def parse_occupation_table(release_html_path: str) -> pd.DataFrame:
-    """Parse Table 5 into one row per leaf occupation group, mapped to SOC major groups."""
+def _parse_archived_period(archive_html: str) -> tuple[int, int]:
+    """Read the three-year displacement window (period_start_year, period_end_year) from an archived release's text.
+
+    Unlike the current release, an archived release's survey year is supplied by the
+    caller of `parse_archived_release` — the January in which BLS conducted that
+    survey — rather than derived here. The window does not equal that year: the
+    archive published as `disp_2018.html` (page title "2017 A01 Results") reports
+    displacement between January 2015 and December 2017, not 2018 itself.
+    """
+    release_text = re.sub(r"<[^>]*>", " ", archive_html)
+    release_text = re.sub(r"\s+", " ", release_text)
+
+    window_match = re.search(r"between January (\d{4}) and December (\d{4})", release_text)
+    if window_match is None:
+        raise ValueError("could not read the displacement window from the archived release")
+
+    return int(window_match.group(1)), int(window_match.group(2))
+
+
+def _read_flattened_tables(archive_html: str) -> list[pd.DataFrame]:
+    """Every inline `<table>` on the page, each with `_flatten_columns` already applied.
+
+    Returns an empty list — rather than letting `pandas.read_html` raise — when the
+    page carries no `<table>` elements at all. Five of the nine archived releases
+    (2008–2016) lay their tables out as plain-text `<PRE>` blocks; those are out of
+    scope for this parser, and the caller treats an empty list as "nothing here to
+    parse" rather than a failure.
+    """
+    try:
+        return [_flatten_columns(candidate_df) for candidate_df in pd.read_html(io.StringIO(archive_html))]
+    except ValueError:
+        return []
+
+
+def _select_table_by_heading(candidate_tables: list[pd.DataFrame], heading_text: str) -> pd.DataFrame | None:
+    """The table any of whose flattened columns contain heading_text, or None.
+
+    Archived releases carry every table inline on one page and the ordering is not
+    guaranteed stable across sixteen years of releases, so tables are selected by
+    what they contain rather than by index. The heading text does not always land in
+    the first column: "Reason for job loss" appears only inside the second-header-row
+    labels ("Percent distribution by reason for job loss ..."), never as a first
+    column header on its own, so every column is checked rather than just the first.
+    """
+    for candidate_df in candidate_tables:
+        if any(heading_text.lower() in str(column).lower() for column in candidate_df.columns):
+            return candidate_df
+    return None
+
+
+def _has_total_table_signature(candidate_df: pd.DataFrame) -> bool:
+    """True if candidate_df carries Table 8's six-column "Characteristic" plus
+    employment-status-breakdown signature — see `_TOTAL_TABLE_SIGNATURE_PATTERNS`.
+    """
+    return all(any(re.search(pattern, column) for column in candidate_df.columns) for pattern in _TOTAL_TABLE_SIGNATURE_PATTERNS)
+
+
+def _table5_long_tenured_total(occupation_table_df: pd.DataFrame) -> float:
+    """Table 5's own published long-tenured total (its "Total, ..." row), read the
+    same way `_occupation_rows` reads it — `startswith("total,")`, tolerating a
+    footnote marker appended straight onto the label. This is the baseline
+    `_select_total_table`'s invariant compares each same-signature candidate against:
+    the true long-tenured population, not the ten leaf groups' sum, which
+    `_occupation_rows` already establishes omits a small unclassified residual (see
+    LEAF_COVERAGE_TOLERANCE) and so would sit close enough to Table 1's own
+    long-tenured grand total to leave the two indistinguishable by magnitude alone.
+    """
+    occupation_column = _find_column(occupation_table_df, r"occupation of lost job")
+    total_column = _find_column(occupation_table_df, r"^total$")
+    return pd.to_numeric(
+        occupation_table_df.loc[
+            occupation_table_df[occupation_column].astype(str).str.strip().str.lower().str.startswith("total,"),
+            total_column,
+        ],
+        errors="coerce",
+    ).max()
+
+
+def _select_total_table(candidate_tables: list[pd.DataFrame], occupation_table_df: pd.DataFrame, survey_year: int) -> pd.DataFrame | None:
+    """Select Table 8 (the all-tenures total) among an archived HTML release's tables.
+
+    Table 8 shares its six-column signature with two other tables on the page — Table
+    1 (long-tenured, by age/sex/race) and Table 3 (long-tenured, by advance notice) —
+    and no heading text distinguishes any of the three (see the module docstring and
+    `_has_total_table_signature`). This was previously left unparsed for exactly that
+    reason. It is now selected by a semantic invariant instead of a heuristic:
+    all-tenures displacement must exceed long-tenured displacement from the same
+    release, so the winning candidate's "Total, 20 years and over" total must exceed
+    `_table5_long_tenured_total` — Table 5's own published long-tenured total, the
+    authoritative figure for "long-tenured displacement from the same release" (Table
+    1 and Table 3 both republish this identical number under their own headings, so
+    they tie rather than exceed it and are excluded by the strict inequality; only
+    Table 8, which counts short-tenured workers too, actually exceeds it).
+
+    If zero same-signature candidates satisfy the invariant, or more than one does,
+    this returns None with a warning naming the survey year, exactly as a missing
+    occupation or reason table is skipped elsewhere in this module — a wrong Table 8
+    would silently poison the project's default displacement rate, so failing to
+    parse is strictly better than guessing. A row count of 59 (`_EXPECTED_TOTAL_TABLE_ROW_COUNT`,
+    matching the current release's own Table 8) is checked only as corroboration once a
+    unique candidate is already selected; it never decides which candidate wins.
+    """
+    long_tenured_total = _table5_long_tenured_total(occupation_table_df)
+    invariant_satisfying_tables: list[pd.DataFrame] = []
+
+    for candidate_df in candidate_tables:
+        if not _has_total_table_signature(candidate_df):
+            continue
+        characteristic_column = _find_column(candidate_df, r"^characteristic")
+        total_column = _find_column(candidate_df, r"^total$")
+        total_rows = candidate_df[
+            candidate_df[characteristic_column].astype(str).str.strip().str.lower().str.startswith("total, 20 years and over")
+        ]
+        if total_rows.empty:
+            continue
+        candidate_total = pd.to_numeric(total_rows.iloc[0][total_column], errors="coerce")
+        if pd.notna(candidate_total) and candidate_total > long_tenured_total:
+            invariant_satisfying_tables.append(candidate_df)
+
+    if len(invariant_satisfying_tables) != 1:
+        print(
+            f"  ⚠ Could not uniquely identify Table 8 (all-tenures total) in the {survey_year} archived release — "
+            f"{len(invariant_satisfying_tables)} same-signature candidates exceeded the long-tenured baseline "
+            f"({long_tenured_total:,.0f}); skipping the all-tenures row rather than guessing."
+        )
+        return None
+
+    selected_total_table = invariant_satisfying_tables[0]
+    characteristic_column = _find_column(selected_total_table, r"^characteristic")
+    total_column = _find_column(selected_total_table, r"^total$")
+    selected_total = pd.to_numeric(
+        selected_total_table[
+            selected_total_table[characteristic_column].astype(str).str.strip().str.lower().str.startswith("total, 20 years and over")
+        ].iloc[0][total_column],
+        errors="coerce",
+    )
+    assert selected_total > long_tenured_total, "the selected Table 8 candidate must exceed the long-tenured baseline"
+
+    if len(selected_total_table) != _EXPECTED_TOTAL_TABLE_ROW_COUNT:
+        print(
+            f"  ⚠ Table 8 in the {survey_year} archived release has {len(selected_total_table)} rows, not the "
+            f"expected {_EXPECTED_TOTAL_TABLE_ROW_COUNT} — keeping it since the long-tenured-total invariant "
+            f"still uniquely selected it."
+        )
+    return selected_total_table
+
+
+def parse_archived_release(archive_html: str, survey_year: int) -> pd.DataFrame:
+    """Every panel row an archived release can supply, in the committed panel's schema.
+
+    Mirrors the current-release parser's occupation, reason, and all-tenures output so
+    all three accumulate into one seed: leaf occupation rows from the occupation table
+    (Table 5), the three reason rows (Table 2), and the single all-tenures total
+    analogous to Table 8 — all selected out of the page's inline tables rather than a
+    fixed index, since ordering is not guaranteed stable across sixteen years of
+    releases. The occupation and reason tables are selected by heading text
+    (`_select_table_by_heading`); Table 8 cannot be, because it shares its column
+    signature with two other tables on the page and no heading distinguishes any of
+    the three, so it is instead selected by the semantic invariant in
+    `_select_total_table` — its total must exceed Table 5's own published
+    long-tenured total, which the same-signature tables merely repeat rather than
+    exceed. That invariant is asserted once a unique candidate is chosen, and the
+    table is skipped with a warning (rather than guessed) if zero or more than one
+    candidate satisfies it, or if there is no occupation table to read the baseline
+    from at all.
+
+    Dispatches to `parse_archived_text_release` when the page carries no inline
+    HTML `<table>` elements at all — the five 2008-2016 archives, which lay their
+    tables out as plain-text `<PRE>` blocks instead — so a caller looping over
+    every archived release gets parsed rows for all nine rather than having to
+    special-case the plain-text layout itself.
+    """
+    candidate_tables = _read_flattened_tables(archive_html)
+    if not candidate_tables:
+        return parse_archived_text_release(archive_html, survey_year)
+
+    parsed_frames: list[pd.DataFrame] = []
+    occupation_table = _select_table_by_heading(candidate_tables, "Occupation of lost job")
+    if occupation_table is not None:
+        parsed_frames.append(_occupation_rows(occupation_table))
+    reason_table = _select_table_by_heading(candidate_tables, "Reason for job loss")
+    if reason_table is not None:
+        parsed_frames.append(_reason_rows(reason_table))
+    if occupation_table is not None:
+        total_table = _select_total_table(candidate_tables, occupation_table, survey_year)
+        if total_table is not None:
+            parsed_frames.append(_total_rows(total_table))
+
+    if not parsed_frames:
+        print(f"  ⚠ No occupation or reason table found in the {survey_year} archived release; skipping.")
+        return pd.DataFrame(columns=PANEL_COLUMNS)
+
+    release_panel_df = pd.concat(parsed_frames, ignore_index=True)
+    period_start_year, period_end_year = _parse_archived_period(archive_html)
+    release_panel_df["survey_year"] = survey_year
+    release_panel_df["period_start_year"] = period_start_year
+    release_panel_df["period_end_year"] = period_end_year
+    release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    release_panel_df["source"] = "news_release_archive"
+    return release_panel_df[PANEL_COLUMNS]
+
+
+def _occupation_rows(occupation_table_df: pd.DataFrame) -> pd.DataFrame:
+    """Table 5's leaf occupation rows, mapped to SOC major groups.
+
+    Shared by the current-release parser (`parse_occupation_table`, which reads the
+    table from its own standalone file) and the archived-release parser
+    (`parse_archived_release`, which selects the same table by heading text out of a
+    page carrying every table inline), so the leaf-row selection, dash-to-NaN, and
+    coverage checks live in one place.
+    """
     verify_soc_coverage()
-    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
 
-    occupation_column = _find_column(release_df, r"occupation of lost job")
-    total_column = _find_column(release_df, r"^total$")
+    occupation_column = _find_column(occupation_table_df, r"occupation of lost job")
+    total_column = _find_column(occupation_table_df, r"^total$")
 
-    occupation_df = release_df[[occupation_column, total_column]].copy()
+    occupation_df = occupation_table_df[[occupation_column, total_column]].copy()
     occupation_df.columns = ["group_name", "displaced_thousands"]
     occupation_df["group_name"] = occupation_df["group_name"].astype(str).str.strip()
 
@@ -186,31 +488,41 @@ def parse_occupation_table(release_html_path: str) -> pd.DataFrame:
     occupation_df["source_table"] = "table_5_occupation"
     occupation_df["reason"] = "all"
     occupation_df["tenure_class"] = "long_tenured"
+    occupation_df["mlr_occupation"] = ""
+    occupation_df["displacement_rate_percent"] = float("nan")
+    occupation_df["measurement_basis"] = COUNT_MEASUREMENT_BASIS
     return occupation_df
 
 
-def parse_reason_table(release_html_path: str) -> pd.DataFrame:
-    """Parse Table 2 into one row per reason for job loss, as counts rather than percentages.
+def parse_occupation_table(release_html_path: str) -> pd.DataFrame:
+    """Parse Table 5 into one row per leaf occupation group, mapped to SOC major groups."""
+    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    return _occupation_rows(release_df)
+
+
+def _reason_rows(reason_table_df: pd.DataFrame) -> pd.DataFrame:
+    """Table 2's three reason-for-job-loss rows, as counts rather than percentages.
 
     The release publishes reasons as a percent distribution over the long-tenured
     total; those percentages are converted to counts here so every panel row carries
-    the same unit.
+    the same unit. Shared by the current-release parser (`parse_reason_table`) and
+    the archived-release parser (`parse_archived_release`).
     """
-    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    characteristic_column = _find_column(reason_table_df, r"^characteristic")
+    total_column = _find_column(reason_table_df, r"^total$")
 
-    characteristic_column = _find_column(release_df, r"^characteristic")
-    total_column = _find_column(release_df, r"^total$")
-
-    all_worker_rows = release_df[release_df[characteristic_column].astype(str).str.strip().str.lower() == "total, 20 years and over"]
+    all_worker_rows = reason_table_df[
+        reason_table_df[characteristic_column].astype(str).str.strip().str.lower() == "total, 20 years and over"
+    ]
     if all_worker_rows.empty:
-        raise ValueError(f"Table 2 has no 'Total, 20 years and over' row in {release_html_path}")
+        raise ValueError("reason table has no 'Total, 20 years and over' row")
     # The first such row is the all-workers total; the later ones break out men and women.
     total_row = all_worker_rows.iloc[0]
     displaced_total = pd.to_numeric(total_row[total_column], errors="coerce")
 
     reason_rows = []
     for reason_label, column_pattern in REASON_COLUMN_PATTERNS.items():
-        reason_percent = pd.to_numeric(total_row[_find_column(release_df, column_pattern)], errors="coerce")
+        reason_percent = pd.to_numeric(total_row[_find_column(reason_table_df, column_pattern)], errors="coerce")
         reason_rows.append(
             {
                 "group_name": "Total, 20 years and over",
@@ -221,21 +533,217 @@ def parse_reason_table(release_html_path: str) -> pd.DataFrame:
                 "source_table": "table_2_reason",
                 "reason": reason_label,
                 "tenure_class": "long_tenured",
+                "mlr_occupation": "",
+                "displacement_rate_percent": float("nan"),
+                "measurement_basis": COUNT_MEASUREMENT_BASIS,
             }
         )
     return pd.DataFrame(reason_rows)
 
 
-def parse_total_table(release_html_path: str) -> pd.DataFrame:
-    """Parse Table 8 into the single all-tenures displacement total."""
+def parse_reason_table(release_html_path: str) -> pd.DataFrame:
+    """Parse Table 2 into one row per reason for job loss, as counts rather than percentages."""
     release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    return _reason_rows(release_df)
 
-    characteristic_column = _find_column(release_df, r"^characteristic")
-    total_column = _find_column(release_df, r"^total$")
 
-    all_worker_rows = release_df[release_df[characteristic_column].astype(str).str.strip().str.lower() == "total, 20 years and over"]
+def _archive_pre_blocks(archive_html: str) -> list[str]:
+    """Every `<PRE>` block's text on an archived release page, HTML entities decoded, in document order.
+
+    The five 2008-2016 archives lay every table out as one plain-text `<PRE>`
+    block per table rather than as HTML `<table>` elements, so this is the
+    plain-text analogue of `_read_flattened_tables`.
+    """
+    return [html.unescape(pre_block_text) for pre_block_text in re.findall(r"<pre[^>]*>(.*?)</pre>", archive_html, re.S | re.I)]
+
+
+def _select_pre_block(pre_blocks: list[str], caption_text: str, exclude_text: str | None = None) -> str | None:
+    """The first pre block whose caption contains caption_text and, if given, not exclude_text.
+
+    Only the caption — the block's first 400 characters, with whitespace runs
+    collapsed to one space so a phrase wrapped across two physical lines still
+    reads as one string — is searched, not the whole block. "reason for job loss"
+    also appears deep inside unrelated tables (a row-group label in Table 6 and
+    Table 8, a repeated column header in Table 2 itself), so searching the whole
+    block finds too many matches; restricting the search to the caption and, for
+    the reason table, excluding Table 3's competing caption phrase ("...advance
+    notice, reason for job loss...") is what makes the match unique. Selection is
+    always by this caption content, never by the block's position on the page,
+    which is not guaranteed stable across sixteen years of releases.
+    """
+    for pre_block_text in pre_blocks:
+        caption = re.sub(r"\s+", " ", pre_block_text[:400]).strip().lower()
+        if caption_text in caption and (exclude_text is None or exclude_text not in caption):
+            return pre_block_text
+    return None
+
+
+def _parse_pre_table_rows(pre_block_text: str) -> list[tuple[str, list[str]]]:
+    """Every (row_label, numeric_tokens) row in a `<PRE>`-formatted table block.
+
+    Dot leaders pad a row label out to its numbers column
+    (`Service occupations.............`); those are collapsed to a single space
+    first with `_DOT_LEADER_PATTERN`, and each line is then split on runs of two
+    or more whitespace characters with `_WHITESPACE_RUN_PATTERN` — never a fixed
+    character offset, which the repo's trailing-whitespace-stripping pre-commit
+    hook could silently break for a column-position-dependent parser.
+
+    A label too long for the label column wraps onto its own line with no
+    numbers at all (`Management, business, and financial operations\\n   occupations
+    ....`); such a line is buffered as a pending label fragment and prefixed onto
+    the label of the next line that does carry numbers, so the two physical lines
+    recombine into one row.
+    """
+    pending_label_fragment = ""
+    parsed_rows: list[tuple[str, list[str]]] = []
+    for raw_line in pre_block_text.split("\n"):
+        line = _DOT_LEADER_PATTERN.sub(" ", raw_line).strip()
+        if not line:
+            pending_label_fragment = ""
+            continue
+        line_tokens = _WHITESPACE_RUN_PATTERN.split(line)
+        if len(line_tokens) >= 2 and _PRE_TABLE_NUMERIC_TOKEN_PATTERN.fullmatch(line_tokens[1]):
+            row_label = f"{pending_label_fragment} {line_tokens[0]}".strip() if pending_label_fragment else line_tokens[0]
+            parsed_rows.append((row_label, line_tokens[1:]))
+            pending_label_fragment = ""
+        elif len(line_tokens) == 1:
+            pending_label_fragment = f"{pending_label_fragment} {line_tokens[0]}".strip() if pending_label_fragment else line_tokens[0]
+        else:
+            pending_label_fragment = ""
+    return parsed_rows
+
+
+def _pre_table_count_string(numeric_token: str) -> str:
+    """Strip thousands-separator commas from a `<PRE>`-table numeric token, leaving a suppressed dash as-is.
+
+    `pandas.read_html` strips comma thousands separators automatically when it
+    parses an HTML `<table>`; the rows `_parse_pre_table_rows` recovers bypass
+    `read_html` entirely, so this stands in for that step. Without it,
+    `pd.to_numeric` inside `_occupation_rows` / `_reason_rows` would coerce
+    "3,191" to NaN rather than 3191 — comma-separated, not truncated at the comma.
+    """
+    return numeric_token if numeric_token == "-" else numeric_token.replace(",", "")
+
+
+def parse_archived_text_release(archive_html: str, survey_year: int) -> pd.DataFrame:
+    """Parse a plain-text `<PRE>`-block archived DWS release (2008-2016) into panel rows.
+
+    Reconstructs, out of the plain text, the same column shape `_occupation_rows`,
+    `_reason_rows`, and `_total_rows` already expect from an HTML table — column
+    names chosen to satisfy the regex patterns those helpers search for
+    (`"occupation of lost job"` / `"total"` for the occupation table;
+    `"characteristic"` / `"total"` plus each `REASON_COLUMN_PATTERNS` phrase for the
+    reason table; `"characteristic"` / `"total"` again for the all-tenures table) —
+    then calls them, so leaf selection, dash-to-NaN, SOC mapping, and the coverage
+    check live in one place rather than being duplicated here.
+
+    Only the reason table's first "Total, 20 years and over" row is used — the
+    same row the HTML-table path takes via `_reason_rows`' own first-match logic —
+    since the release repeats that label for the Men and Women breakdowns beneath
+    it. The five numeric tokens on that row are, in publication order, the total
+    count, the (redundant) 100.0% total, and the plant/insufficient-work/position
+    percentages; that order is stable across all five plain-text archives.
+
+    Table 8's own "Total, 20 years and over" row needs none of the HTML path's
+    same-signature disambiguation (`_select_total_table`): its caption ("Table 8.
+    Total displaced workers...") is unique among the page's `<PRE>` captions, so
+    `_select_pre_block` finds it directly, the same way it already finds the
+    occupation and reason blocks.
+
+    Returns an empty, correctly-columned frame with a warning printed to stdout
+    when none of the three tables can be found on the page, so a caller looping
+    over every archived release can treat that as "nothing to parse" rather than a
+    failure.
+    """
+    pre_blocks = _archive_pre_blocks(archive_html)
+    parsed_frames: list[pd.DataFrame] = []
+
+    occupation_block = _select_pre_block(pre_blocks, "by occupation of lost job")
+    if occupation_block is not None:
+        occupation_table_df = pd.DataFrame(
+            [
+                (row_label, _pre_table_count_string(numeric_tokens[0]))
+                for row_label, numeric_tokens in _parse_pre_table_rows(occupation_block)
+            ],
+            columns=["occupation of lost job", "total"],
+        )
+        parsed_frames.append(_occupation_rows(occupation_table_df))
+
+    reason_block = _select_pre_block(pre_blocks, "reason for job loss", exclude_text="advance notice")
+    if reason_block is not None:
+        total_row = next(
+            (
+                numeric_tokens
+                for row_label, numeric_tokens in _parse_pre_table_rows(reason_block)
+                if row_label.lower().startswith("total, 20 years and over")
+            ),
+            None,
+        )
+        if total_row is not None and len(total_row) >= 5:
+            reason_table_df = pd.DataFrame(
+                [
+                    {
+                        "characteristic": "Total, 20 years and over",
+                        "total": _pre_table_count_string(total_row[0]),
+                        "plant or company closed down or moved": total_row[2],
+                        "insufficient work": total_row[3],
+                        "position or shift abolished": total_row[4],
+                    }
+                ]
+            )
+            parsed_frames.append(_reason_rows(reason_table_df))
+
+    total_block = _select_pre_block(pre_blocks, "table 8.")
+    if total_block is not None:
+        total_row = next(
+            (
+                numeric_tokens
+                for row_label, numeric_tokens in _parse_pre_table_rows(total_block)
+                if row_label.lower().startswith("total, 20 years and over")
+            ),
+            None,
+        )
+        if total_row is not None:
+            total_table_df = pd.DataFrame([{"characteristic": "Total, 20 years and over", "total": _pre_table_count_string(total_row[0])}])
+            parsed_frames.append(_total_rows(total_table_df))
+
+    if not parsed_frames:
+        print(f"  ⚠ No occupation, reason, or total table found in the {survey_year} archived plain-text release; skipping.")
+        return pd.DataFrame(columns=PANEL_COLUMNS)
+
+    release_panel_df = pd.concat(parsed_frames, ignore_index=True)
+    period_start_year, period_end_year = _parse_archived_period(archive_html)
+    release_panel_df["survey_year"] = survey_year
+    release_panel_df["period_start_year"] = period_start_year
+    release_panel_df["period_end_year"] = period_end_year
+    release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    release_panel_df["source"] = "news_release_archive"
+    return release_panel_df[PANEL_COLUMNS]
+
+
+def _total_rows(total_table_df: pd.DataFrame) -> pd.DataFrame:
+    """Table 8's single all-tenures displacement total, in the panel's row shape.
+
+    Shared by the current-release parser (`parse_total_table`, which reads the table
+    from its own standalone file) and both archived-release parsers —
+    `parse_archived_text_release`, which reconstructs the same column shape out of a
+    plain-text `<PRE>` block, and `parse_archived_release`'s HTML-table path, which
+    selects the table via `_select_total_table` — so the row shape lives in one place.
+
+    Matched by `startswith` rather than an exact match on "total, 20 years and over",
+    because an archived release's Table 8 (and the same-signature tables
+    `_select_total_table` compares it against) sometimes appends a footnote marker
+    directly onto that label with no separating space ("...and over(2)"); this is the
+    same tolerance `_occupation_rows` already applies to Table 5's own total row.
+    """
+    characteristic_column = _find_column(total_table_df, r"^characteristic")
+    total_column = _find_column(total_table_df, r"^total$")
+
+    all_worker_rows = total_table_df[
+        total_table_df[characteristic_column].astype(str).str.strip().str.lower().str.startswith("total, 20 years and over")
+    ]
     if all_worker_rows.empty:
-        raise ValueError(f"Table 8 has no 'Total, 20 years and over' row in {release_html_path}")
+        raise ValueError("Table 8 has no 'Total, 20 years and over' row")
 
     return pd.DataFrame(
         [
@@ -246,9 +754,21 @@ def parse_total_table(release_html_path: str) -> pd.DataFrame:
                 "source_table": "table_8_all_tenures",
                 "reason": "all",
                 "tenure_class": "all_tenures",
+                "mlr_occupation": "",
+                "displacement_rate_percent": float("nan"),
+                "measurement_basis": COUNT_MEASUREMENT_BASIS,
             }
         ]
     )
+
+
+def parse_total_table(release_html_path: str) -> pd.DataFrame:
+    """Parse Table 8 into the single all-tenures displacement total."""
+    release_df = _flatten_columns(pd.read_html(release_html_path, flavor="bs4")[0])
+    try:
+        return _total_rows(release_df)
+    except ValueError as total_row_error:
+        raise ValueError(f"{total_row_error} in {release_html_path}") from total_row_error
 
 
 def build_release_panel(raw_release_dir: str = RAW_RELEASE_DIR) -> pd.DataFrame:
@@ -267,14 +787,21 @@ def build_release_panel(raw_release_dir: str = RAW_RELEASE_DIR) -> pd.DataFrame:
     release_panel_df["period_start_year"] = period_start_year
     release_panel_df["period_end_year"] = period_end_year
     release_panel_df["period_years"] = period_end_year - period_start_year + 1
+    release_panel_df["source"] = "news_release"
     return release_panel_df[PANEL_COLUMNS]
 
 
 def merge_panel(existing_panel_df: pd.DataFrame, new_release_df: pd.DataFrame) -> pd.DataFrame:
-    """Merge a freshly parsed release into the accumulated panel, the new release winning ties."""
+    """Merge a freshly parsed release into the accumulated panel, the new release winning ties.
+
+    `mlr_occupation` is part of the dedup key alongside the original five columns
+    because four DWS groups each receive two MLR leaf rows sharing every other
+    key column (see mlr_rows_for_panel) — without it, this drop_duplicates would
+    silently collapse one of every colliding pair on every merge.
+    """
     combined_panel_df = pd.concat([existing_panel_df, new_release_df], ignore_index=True)
     combined_panel_df = combined_panel_df.drop_duplicates(
-        subset=["survey_year", "source_table", "group_name", "reason", "tenure_class"], keep="last"
+        subset=["survey_year", "source_table", "group_name", "reason", "tenure_class", "mlr_occupation"], keep="last"
     )
     return combined_panel_df.sort_values(["survey_year", "source_table", "group_name", "reason"]).reset_index(drop=True)
 
@@ -291,7 +818,9 @@ def load_dws_panel(
     """
     existing_panel_df = pd.DataFrame(columns=PANEL_COLUMNS)
     if os.path.exists(seed_path):
-        existing_panel_df = pd.read_csv(seed_path, dtype={"soc_majors": str}).fillna({"soc_majors": ""})
+        existing_panel_df = pd.read_csv(seed_path, dtype={"soc_majors": str, "mlr_occupation": str}).fillna(
+            {"soc_majors": "", "mlr_occupation": ""}
+        )
 
     release_panel_df = None
     if os.path.exists(os.path.join(raw_release_dir, "disp_t05.html")):
@@ -314,3 +843,189 @@ def load_dws_panel(
         panel_df.to_csv(output_path, index=False)
 
     return panel_df
+
+
+def mlr_rows_for_panel(rate_df: pd.DataFrame) -> pd.DataFrame:
+    """Reshape parse_displacement_rate_table output into DWS panel rows.
+
+    Emits one row per (period, MLR occupation leaf) — NOT one row per (period, DWS
+    group) — because four DWS groups each receive two MLR leaves (professional and
+    related occupations gets Professional specialty and Technicians and related
+    support; service occupations gets Protective services and Other service
+    occupations; production occupations gets Other precision production
+    occupations and Machine operators, assemblers, and inspectors; transportation
+    and material moving occupations gets Transportation and material-moving
+    occupations and Handlers, equipment cleaners, helpers, and laborers). These
+    are rates, so they cannot be summed, and averaging them would need employment
+    weights the MLR tables never published — an unweighted mean would be a
+    fabricated number baked into a committed seed. `group_name` carries the
+    crosswalked DWS group so these rows sit beside the archive rows' occupation
+    groups; the new `mlr_occupation` column preserves the native 1980-census
+    label so the colliding pairs stay visible in the data rather than silently
+    merged, leaving the weighting decision to whichever consumer eventually needs
+    one group-level number.
+
+    `survey_year` is `period_end_year + 1` — the same rule the modern archive rows
+    already follow (a 2026 survey covers 2023-2025, a 2008 survey covers
+    2005-2007), so one derivation covers the whole panel. It is a panel key, not a
+    literal fieldwork date for these pre-2008 periods: the real mid-1990s DWS
+    surveys used a recall window longer than three years, and the true period is
+    always in `period_start_year` / `period_end_year`, not in `survey_year`.
+
+    Raises ValueError if any mlr_occupation in rate_df has no entry in
+    mlr_to_dws_group(), rather than silently dropping an occupation from the panel.
+    """
+    panel_rows_df = rate_df.copy()
+
+    panel_rows_df["group_name"] = panel_rows_df["mlr_occupation"].map(mlr_to_dws_group())
+    unmapped_occupations = sorted(panel_rows_df.loc[panel_rows_df["group_name"].isna(), "mlr_occupation"].unique())
+    if unmapped_occupations:
+        raise ValueError(f"No DWS group crosswalk entry for MLR occupations: {unmapped_occupations}")
+
+    panel_rows_df["soc_majors"] = panel_rows_df["group_name"].map(lambda dws_group: "|".join(DWS_TO_SOC_MAJOR[dws_group]))
+    panel_rows_df["survey_year"] = panel_rows_df["period_end_year"] + 1
+    panel_rows_df["period_years"] = panel_rows_df["period_end_year"] - panel_rows_df["period_start_year"] + 1
+    panel_rows_df["source_table"] = "mlr_table_2_occupation"
+    panel_rows_df["tenure_class"] = "long_tenured"
+    panel_rows_df["reason"] = "all"
+    panel_rows_df["displaced_thousands"] = float("nan")
+    panel_rows_df["measurement_basis"] = RATE_MEASUREMENT_BASIS
+    panel_rows_df["source"] = "mlr_article"
+
+    return panel_rows_df[PANEL_COLUMNS]
+
+
+# Where download_dws.py puts the nine archived releases. Duplicated from
+# download_dws.ARCHIVE_DIR's value rather than imported: download_dws.py is a
+# fetch script, this module is the parser, and historical_displacement.py already
+# imports from this module, so importing download_dws here risks a future cycle
+# for no real benefit over keeping the one literal path in sync by hand.
+ARCHIVE_DIR = "data/raw/dws/archives"
+
+# The three MLR article paths download_dws.py fetches. Duplicated from
+# historical_displacement.MLR_ARTICLE_PATHS rather than imported: that module
+# imports FROM this one (`from dws_panel import STRUCTURAL_REASON, load_dws_panel`),
+# so importing it back here would be circular.
+MLR_ARTICLE_PATHS = (
+    "data/raw/dws/mlr/mid_1990s_1999.pdf",
+    "data/raw/dws/mlr/strong_labor_market_2001.pdf",
+    "data/raw/dws/mlr/displacement_1999_2000_2004.pdf",
+)
+
+REBUILT_HISTORICAL_PANEL_PATH = "data/output/dws_historical_panel_rebuilt.csv"
+
+_ARCHIVE_FILE_NAME_PATTERN = re.compile(r"disp_(\d{4})\.html")
+
+
+def _archive_years_available(archive_dir: str) -> list[int]:
+    """Survey years for every downloaded archive file present in archive_dir.
+
+    Discovered by listing the directory rather than hardcoding the nine known
+    years, so a future archive (e.g. a 2028 release, once BLS publishes one) is
+    picked up the moment download_dws.py fetches it, with no code change here.
+    """
+    if not os.path.isdir(archive_dir):
+        return []
+    matched_years = (_ARCHIVE_FILE_NAME_PATTERN.fullmatch(file_name) for file_name in os.listdir(archive_dir))
+    return sorted(int(match.group(1)) for match in matched_years if match)
+
+
+def rebuild_historical_panel_from_raw(
+    archive_dir: str = ARCHIVE_DIR,
+    mlr_article_paths: tuple[str, ...] = MLR_ARTICLE_PATHS,
+) -> pd.DataFrame:
+    """Rebuild the pre-2026 archive + MLR portion of the panel directly from raw sources.
+
+    This is the committed, tested counterpart to the seed-rebuild procedure that
+    previously existed only as prose in the project's implementation plan (whose
+    own version of the snippet was wrong — it called load_dws_panel, a no-op for
+    this purpose, since load_dws_panel only ever merges the *current* release
+    onto the existing seed and never reads the archives or MLR articles at all).
+    parse_archived_release, and mlr_rows_for_panel by extension
+    parse_displacement_rate_table, otherwise had no production caller.
+
+    This exists for maintainability and provenance, not to recover lost data:
+    the committed seed is currently exactly reproducible from these raw sources
+    (verified 2026-09-15: 126/126 archive rows and 140/140 MLR rows, zero value
+    mismatches against seeds/dws_displacement_panel.csv). Run it after
+    download_dws.py fetches a new archive or MLR article
+    (`python dws_panel.py`), diff data/output/dws_historical_panel_rebuilt.csv
+    against seeds/dws_displacement_panel.csv, and promote by hand -- the same
+    convention as every other seed in this project. It never writes to seeds/
+    itself and never touches the committed seed's contents.
+
+    Deliberately excludes the current (rolling) release's own three tables
+    (disp_t02/t05/t08.html): that incremental step is load_dws_panel's job via
+    build_release_panel and merge_panel, and stays separate so this function's
+    output depends only on the archived, no-longer-rolling raw sources rather
+    than on whatever the rolling current-release page happens to show right now.
+
+    A missing archive directory or missing MLR articles are not errors: each
+    produces an empty contribution with a printed notice, exactly like
+    load_dws_panel already does for a missing current release, so a partial
+    raw-data checkout still rebuilds whatever it can.
+    """
+    archive_years = _archive_years_available(archive_dir)
+    if not archive_years:
+        print(f"  ⚠ No archived DWS releases found under {archive_dir}; historical panel will carry no archive rows.")
+
+    archive_frames = []
+    for survey_year in archive_years:
+        archive_path = os.path.join(archive_dir, f"disp_{survey_year}.html")
+        with open(archive_path, encoding="utf-8", errors="replace") as archive_file:
+            archive_frames.append(parse_archived_release(archive_file.read(), survey_year))
+
+    available_mlr_paths = [path for path in mlr_article_paths if os.path.exists(path)]
+    if not available_mlr_paths:
+        print("  ⚠ No MLR articles found; historical panel will carry no pre-2008 rate rows.")
+
+    mlr_rows_df = pd.DataFrame(columns=PANEL_COLUMNS)
+    if available_mlr_paths:
+        rate_frames = [parse_displacement_rate_table(path) for path in available_mlr_paths]
+        # Later articles cover more periods than earlier ones; an overlapping period
+        # agrees exactly across all three (tests/test_mlr_displacement.py), so which
+        # one wins on a tie is moot in practice -- mirrors
+        # historical_displacement.load_mlr_total_displacement_rate's own dedup rule.
+        combined_rate_df = pd.concat(rate_frames, ignore_index=True).drop_duplicates(subset=["period_label", "mlr_occupation"], keep="last")
+        mlr_rows_df = mlr_rows_for_panel(combined_rate_df)
+
+    historical_panel_df = pd.concat([*archive_frames, mlr_rows_df], ignore_index=True)
+    historical_panel_df = historical_panel_df.drop_duplicates(
+        subset=["survey_year", "source_table", "group_name", "reason", "tenure_class", "mlr_occupation"], keep="last"
+    )
+    return historical_panel_df.sort_values(["survey_year", "source_table", "group_name", "reason"]).reset_index(drop=True)[PANEL_COLUMNS]
+
+
+def main() -> None:
+    """Rebuild the historical panel from raw archives and MLR articles and write it for comparison.
+
+    Writes to REBUILT_HISTORICAL_PANEL_PATH rather than seeds/dws_displacement_panel.csv
+    or the normal load_dws_panel output path -- promotion into the seed is a manual
+    step the maintainer takes after diffing, the same convention every other seed
+    in this project follows.
+    """
+    rebuilt_df = rebuild_historical_panel_from_raw()
+    print(f"Rebuilt {len(rebuilt_df)} historical panel rows from raw archives and MLR articles.")
+
+    if os.path.exists(SEED_PANEL_PATH):
+        seed_df = pd.read_csv(SEED_PANEL_PATH, dtype={"soc_majors": str, "mlr_occupation": str}).fillna(
+            {"soc_majors": "", "mlr_occupation": ""}
+        )
+        # The seed also carries the current rolling release (source == "news_release"),
+        # which this rebuild deliberately excludes -- compare only the shared portion.
+        historical_seed_df = seed_df[seed_df["source"] != "news_release"].reset_index(drop=True)
+        if len(historical_seed_df) == len(rebuilt_df):
+            print(f"  Row count matches the committed seed's historical portion ({len(rebuilt_df)} rows).")
+        else:
+            print(
+                f"  ⚠ Row count differs from the committed seed's historical portion: "
+                f"rebuilt {len(rebuilt_df)} vs. seed {len(historical_seed_df)}. Diff before promoting."
+            )
+
+    os.makedirs(os.path.dirname(REBUILT_HISTORICAL_PANEL_PATH), exist_ok=True)
+    rebuilt_df.to_csv(REBUILT_HISTORICAL_PANEL_PATH, index=False)
+    print(f"  ✓ {REBUILT_HISTORICAL_PANEL_PATH}  (diff against {SEED_PANEL_PATH} and promote by hand if it matches)")
+
+
+if __name__ == "__main__":
+    main()

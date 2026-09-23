@@ -138,11 +138,11 @@ class TestMergePanel:
 
 class TestOewsReferenceMonth:
     def test_derives_may_of_the_latest_oews_year(self):
-        assert oews_reference_month(["OCC_CODE", "TOT_EMP_23", "TOT_EMP_25", "TOT_EMP_24"]) == "2025-05"
+        assert oews_reference_month(["OCC_CODE", "TOT_EMP_2023", "TOT_EMP_2025", "TOT_EMP_2024"]) == "2025-05"
 
     def test_raises_without_employment_columns(self):
         with pytest.raises(ValueError):
-            oews_reference_month(["OCC_CODE", "A_MEDIAN_25"])
+            oews_reference_month(["OCC_CODE", "A_MEDIAN_2025"])
 
 
 class TestResolveComparisonWindows:

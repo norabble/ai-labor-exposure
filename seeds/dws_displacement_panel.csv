@@ -1,15 +1,281 @@
-survey_year,period_start_year,period_end_year,period_years,source_table,group_name,soc_majors,displaced_thousands,reason,tenure_class
-2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,761.196,insufficient work,long_tenured
-2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,1083.624,plant or company closed down or moved,long_tenured
-2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,1475.856,position or shift abolished,long_tenured
-2026,2023,2025,3,table_5_occupation,Construction and extraction occupations,47,188.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,19.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,134.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,916.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,Office and administrative support occupations,43,316.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,Production occupations,51,352.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,629.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,Sales and related occupations,41,211.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,Service occupations,31|33|35|37|39,302.0,all,long_tenured
-2026,2023,2025,3,table_5_occupation,Transportation and material moving occupations,53,213.0,all,long_tenured
-2026,2023,2025,3,table_8_all_tenures,"Total, 20 years and over",,7445.0,all,all_tenures
+survey_year,period_start_year,period_end_year,period_years,source_table,group_name,soc_majors,displaced_thousands,reason,tenure_class,measurement_basis,source,mlr_occupation,displacement_rate_percent
+1983,1981,1982,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,5.3
+1983,1981,1982,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",0.9
+1983,1981,1982,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,4.8
+1983,1981,1982,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.5
+1983,1981,1982,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",2.5
+1983,1981,1982,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,8.5
+1983,1981,1982,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",9.6
+1983,1981,1982,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.7
+1983,1981,1982,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,3.3
+1983,1981,1982,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,3.7
+1983,1981,1982,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,1.3
+1983,1981,1982,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,2.1
+1983,1981,1982,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,5.7
+1983,1981,1982,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",8.0
+1985,1983,1984,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,4.0
+1985,1983,1984,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",2.1
+1985,1983,1984,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,3.8
+1985,1983,1984,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.4
+1985,1983,1984,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",2.0
+1985,1983,1984,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,5.6
+1985,1983,1984,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",8.1
+1985,1983,1984,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.2
+1985,1983,1984,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,2.9
+1985,1983,1984,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,2.8
+1985,1983,1984,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,1.9
+1985,1983,1984,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,1.7
+1985,1983,1984,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,3.7
+1985,1983,1984,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",7.6
+1987,1985,1986,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,4.1
+1987,1985,1986,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",1.6
+1987,1985,1986,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,2.1
+1987,1985,1986,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.8
+1987,1985,1986,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",3.1
+1987,1985,1986,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,5.5
+1987,1985,1986,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",5.9
+1987,1985,1986,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.4
+1987,1985,1986,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,3.0
+1987,1985,1986,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,3.2
+1987,1985,1986,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,0.5
+1987,1985,1986,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,2.2
+1987,1985,1986,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,4.8
+1987,1985,1986,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",5.2
+1989,1987,1988,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,2.4
+1989,1987,1988,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",0.8
+1989,1987,1988,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,2.1
+1989,1987,1988,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.5
+1989,1987,1988,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",2.4
+1989,1987,1988,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,3.7
+1989,1987,1988,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",4.5
+1989,1987,1988,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.1
+1989,1987,1988,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,2.2
+1989,1987,1988,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,2.7
+1989,1987,1988,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,0.6
+1989,1987,1988,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,1.6
+1989,1987,1988,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,3.1
+1989,1987,1988,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",3.0
+1991,1989,1990,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,4.2
+1991,1989,1990,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",1.5
+1991,1989,1990,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,3.4
+1991,1989,1990,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",3.4
+1991,1989,1990,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",3.2
+1991,1989,1990,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,5.1
+1991,1989,1990,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",6.2
+1991,1989,1990,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.3
+1991,1989,1990,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,3.2
+1991,1989,1990,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,2.9
+1991,1989,1990,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,1.2
+1991,1989,1990,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,1.7
+1991,1989,1990,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,3.6
+1991,1989,1990,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",3.0
+1993,1991,1992,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,5.5
+1993,1991,1992,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",1.4
+1993,1991,1992,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,3.7
+1993,1991,1992,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",4.8
+1993,1991,1992,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",3.8
+1993,1991,1992,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,6.4
+1993,1991,1992,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",6.7
+1993,1991,1992,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,2.4
+1993,1991,1992,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,3.7
+1993,1991,1992,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,3.6
+1993,1991,1992,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,0.8
+1993,1991,1992,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,2.3
+1993,1991,1992,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,4.1
+1993,1991,1992,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",4.9
+1995,1993,1994,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,2.2
+1995,1993,1994,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",0.8
+1995,1993,1994,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,3.3
+1995,1993,1994,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",3.5
+1995,1993,1994,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",3.9
+1995,1993,1994,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,4.7
+1995,1993,1994,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",5.5
+1995,1993,1994,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,2.4
+1995,1993,1994,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,3.4
+1995,1993,1994,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,3.4
+1995,1993,1994,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,0.6
+1995,1993,1994,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,2.1
+1995,1993,1994,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,4.1
+1995,1993,1994,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",5.4
+1997,1995,1996,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,2.4
+1997,1995,1996,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",1.4
+1997,1995,1996,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,3.1
+1997,1995,1996,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.7
+1997,1995,1996,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",3.5
+1997,1995,1996,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,3.8
+1997,1995,1996,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",4.9
+1997,1995,1996,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,2.0
+1997,1995,1996,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,3.6
+1997,1995,1996,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,3.8
+1997,1995,1996,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,2.0
+1997,1995,1996,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,2.2
+1997,1995,1996,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,2.1
+1997,1995,1996,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",3.9
+1999,1997,1998,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,2.8
+1999,1997,1998,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",1.8
+1999,1997,1998,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,2.0
+1999,1997,1998,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.9
+1999,1997,1998,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",2.3
+1999,1997,1998,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,3.6
+1999,1997,1998,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",4.0
+1999,1997,1998,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.6
+1999,1997,1998,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,2.5
+1999,1997,1998,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,2.7
+1999,1997,1998,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,0.8
+1999,1997,1998,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,1.6
+1999,1997,1998,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,2.1
+1999,1997,1998,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",4.3
+2001,1999,2000,2,mlr_table_2_occupation,construction and extraction occupations,47,,all,long_tenured,rate_percent,mlr_article,Construction trades,1.6
+2001,1999,2000,2,mlr_table_2_occupation,"farming, fishing, and forestry occupations",45,,all,long_tenured,rate_percent,mlr_article,"Farming, forestry, and fishing",0.5
+2001,1999,2000,2,mlr_table_2_occupation,"installation, maintenance, and repair occupations",49,,all,long_tenured,rate_percent,mlr_article,Mechanics and repairers,2.1
+2001,1999,2000,2,mlr_table_2_occupation,"management, business, and financial operations occupations",11|13,,all,long_tenured,rate_percent,mlr_article,"Executive, administrative, and managerial",2.7
+2001,1999,2000,2,mlr_table_2_occupation,office and administrative support occupations,43,,all,long_tenured,rate_percent,mlr_article,"Administrative support, including clerical",2.6
+2001,1999,2000,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,Other precision production occupations,5.1
+2001,1999,2000,2,mlr_table_2_occupation,production occupations,51,,all,long_tenured,rate_percent,mlr_article,"Machine operators, assemblers, and inspectors",4.8
+2001,1999,2000,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Professional specialty,1.6
+2001,1999,2000,2,mlr_table_2_occupation,professional and related occupations,15|17|19|21|23|25|27|29,,all,long_tenured,rate_percent,mlr_article,Technicians and related support,2.7
+2001,1999,2000,2,mlr_table_2_occupation,sales and related occupations,41,,all,long_tenured,rate_percent,mlr_article,Sales occupations,2.9
+2001,1999,2000,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Protective services,0.9
+2001,1999,2000,2,mlr_table_2_occupation,service occupations,31|33|35|37|39,,all,long_tenured,rate_percent,mlr_article,Other service occupations,1.6
+2001,1999,2000,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,Transportation and material-moving occupations,3.0
+2001,1999,2000,2,mlr_table_2_occupation,transportation and material moving occupations,53,,all,long_tenured,rate_percent,mlr_article,"Handlers, equipment cleaners, helpers, and laborers",2.7
+2008,2005,2007,3,table_2_reason,"Total, 20 years and over",,870.199,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_2_reason,"Total, 20 years and over",,1649.373,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_2_reason,"Total, 20 years and over",,1121.428,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Construction and extraction occupations,47,218.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,21.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,176.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,605.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Office and administrative support occupations,43,574.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Production occupations,51,536.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,542.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Sales and related occupations,41,413.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Service occupations,31|33|35|37|39,319.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_5_occupation,Transportation and material moving occupations,53,210.0,all,long_tenured,count_thousands,news_release_archive,,
+2008,2005,2007,3,table_8_all_tenures,"Total, 20 years and over",,8250.0,all,all_tenures,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_2_reason,"Total, 20 years and over",,2969.464,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_2_reason,"Total, 20 years and over",,2123.028,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_2_reason,"Total, 20 years and over",,1845.508,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Construction and extraction occupations,47,745.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,26.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,317.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,1149.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Office and administrative support occupations,43,1043.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Production occupations,51,873.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,964.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Sales and related occupations,41,675.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Service occupations,31|33|35|37|39,565.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_5_occupation,Transportation and material moving occupations,53,508.0,all,long_tenured,count_thousands,news_release_archive,,
+2010,2007,2009,3,table_8_all_tenures,"Total, 20 years and over",,15429.0,all,all_tenures,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_2_reason,"Total, 20 years and over",,2417.795,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_2_reason,"Total, 20 years and over",,1885.268,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_2_reason,"Total, 20 years and over",,1817.937,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Construction and extraction occupations,47,516.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,30.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,242.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,1051.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Office and administrative support occupations,43,938.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Production occupations,51,644.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,956.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Sales and related occupations,41,625.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Service occupations,31|33|35|37|39,611.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_5_occupation,Transportation and material moving occupations,53,411.0,all,long_tenured,count_thousands,news_release_archive,,
+2012,2009,2011,3,table_8_all_tenures,"Total, 20 years and over",,12854.0,all,all_tenures,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_2_reason,"Total, 20 years and over",,1399.192,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_2_reason,"Total, 20 years and over",,1515.076,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_2_reason,"Total, 20 years and over",,1377.732,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Construction and extraction occupations,47,321.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,27.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,151.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,669.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Office and administrative support occupations,43,647.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Production occupations,51,440.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,781.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Sales and related occupations,41,408.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Service occupations,31|33|35|37|39,521.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_5_occupation,Transportation and material moving occupations,53,245.0,all,long_tenured,count_thousands,news_release_archive,,
+2014,2011,2013,3,table_8_all_tenures,"Total, 20 years and over",,9529.0,all,all_tenures,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_2_reason,"Total, 20 years and over",,816.896,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_2_reason,"Total, 20 years and over",,1193.434,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_2_reason,"Total, 20 years and over",,1183.861,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Construction and extraction occupations,47,193.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,8.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,102.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,702.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Office and administrative support occupations,43,479.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Production occupations,51,246.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,598.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Sales and related occupations,41,340.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Service occupations,31|33|35|37|39,313.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_5_occupation,Transportation and material moving occupations,53,171.0,all,long_tenured,count_thousands,news_release_archive,,
+2016,2013,2015,3,table_8_all_tenures,"Total, 20 years and over",,7440.0,all,all_tenures,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_2_reason,"Total, 20 years and over",,784.003,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_2_reason,"Total, 20 years and over",,1094.027,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_2_reason,"Total, 20 years and over",,1102.97,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Construction and extraction occupations,47,169.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,34.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,88.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,598.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Office and administrative support occupations,43,453.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Production occupations,51,246.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,545.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Sales and related occupations,41,343.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Service occupations,31|33|35|37|39,293.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_5_occupation,Transportation and material moving occupations,53,168.0,all,long_tenured,count_thousands,news_release_archive,,
+2018,2015,2017,3,table_8_all_tenures,"Total, 20 years and over",,6825.0,all,all_tenures,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_2_reason,"Total, 20 years and over",,619.904,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_2_reason,"Total, 20 years and over",,1084.832,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_2_reason,"Total, 20 years and over",,967.264,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Construction and extraction occupations,47,124.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,8.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,106.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,715.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Office and administrative support occupations,43,321.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Production occupations,51,201.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,481.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Sales and related occupations,41,283.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Service occupations,31|33|35|37|39,252.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_5_occupation,Transportation and material moving occupations,53,163.0,all,long_tenured,count_thousands,news_release_archive,,
+2020,2017,2019,3,table_8_all_tenures,"Total, 20 years and over",,6334.0,all,all_tenures,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_2_reason,"Total, 20 years and over",,1111.164,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_2_reason,"Total, 20 years and over",,1370.076,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_2_reason,"Total, 20 years and over",,1114.76,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Construction and extraction occupations,47,173.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,4.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,97.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,722.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Office and administrative support occupations,43,435.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Production occupations,51,194.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,689.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Sales and related occupations,41,342.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Service occupations,31|33|35|37|39,647.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_5_occupation,Transportation and material moving occupations,53,220.0,all,long_tenured,count_thousands,news_release_archive,,
+2022,2019,2021,3,table_8_all_tenures,"Total, 20 years and over",,8589.0,all,all_tenures,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_2_reason,"Total, 20 years and over",,670.28,insufficient work,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_2_reason,"Total, 20 years and over",,940.97,plant or company closed down or moved,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_2_reason,"Total, 20 years and over",,966.75,position or shift abolished,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Construction and extraction occupations,47,115.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,17.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,95.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,604.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Office and administrative support occupations,43,330.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Production occupations,51,149.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,494.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Sales and related occupations,41,278.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Service occupations,31|33|35|37|39,323.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_5_occupation,Transportation and material moving occupations,53,144.0,all,long_tenured,count_thousands,news_release_archive,,
+2024,2021,2023,3,table_8_all_tenures,"Total, 20 years and over",,6272.0,all,all_tenures,count_thousands,news_release_archive,,
+2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,761.196,insufficient work,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,1083.624,plant or company closed down or moved,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_2_reason,"Total, 20 years and over",,1475.856,position or shift abolished,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Construction and extraction occupations,47,188.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,"Farming, fishing, and forestry occupations",45,19.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,"Installation, maintenance, and repair occupations",49,134.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,"Management, business, and financial operations occupations",11|13,916.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Office and administrative support occupations,43,316.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Production occupations,51,352.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Professional and related occupations,15|17|19|21|23|25|27|29,629.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Sales and related occupations,41,211.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Service occupations,31|33|35|37|39,302.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_5_occupation,Transportation and material moving occupations,53,213.0,all,long_tenured,count_thousands,news_release,,
+2026,2023,2025,3,table_8_all_tenures,"Total, 20 years and over",,7445.0,all,all_tenures,count_thousands,news_release,,

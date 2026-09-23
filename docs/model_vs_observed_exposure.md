@@ -158,7 +158,7 @@ Administrative Support leaves r = +0.344 (p = 0.126).
 
 ### Confound: pre-existing sector composition
 
-Extending the historical BLS baseline back to 2005 (see `model_signal_over_time.md`)
+Extending the historical BLS baseline back to 1999 (see `model_signal_over_time.md`)
 reveals that the dynamic model's sector-level r was already elevated **before AI**:
 +0.40 to +0.50 in 2006→09 and +0.37 in 2017→18, well before meaningful AI
 adoption. Sectors with Unbounded and Adversarial demand — Computer and
@@ -190,10 +190,10 @@ longer pre-AI baseline against which an acceleration could be measured.
 **This confound is now tested directly** — see `docs/framework.md` § Demand
 Composition Model. Stripping every trace of AI data from the predictor, leaving
 demand-type composition alone, leaves a general non-cyclical signal (intercept
-+0.238, p = 0.0004) whose strength is strongly cycle-dependent (+0.160 per
-percentage point of rising unemployment, p = 0.0024) and which shows *no* AI-era
-premium once the cycle is controlled (+0.093, p = 0.476). The AI-penetration
-model, run through the same decomposition, does show one (+0.238, p = 0.021). So
++0.224, p < 0.0001) whose strength is strongly cycle-dependent (+0.137 per
+percentage point of rising unemployment, p = 0.0020) and which shows *no* AI-era
+premium once the cycle is controlled (+0.112, p = 0.349). The AI-penetration
+model, run through the same decomposition, does show one (+0.272, p = 0.0052). So
 the pre-existing elevation recorded above is real and is largely cyclical, and an
 AI-specific increment survives it.
 

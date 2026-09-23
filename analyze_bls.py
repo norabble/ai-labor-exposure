@@ -7,6 +7,8 @@ years, plus a composite total change from the anchor year (2022) to the most
 recent year.
 
 Inputs (any subset that exists under data/raw/bls/):
+  • oes99nat.zip – oes02nat.zip — annual-estimate national files (1999–2002, pre-"m" naming)
+  • oesm03nat.zip, oesm04nat.zip — national files (2003–2004, May reference month)
   • oesm05nat.zip – oesm14nat.zip — deep-history national files (2005–2014; .xls format for 2005–2013)
   • oesm15nat.zip – oesm21nat.zip — historical national files (2015–2021)
   • oesm22nat.zip — 2022 national-only file (merge anchor; composite base)
@@ -28,13 +30,13 @@ Outputs:
     2010→2018 (2018→2019) moved some occupations between major groups.
   • data/output/bls_trends.csv
     Core columns (2022-onward):
-      TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
-      emp_growth_{yy}_{yy}                — YoY growth for 2022→2023 onward
-      emp_growth_composite                 — 2022→latest
+      TOT_EMP_{yyyy}, A_MEDIAN_{yyyy}     — employment and median wage per year
+      emp_growth_{yyyy}_{yyyy}            — YoY growth for 2022→2023 onward
+      emp_growth_composite                — 2022→latest
     Historical columns (pre-2022, prefixed hist_ to exclude from auto-detection):
-      TOT_EMP_{yy}, A_MEDIAN_{yy}         — employment and median wage per year
-      hist_emp_growth_{yy}_{yy}            — YoY growth for periods before 2022
-      hist_emp_growth_pre_ai               — composite from earliest available year → 2022
+      TOT_EMP_{yyyy}, A_MEDIAN_{yyyy}     — employment and median wage per year
+      hist_emp_growth_{yyyy}_{yyyy}       — YoY growth for periods before 2022
+      hist_emp_growth_pre_ai_{yyyy}_2022  — composite from earliest available year → 2022
   • data/output/bls_harmonized_trends.csv
     Same column layout as bls_trends.csv, keyed by unit_id: the trend series on
     harmonized occupation units built by harmonize_soc.py, which follow BLS's
@@ -47,6 +49,8 @@ Outputs:
     specific occupation — the leakage the harmonization accepts, for audit.
 
 Note on SOC codes and file formats:
+  • 1999–2004: SOC 2000 codes, .xls format (requires xlrd); 1999–2002 are annual estimates
+    with no "m" in the filename, 2003–2004 carry a May reference month like 2005+
   • 2005–2009: SOC 2000 codes, .xls format (requires xlrd), GROUP column (NaN = detailed)
   • 2010–2013: SOC 2010 codes, .xls format, GROUP column (NaN = detailed)
   • 2014–2018: SOC 2010 codes, .xlsx format, OCC_GROUP column
@@ -59,6 +63,7 @@ overall, but as low as 3% for individual sectors — which is why sector-level
 growth comes from bls_sector_trends.csv rather than from these rows.
 """
 
+import io
 import os
 import zipfile
 
@@ -77,33 +82,39 @@ WITHHELD_ESTIMATE_FLAG = "*"
 # floor is derived from the data instead of hardcoded; see derive_censoring_floor.
 
 YEAR_CONFIGS = [
-    ("05", "data/raw/bls/oesm05nat.zip"),
-    ("06", "data/raw/bls/oesm06nat.zip"),
-    ("07", "data/raw/bls/oesm07nat.zip"),
-    ("08", "data/raw/bls/oesm08nat.zip"),
-    ("09", "data/raw/bls/oesm09nat.zip"),
-    ("10", "data/raw/bls/oesm10nat.zip"),
-    ("11", "data/raw/bls/oesm11nat.zip"),
-    ("12", "data/raw/bls/oesm12nat.zip"),
-    ("13", "data/raw/bls/oesm13nat.zip"),
-    ("14", "data/raw/bls/oesm14nat.zip"),
-    ("15", "data/raw/bls/oesm15nat.zip"),
-    ("16", "data/raw/bls/oesm16nat.zip"),
-    ("17", "data/raw/bls/oesm17nat.zip"),
-    ("18", "data/raw/bls/oesm18nat.zip"),
-    ("19", "data/raw/bls/oesm19nat.zip"),
-    ("20", "data/raw/bls/oesm20nat.zip"),
-    ("21", "data/raw/bls/oesm21nat.zip"),
-    ("22", "data/raw/bls/oesm22nat.zip"),
-    ("23", "data/raw/bls/oesm23nat.zip"),
-    ("24", "data/raw/bls/oesm24all.zip"),
-    ("25", "data/raw/bls/oesm25all.zip"),
+    ("1999", "data/raw/bls/oes99nat.zip"),
+    ("2000", "data/raw/bls/oes00nat.zip"),
+    ("2001", "data/raw/bls/oes01nat.zip"),
+    ("2002", "data/raw/bls/oes02nat.zip"),
+    ("2003", "data/raw/bls/oesm03nat.zip"),
+    ("2004", "data/raw/bls/oesm04nat.zip"),
+    ("2005", "data/raw/bls/oesm05nat.zip"),
+    ("2006", "data/raw/bls/oesm06nat.zip"),
+    ("2007", "data/raw/bls/oesm07nat.zip"),
+    ("2008", "data/raw/bls/oesm08nat.zip"),
+    ("2009", "data/raw/bls/oesm09nat.zip"),
+    ("2010", "data/raw/bls/oesm10nat.zip"),
+    ("2011", "data/raw/bls/oesm11nat.zip"),
+    ("2012", "data/raw/bls/oesm12nat.zip"),
+    ("2013", "data/raw/bls/oesm13nat.zip"),
+    ("2014", "data/raw/bls/oesm14nat.zip"),
+    ("2015", "data/raw/bls/oesm15nat.zip"),
+    ("2016", "data/raw/bls/oesm16nat.zip"),
+    ("2017", "data/raw/bls/oesm17nat.zip"),
+    ("2018", "data/raw/bls/oesm18nat.zip"),
+    ("2019", "data/raw/bls/oesm19nat.zip"),
+    ("2020", "data/raw/bls/oesm20nat.zip"),
+    ("2021", "data/raw/bls/oesm21nat.zip"),
+    ("2022", "data/raw/bls/oesm22nat.zip"),
+    ("2023", "data/raw/bls/oesm23nat.zip"),
+    ("2024", "data/raw/bls/oesm24all.zip"),
+    ("2025", "data/raw/bls/oesm25all.zip"),
 ]
 
 # The composite growth column is always anchored at this year, regardless of
 # which historical years are available. Do not change without updating
 # validate_bls.py and all downstream docs.
-COMPOSITE_ANCHOR_YEAR = "22"
+COMPOSITE_ANCHOR_YEAR = "2022"
 
 
 # Occupation-grouping column by file era. Checked in this order: 2019+ files
@@ -177,9 +188,29 @@ def select_major_group_rows(bls_dataframe: pd.DataFrame) -> pd.DataFrame:
     if group_column is None:
         return pd.DataFrame(columns=["soc_major", "OCC_TITLE", "TOT_EMP", "A_MEDIAN"])
     major_rows = bls_dataframe[bls_dataframe[group_column] == "major"].copy()
+    # The 2002 national file flags All Occupations (00-0000) as a major group; it is a total, not a sector.
+    major_rows = major_rows[major_rows["OCC_CODE"].astype(str) != "00-0000"]
     major_rows["soc_major"] = major_rows["OCC_CODE"].astype(str).str[:2]
     target_columns = ["soc_major", "OCC_TITLE", "TOT_EMP", "A_MEDIAN"]
     return _numeric_bls_columns(major_rows[[c for c in target_columns if c in major_rows.columns]]).reset_index(drop=True)
+
+
+OEWS_HEADER_SCAN_ROWS = 60
+
+
+def detect_header_row(raw_frame: pd.DataFrame) -> int:
+    """
+    Row index of the OEWS column header, which sits below a title banner in the 1997-2000 files.
+
+    The 1999 and 2000 national files open with ~38 rows of survey description
+    before the header; 2001 onward start at row 0. Falls back to 0 when no
+    occ_code cell is found, which keeps the modern files on their existing path.
+    """
+    for row_index in range(min(OEWS_HEADER_SCAN_ROWS, len(raw_frame))):
+        cells = [str(cell).strip().lower() for cell in raw_frame.iloc[row_index].tolist()]
+        if "occ_code" in cells:
+            return row_index
+    return 0
 
 
 def load_bls_year(zip_path: str) -> pd.DataFrame | None:
@@ -197,9 +228,14 @@ def load_bls_year(zip_path: str) -> pd.DataFrame | None:
             return None
         print(f"Found {xls_files[0]}")
         with zip_file.open(xls_files[0]) as excel_file:
-            bls_dataframe = pd.read_excel(excel_file)
+            excel_bytes = io.BytesIO(excel_file.read())
+        header_row_index = detect_header_row(pd.read_excel(excel_bytes, header=None, nrows=OEWS_HEADER_SCAN_ROWS))
+        excel_bytes.seek(0)
+        bls_dataframe = pd.read_excel(excel_bytes, header=header_row_index)
 
     bls_dataframe.columns = [str(c).upper().strip() for c in bls_dataframe.columns]
+    # The 2000 and 2002 national files spell the title column occ_titl.
+    bls_dataframe = bls_dataframe.rename(columns={"OCC_TITL": "OCC_TITLE"})
 
     # Filter to national cross-industry data. The all-areas files require
     # explicit area and ownership filters; national-only files already satisfy
@@ -224,7 +260,7 @@ def load_bls_data(zip_path: str) -> pd.DataFrame | None:
 def attach_growth_columns(trend_df: pd.DataFrame, available_years: list[str]) -> pd.DataFrame:
     """
     Add year-over-year, composite and pre-AI growth columns to a frame that
-    already holds TOT_EMP_{yy} / A_MEDIAN_{yy} per year.
+    already holds TOT_EMP_{yyyy} / A_MEDIAN_{yyyy} per year.
 
     Pre-2022 pairs use the hist_ prefix so that validate_bls.py's auto-detection
     of emp_growth_* columns does not add them to the existing 2×2 grid charts.
@@ -259,11 +295,12 @@ def attach_growth_columns(trend_df: pd.DataFrame, available_years: list[str]) ->
 
     earliest_year = available_years[0]
     if earliest_year < COMPOSITE_ANCHOR_YEAR and f"TOT_EMP_{earliest_year}" in trend_df.columns:
-        trend_df["hist_emp_growth_pre_ai"] = (
+        pre_ai_span = f"pre_ai_{earliest_year}_{COMPOSITE_ANCHOR_YEAR}"
+        trend_df[f"hist_emp_growth_{pre_ai_span}"] = (
             trend_df[f"TOT_EMP_{COMPOSITE_ANCHOR_YEAR}"] - trend_df[f"TOT_EMP_{earliest_year}"]
         ) / trend_df[f"TOT_EMP_{earliest_year}"]
         if f"A_MEDIAN_{earliest_year}" in trend_df.columns and f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}" in trend_df.columns:
-            trend_df["hist_wage_growth_pre_ai"] = (
+            trend_df[f"hist_wage_growth_{pre_ai_span}"] = (
                 trend_df[f"A_MEDIAN_{COMPOSITE_ANCHOR_YEAR}"] - trend_df[f"A_MEDIAN_{earliest_year}"]
             ) / trend_df[f"A_MEDIAN_{earliest_year}"]
 
@@ -388,8 +425,7 @@ def main():
                 if "A_MEDIAN_censored" in detailed_rows_df.columns:
                     censoring_rows.append(
                         {
-                            "year": f"20{year_suffix}",
-                            "year_suffix": year_suffix,
+                            "year": year_suffix,
                             # Derived from the complete single-year file, before the
                             # 2022-anchored left join drops non-surviving SOC codes.
                             "censoring_floor": derive_censoring_floor(detailed_rows_df),
@@ -460,7 +496,7 @@ def main():
         )
         print("\n── Unit growth continuity across SOC revision boundaries (share of units moving >25% in a year) ──")
         for _, report_row in boundary_continuity_report(harmonized_trends_df).iterrows():
-            boundary_flag = "  ← SOC revision" if report_row["period"] in ("09_10", "18_19", "20_21") else ""
+            boundary_flag = "  ← SOC revision" if report_row["period"] in ("2009_2010", "2018_2019", "2020_2021") else ""
             print(
                 f"  {report_row['period']}  n={int(report_row['n_units']):4d}  "
                 f"{report_row['share_abs_growth_over_25pct']:.1%}{boundary_flag}"

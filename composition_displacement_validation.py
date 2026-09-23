@@ -23,6 +23,7 @@ Inputs:
 
 Outputs:
   • data/output/composition_model_displacement_validation.csv
+  • data/output/composition_model_displacement_validation_panel.csv
   • data/output/visualizations/dws_observed_vs_predicted_displacement.png
 
 Why shares rather than rates
@@ -37,7 +38,12 @@ comparison is the headline.
 
 The economy-wide displacement rate D cancels here for the same reason it cancels
 from every cross-sectional correlation — it is one scalar multiplying every
-occupation's displacement, so it leaves the shares untouched.
+occupation's displacement, so it leaves the shares untouched. That cancellation
+is analytic, not bit-exact: changing D's source window reproduces every reported
+statistic at displayed precision but not at the ~1e-13 relative level, confirmed
+harmless by rerunning the unmodified pipeline twice first (byte-identical) and
+isolating the drift to D's changed magnitude rather than run-to-run
+nondeterminism.
 
 What this test cannot do
 ────────────────────────
@@ -57,6 +63,22 @@ occupation from the published tables.
 **n = 10 groups.** Pearson r alone is not reportable at that size, so Spearman
 and the full leave-one-out range are reported beside it, following the jackknife
 discipline the project already applies to its 22-sector results.
+
+Beyond the single newest survey, `build_displacement_comparison_panel` repeats
+this comparison against every DWS survey the committed panel carries (currently
+ten: 2008–2026 in even years), writing one row per (survey_year, model) to
+`composition_model_displacement_validation_panel.csv`. The newest survey stays
+the headline output above; the panel is additional evidence beside it. A survey
+needs r ≈ 0.63 to be individually significant at n=10, so the panel is read as a
+range and a sign pattern across surveys, not averaged into one number.
+
+All ten surveys land on the positive side of zero for both models, but that
+uniformity is not ten independent confirmations: the predicted vector — the
+2025-derived model score per occupation — is identical across every survey, so
+only the observed side varies, and consecutive biennial DWS releases also share
+overlapping three-year recall windows. A sign test or an averaged r would
+therefore be bogus. The consistent sign is noted as suggestive, not pooled into
+a claim of significance.
 """
 
 import os
@@ -66,12 +88,13 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 
-from dws_panel import DWS_TO_SOC_MAJOR, load_dws_panel
+from dws_panel import COUNT_MEASUREMENT_BASIS, DWS_TO_SOC_MAJOR, load_dws_panel
 
 COMPOSITION_REPORT_PATH = "data/output/occupation_composition_model_report.csv"
 DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
 
 OUTPUT_PATH = "data/output/composition_model_displacement_validation.csv"
+PANEL_OUTPUT_PATH = "data/output/composition_model_displacement_validation_panel.csv"
 CHART_NAME = "dws_observed_vs_predicted_displacement.png"
 
 OCCUPATION_TABLE = "table_5_occupation"
@@ -96,12 +119,30 @@ def soc_major_to_dws_group() -> dict[str, str]:
     return {major: group_name for group_name, majors in DWS_TO_SOC_MAJOR.items() for major in majors}
 
 
+def _count_measured_rows(displacement_panel_df: pd.DataFrame) -> pd.DataFrame:
+    """Restrict the panel to counted rows before any Table 5 aggregation.
+
+    Filtering by `OCCUPATION_TABLE` already excludes the pre-2008 MLR rate rows
+    structurally, since those carry `source_table == "mlr_table_2_occupation"`,
+    never `"table_5_occupation"`. This filter is defense in depth on top of that,
+    so a future source_table added under either measurement basis cannot silently
+    mix a rate into a count sum. The column is REQUIRED, not optional: a mutation
+    test showed that the earlier `if "measurement_basis" in ...columns` form made
+    this filter an unreachable no-op in production, kept only for hand-built test
+    fixtures that predated the column — the same fixture-over-production-code
+    trade-off this project rejected elsewhere as a Critical defect. Callers must
+    supply `measurement_basis`; see this module's tests' `_panel` helper.
+    """
+    return displacement_panel_df[displacement_panel_df["measurement_basis"] == COUNT_MEASUREMENT_BASIS]
+
+
 def observed_displacement_by_group(displacement_panel_df: pd.DataFrame, survey_year: int | None = None) -> pd.DataFrame:
     """Measured displaced workers per DWS occupation group, from Table 5.
 
     Uses the most recent survey unless one is named. Groups whose count was
     suppressed (base under 75,000) are dropped rather than read as zero.
     """
+    displacement_panel_df = _count_measured_rows(displacement_panel_df)
     occupation_rows_df = displacement_panel_df[displacement_panel_df["source_table"] == OCCUPATION_TABLE]
     if occupation_rows_df.empty:
         return pd.DataFrame(columns=["dws_group", "soc_majors", "observed_displaced_thousands"])
@@ -222,6 +263,82 @@ def correlate_with_leave_one_out(comparison_df: pd.DataFrame, predicted_column: 
     }
 
 
+PANEL_OUTPUT_COLUMNS = ["survey_year", "model", "pearson_r", "pearson_p", "spearman_r", "spearman_p", "n_groups"]
+
+
+def build_displacement_comparison_panel(displacement_panel_df: pd.DataFrame) -> pd.DataFrame | None:
+    """Score both models' predicted displacement against every DWS survey in the panel.
+
+    The single-survey comparison above always reads the newest survey and stays
+    the headline; this widens the same comparison to every survey the panel
+    carries; one row per (survey_year, model). `observed_displacement_by_group`
+    already accepts a `survey_year`, and `predicted_displacement_by_group` is
+    survey-independent — both are reused unchanged. A survey whose occupation
+    rows carry fewer than `MINIMUM_GROUPS` non-null counts is skipped, the same
+    threshold the single-survey path already applies, so a suppressed-heavy
+    survey cannot produce a two-point correlation.
+    """
+    if not os.path.exists(COMPOSITION_REPORT_PATH):
+        return None
+
+    composition_df = pd.read_csv(COMPOSITION_REPORT_PATH)
+    employment_col = sorted(column for column in composition_df.columns if column.startswith("TOT_EMP_"))[-1]
+    composition_predicted_df = predicted_displacement_by_group(composition_df, "gross_displacement", employment_col)
+
+    dynamic_predicted_df = None
+    if os.path.exists(DYNAMIC_REPORT_PATH):
+        dynamic_df = pd.read_csv(DYNAMIC_REPORT_PATH)
+        ai_employment_col = sorted(column for column in dynamic_df.columns if column.startswith("TOT_EMP_"))[-1]
+        dynamic_predicted_df = predicted_displacement_by_group(dynamic_df, "gross_displacement", ai_employment_col)
+
+    displacement_panel_df = _count_measured_rows(displacement_panel_df)
+    occupation_rows_df = displacement_panel_df[displacement_panel_df["source_table"] == OCCUPATION_TABLE]
+    if occupation_rows_df.empty:
+        return None
+
+    model_predictions = (
+        ("composition", composition_predicted_df),
+        ("dynamic", dynamic_predicted_df),
+    )
+
+    panel_rows = []
+    for survey_year in sorted(occupation_rows_df["survey_year"].dropna().unique()):
+        survey_year = int(survey_year)
+        observed_df = observed_displacement_by_group(displacement_panel_df, survey_year=survey_year)
+        if len(observed_df) < MINIMUM_GROUPS:
+            continue
+        observed_df = observed_df.copy()
+        observed_df["observed_share"] = observed_df["observed_displaced_thousands"] / observed_df["observed_displaced_thousands"].sum()
+
+        for model_name, predicted_df in model_predictions:
+            if predicted_df is None:
+                continue
+            merged_df = observed_df.merge(predicted_df, on="dws_group", how="inner")
+            if merged_df.empty:
+                continue
+            merged_df["predicted_share"] = merged_df["predicted_displaced_workers"] / merged_df["predicted_displaced_workers"].sum()
+
+            correlations = correlate_with_leave_one_out(merged_df, "predicted_share")
+            if correlations is None:
+                continue
+            panel_rows.append(
+                {
+                    "survey_year": survey_year,
+                    "model": model_name,
+                    "pearson_r": correlations["pearson_r"],
+                    "pearson_p": correlations["pearson_p"],
+                    "spearman_r": correlations["spearman_r"],
+                    "spearman_p": correlations["spearman_p"],
+                    "n_groups": correlations["n_groups"],
+                }
+            )
+
+    if not panel_rows:
+        return None
+
+    return pd.DataFrame(panel_rows, columns=PANEL_OUTPUT_COLUMNS)
+
+
 def plot_observed_vs_predicted(comparison_df: pd.DataFrame, output_dir: str) -> None:
     """Scatter each group's predicted displacement share against its measured share."""
     plottable_df = comparison_df.dropna(subset=["composition_predicted_share", "observed_share"])
@@ -323,6 +440,25 @@ def run(output_dir: str = "data/output/visualizations") -> pd.DataFrame | None:
 
     plot_observed_vs_predicted(comparison_df, output_dir)
     print(f"  ✓ {OUTPUT_PATH}")
+
+    panel_df = build_displacement_comparison_panel(displacement_panel_df)
+    if panel_df is not None:
+        panel_df.to_csv(PANEL_OUTPUT_PATH, index=False)
+        print(f"\n── Same comparison, every DWS survey in the panel ({panel_df['survey_year'].nunique()} surveys) ──")
+        for model_name in ("composition", "dynamic"):
+            model_panel_df = panel_df[panel_df["model"] == model_name]
+            if model_panel_df.empty:
+                continue
+            significant_count = (model_panel_df["pearson_p"] < 0.05).sum()
+            print(
+                f"  {model_name:<12} Pearson r range {model_panel_df['pearson_r'].min():+.3f} to "
+                f"{model_panel_df['pearson_r'].max():+.3f} (median {model_panel_df['pearson_r'].median():+.3f}), "
+                f"Spearman range {model_panel_df['spearman_r'].min():+.3f} to {model_panel_df['spearman_r'].max():+.3f} "
+                f"(median {model_panel_df['spearman_r'].median():+.3f}), "
+                f"{significant_count}/{len(model_panel_df)} surveys significant at p<0.05"
+            )
+        print(f"  ✓ {PANEL_OUTPUT_PATH}")
+
     return comparison_df
 
 

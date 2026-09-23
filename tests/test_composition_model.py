@@ -39,7 +39,7 @@ from synthesize_composition import (
 from synthesize_dynamic import AI_DISPLACEMENT_COMPONENTS, compute_dynamic_equilibrium
 from synthesize_impacts import ADVERSARIAL_REBOUND, BOUNDED_REBOUND
 
-EMPLOYMENT_COLUMN = "TOT_EMP_25"
+EMPLOYMENT_COLUMN = "TOT_EMP_2025"
 
 DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
 DYNAMIC_REPORT_PRESENT = os.path.exists(DYNAMIC_REPORT_PATH)
@@ -240,3 +240,113 @@ class TestAgainstTheRealOccupationSet:
 
         # Strongly related, but far from a relabel.
         assert 0.5 < correlation < 0.95
+
+
+class TestWriteDisplacementRateTable:
+    """D's own table is a reporting artifact, so writing it must never break the stage.
+
+    Before this was wired in, historical_displacement.py wrote the file only under
+    its own __main__ gate, so `make run-pipeline` shipped whatever had last been
+    committed. The model reads D through economy_displacement_rate() directly and
+    never through this file, which is why a failure here degrades to a warning.
+    """
+
+    def test_writes_the_table_to_the_documented_path(self, tmp_path, monkeypatch):
+        import historical_displacement
+        import synthesize_composition
+
+        output_path = tmp_path / "output" / "historical_displacement_rate.csv"
+        monkeypatch.setattr(historical_displacement, "OUTPUT_PATH", str(output_path))
+        monkeypatch.setattr(
+            historical_displacement,
+            "build_displacement_rate_table",
+            lambda: pd.DataFrame(
+                [
+                    {"year": 1984, "source": "productivity", "displacement_rate": 0.02, "n_observations": 1, "is_interpolated": False},
+                    {"year": 1985, "source": "productivity", "displacement_rate": 0.03, "n_observations": 1, "is_interpolated": False},
+                ]
+            ),
+        )
+        # Not under test here, and would otherwise overwrite the real chart under
+        # data/output/visualizations/ with this test's two-row fixture.
+        monkeypatch.setattr(historical_displacement, "plot_displacement_rate_history", lambda *args, **kwargs: None)
+
+        synthesize_composition.write_displacement_rate_table()
+
+        assert output_path.exists()
+        assert list(pd.read_csv(output_path)["year"]) == [1984, 1985]
+
+    def test_also_draws_the_chart_from_the_same_table(self, tmp_path, monkeypatch):
+        """The chart must be drawn at the same point the table is written, so a pipeline
+        run produces both — not wired in separately where it could drift out of sync."""
+        import historical_displacement
+        import synthesize_composition
+
+        output_path = tmp_path / "historical_displacement_rate.csv"
+        rate_table_df = pd.DataFrame(
+            [{"year": 1984, "source": "productivity", "displacement_rate": 0.02, "n_observations": 1, "is_interpolated": False}]
+        )
+        monkeypatch.setattr(historical_displacement, "OUTPUT_PATH", str(output_path))
+        monkeypatch.setattr(historical_displacement, "build_displacement_rate_table", lambda: rate_table_df)
+
+        received_frames = []
+        monkeypatch.setattr(historical_displacement, "plot_displacement_rate_history", lambda frame: received_frames.append(frame))
+
+        synthesize_composition.write_displacement_rate_table()
+
+        assert len(received_frames) == 1
+        pd.testing.assert_frame_equal(received_frames[0], rate_table_df)
+
+    def test_a_raising_chart_warns_instead_of_propagating(self, tmp_path, monkeypatch):
+        """The chart is a reporting artifact — the same degrade-and-continue rule that
+        already applies to the table build must apply to drawing it, so a matplotlib
+        failure never breaks the composition stage."""
+        import historical_displacement
+        import synthesize_composition
+
+        output_path = tmp_path / "historical_displacement_rate.csv"
+        monkeypatch.setattr(historical_displacement, "OUTPUT_PATH", str(output_path))
+        monkeypatch.setattr(
+            historical_displacement,
+            "build_displacement_rate_table",
+            lambda: pd.DataFrame(
+                [{"year": 1984, "source": "productivity", "displacement_rate": 0.02, "n_observations": 1, "is_interpolated": False}]
+            ),
+        )
+
+        def _raise(frame):
+            raise RuntimeError("matplotlib backend unavailable")
+
+        monkeypatch.setattr(historical_displacement, "plot_displacement_rate_history", _raise)
+
+        with pytest.warns(UserWarning, match="Could not draw the displacement rate chart"):
+            synthesize_composition.write_displacement_rate_table()
+
+        # The table itself must still have been written despite the chart failing.
+        assert output_path.exists()
+
+    def test_a_raising_builder_warns_instead_of_propagating(self, monkeypatch):
+        import historical_displacement
+        import synthesize_composition
+
+        def _raise() -> pd.DataFrame:
+            raise RuntimeError("BLS unreachable")
+
+        monkeypatch.setattr(historical_displacement, "build_displacement_rate_table", _raise)
+
+        with pytest.warns(UserWarning, match="Could not rebuild the displacement rate table"):
+            synthesize_composition.write_displacement_rate_table()
+
+    def test_an_empty_table_leaves_any_existing_file_alone(self, tmp_path, monkeypatch):
+        import historical_displacement
+        import synthesize_composition
+
+        output_path = tmp_path / "historical_displacement_rate.csv"
+        output_path.write_text("year,source,displacement_rate\n1984,productivity,0.02\n")
+        monkeypatch.setattr(historical_displacement, "OUTPUT_PATH", str(output_path))
+        monkeypatch.setattr(historical_displacement, "build_displacement_rate_table", lambda: pd.DataFrame())
+
+        with pytest.warns(UserWarning, match="came back empty"):
+            synthesize_composition.write_displacement_rate_table()
+
+        assert "1984" in output_path.read_text()

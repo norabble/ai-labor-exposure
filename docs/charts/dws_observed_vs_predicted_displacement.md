@@ -54,6 +54,32 @@ professional work by 17.8 and 9.9 points and over-predicts service by 15.7**. Th
 AI model's error is more extreme in one place: it puts 49% of all displacement in
 Office and administrative support against a measured 9.6%.
 
+## Beyond this survey: the ten-survey panel
+
+This chart's subject is the single newest survey (January 2026). BLS also
+publishes an archive of prior DWS releases (see the CLAUDE.md correction
+referenced below), which the committed panel now uses to repeat this same
+comparison against nine earlier surveys, in
+`composition_model_displacement_validation_panel.csv`:
+
+- Composition model: Pearson r **+0.220 to +0.645, median +0.387**, 1 of 10
+  surveys individually significant.
+- Dynamic model: Pearson r **+0.261 to +0.618, median +0.567**, 0 of 10 surveys
+  individually significant.
+- **All ten surveys are positive for both models.**
+
+That uniformity is not ten independent confirmations: the predicted side of
+every survey's correlation is the same 2025-derived model score, so only the
+observed side varies across surveys, and consecutive biennial surveys share
+overlapping three-year recall windows — a sign test or an averaged r across
+them would be invalid. At n = 10 groups, a survey needs r ≈ 0.63 to be
+individually significant on its own. Per the project's asymmetric reading rule,
+this stays a **null** — a positive result would have been strong evidence,
+because the 2025-derived labels are anachronistic and work against the model
+finding anything, but a null is uninformative rather than disconfirming. The
+consistent positive sign across all ten surveys is noted as suggestive and
+nothing more.
+
 ## Reading cautions
 
 **This is all-reasons displacement.** The DWS publishes no occupation × reason
@@ -69,8 +95,13 @@ dilution should weaken the correlation rather than inflate it.
 leave-one-out range are given beside it, following the jackknife discipline the
 project already applies to its 22-sector results.
 
-**One survey.** BLS archives no prior DWS releases, so this is January 2026
-covering 2023–2025. The panel accumulates forward.
+**This chart is one survey (January 2026, covering 2023–2025) by design, not for
+lack of an archive.** An earlier note claimed BLS published no prior DWS
+releases; that was wrong — nine biennial archives exist back to 2008 (see the
+correction in `CLAUDE.md` under `seeds/dws_displacement_panel.csv`) — and the
+panel now holds all ten surveys. This chart still shows only the newest one,
+which remains the headline; see "Beyond this survey" above for the panel
+result.
 
 **The composition model's tie structure limits resolution.** 239 of 770
 occupations are exactly 100% Bounded and share one score, so within-group

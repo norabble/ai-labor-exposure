@@ -17,6 +17,7 @@ Two properties matter more than the rest and are tested directly:
     years, because it is what converts a multi-year count into an annual rate.
 """
 
+import os
 import warnings
 
 import pandas as pd
@@ -24,11 +25,16 @@ import pytest
 
 import historical_displacement
 from historical_displacement import (
+    CHART_NAME,
+    DEFAULT_SOURCE,
     DISPLACEMENT_SOURCES,
+    LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES,
+    TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES,
     build_displacement_rate_table,
     dws_displacement_rate,
     economy_displacement_rate,
     fetch_annual_means,
+    plot_displacement_rate_history,
     productivity_displacement_rate,
 )
 
@@ -48,6 +54,10 @@ def _panel(
         "period_start_year": period_start_year,
         "period_end_year": period_end_year,
         "period_years": period_years,
+        # dws_displacement_rate REQUIRES this column (see its docstring) — every real
+        # producer of a DWS panel row sets it, so a fixture that omits it is not
+        # representative of any panel the function actually receives.
+        "measurement_basis": "count_thousands",
     }
     rows = [
         {
@@ -112,6 +122,44 @@ def _employment(years=range(2023, 2026), thousands=160000.0):
     return pd.Series({year: thousands for year in years}, name="value")
 
 
+def _total_rate_df(periods=((1984, 1985, 3.0), (1986, 1987, 3.0))):
+    """Build a hand-built MLR total-displacement-rate table, the same shape
+    mlr_displacement.parse_total_displacement_rate returns, for (start, end, percent) tuples."""
+    return pd.DataFrame(
+        [
+            {
+                "period_label": f"{start}-{str(end)[-2:]}",
+                "period_start_year": start,
+                "period_end_year": end,
+                "displacement_rate_percent": percent,
+            }
+            for start, end, percent in periods
+        ]
+    )
+
+
+class TestWidenedRange:
+    def test_default_start_year_reaches_the_mlr_series(self):
+        """1981 is mlr_long_tenured's own floor, now the binding constraint on D's reach
+        (the DWS count-derived sources only go back to 1984)."""
+        import historical_displacement
+
+        assert historical_displacement.DEFAULT_START_YEAR == 1981
+
+    def test_productivity_rate_accepts_the_widened_range(self, monkeypatch):
+        import historical_displacement
+
+        captured_years = {}
+
+        def fake_fetch(series_id, start_year, end_year):
+            captured_years["start"] = start_year
+            return pd.Series({year: 2.0 for year in range(start_year, end_year + 1)})
+
+        monkeypatch.setattr(historical_displacement, "fetch_annual_means", fake_fetch)
+        historical_displacement.productivity_displacement_rate(start_year=1984, end_year=2025)
+        assert captured_years["start"] == 1984
+
+
 class TestDwsDisplacementRate:
     def test_all_tenures_rate_is_count_over_employment_over_window(self):
         rate_series = dws_displacement_rate(_panel(), _employment(), tenure_class="all_tenures")
@@ -157,6 +205,30 @@ class TestDwsDisplacementRate:
             rate_series = dws_displacement_rate(_panel(), _employment(years=range(1990, 1993)), tenure_class="all_tenures")
 
         assert rate_series.empty
+
+    def test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_rate(self):
+        """Mutation-proof: this is the property test_rates_and_counts_are_never_summed_together
+        (tests/test_dws_panel.py) claimed to cover but did not — that test only asserted
+        the committed seed happens to keep one measurement_basis per survey_year, which
+        says nothing about what dws_displacement_rate actually does if a panel ever mixes
+        bases. Here a rate-basis row shares the real row's survey_year and source_table
+        ("table_8_all_tenures", what the all_tenures path sums) with a large, non-NaN
+        displaced_thousands. If the required `measurement_basis == "count_thousands"`
+        filter in dws_displacement_rate were ever weakened back to `if "measurement_basis"
+        in ...columns` or deleted outright, this row would be summed in and the rate
+        below would come out roughly 134x too high (999,999 / 7,445) instead of matching
+        the clean panel's own rate."""
+        clean_panel = _panel()
+        contaminating_row = clean_panel.iloc[[0]].copy()
+        assert contaminating_row["source_table"].iloc[0] == "table_8_all_tenures"
+        contaminating_row["displaced_thousands"] = 999_999.0
+        contaminating_row["measurement_basis"] = "rate_percent"
+        contaminated_panel = pd.concat([clean_panel, contaminating_row], ignore_index=True)
+
+        clean_rate_series = dws_displacement_rate(clean_panel, _employment(), tenure_class="all_tenures")
+        contaminated_rate_series = dws_displacement_rate(contaminated_panel, _employment(), tenure_class="all_tenures")
+
+        assert contaminated_rate_series.loc[2024] == pytest.approx(clean_rate_series.loc[2024])
 
     def test_accumulates_multiple_surveys(self):
         two_survey_panel = pd.concat(
@@ -274,6 +346,7 @@ class TestEconomyDisplacementRate:
 class TestBuildDisplacementRateTable:
     def test_skips_sources_that_are_unavailable_rather_than_failing(self, monkeypatch):
         monkeypatch.setattr(historical_displacement, "load_dws_panel", lambda: None)
+        monkeypatch.setattr(historical_displacement, "load_mlr_total_displacement_rate", lambda *args, **kwargs: None)
         monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args: pd.Series({2020: 2.0}))
 
         with warnings.catch_warnings():
@@ -284,6 +357,7 @@ class TestBuildDisplacementRateTable:
 
     def test_returns_an_empty_frame_when_nothing_is_available(self, monkeypatch):
         monkeypatch.setattr(historical_displacement, "load_dws_panel", lambda: None)
+        monkeypatch.setattr(historical_displacement, "load_mlr_total_displacement_rate", lambda *args, **kwargs: None)
         monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args: None)
 
         with warnings.catch_warnings():
@@ -297,17 +371,250 @@ class TestBuildDisplacementRateTable:
         monkeypatch.setattr(historical_displacement, "load_dws_panel", lambda: _panel())
         monkeypatch.setattr(historical_displacement, "employment_by_year", lambda *args: _employment())
         monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args: pd.Series({2023: 2.0, 2024: 2.0, 2025: 2.0}))
+        monkeypatch.setattr(historical_displacement, "load_mlr_total_displacement_rate", lambda *args, **kwargs: _total_rate_df())
 
-        rate_table_df = build_displacement_rate_table(2023, 2025)
+        # Widened to 1984-2025 so the request window covers both the mocked DWS
+        # survey window (2023-2025) and the mocked MLR periods (1984-1987) — the
+        # two sources never overlap in calendar time, unlike every other source
+        # pairing this file tests.
+        rate_table_df = build_displacement_rate_table(1984, 2025)
 
         assert set(rate_table_df["source"]) == set(DISPLACEMENT_SOURCES)
 
-    def test_dws_rows_are_flagged_as_interpolated_across_the_window(self, monkeypatch):
+    def test_dws_and_mlr_rows_are_flagged_as_interpolated_across_the_window(self, monkeypatch):
         monkeypatch.setattr(historical_displacement, "load_dws_panel", lambda: _panel())
         monkeypatch.setattr(historical_displacement, "employment_by_year", lambda *args: _employment())
         monkeypatch.setattr(historical_displacement, "fetch_annual_means", lambda *args: pd.Series({2023: 2.0, 2024: 2.0, 2025: 2.0}))
+        monkeypatch.setattr(historical_displacement, "load_mlr_total_displacement_rate", lambda *args, **kwargs: _total_rate_df())
 
-        rate_table_df = build_displacement_rate_table(2023, 2025)
+        rate_table_df = build_displacement_rate_table(1984, 2025)
 
         assert rate_table_df[rate_table_df["source"].str.startswith("dws")]["is_interpolated"].all()
+        assert rate_table_df[rate_table_df["source"] == "mlr_long_tenured"]["is_interpolated"].all()
         assert not rate_table_df[rate_table_df["source"] == "productivity"]["is_interpolated"].any()
+
+
+class TestMlrDisplacementRate:
+    """mlr_displacement_rate is a pure function of a total-rate table (mirroring
+    dws_displacement_rate / load_dws_panel's split), so these run against hand-built
+    fixtures rather than the real MLR PDFs."""
+
+    def test_a_two_year_period_is_spread_across_both_its_years_at_half_the_published_rate(self):
+        rate_series = historical_displacement.mlr_displacement_rate(_total_rate_df(periods=((1985, 1986, 3.0),)))
+
+        assert rate_series[1985] == pytest.approx(0.015)
+        assert rate_series[1986] == pytest.approx(0.015)
+
+    def test_two_periods_produce_four_distinct_years(self):
+        rate_series = historical_displacement.mlr_displacement_rate(_total_rate_df(periods=((1981, 1982, 3.9), (1983, 1984, 3.1))))
+
+        assert list(rate_series.index) == [1981, 1982, 1983, 1984]
+        assert rate_series[1981] == pytest.approx(0.0195)
+        assert rate_series[1983] == pytest.approx(0.0155)
+
+    def test_never_shares_a_value_with_the_dws_count_derived_rate(self):
+        """The two sources divide by different denominators (long-tenured workers employed
+        vs. total employment) and must not be conflated even where their outputs coincide
+        by construction — they are separate calls into separate functions with no shared
+        arithmetic path, verified here by construction rather than by comparing values."""
+        mlr_rate_series = historical_displacement.mlr_displacement_rate(_total_rate_df(periods=((2005, 2006, 3.0),)))
+        dws_rate_series = dws_displacement_rate(_panel(), _employment(), tenure_class="long_tenured")
+
+        assert set(mlr_rate_series.index).isdisjoint(set(dws_rate_series.index))
+
+
+class TestLoadMlrTotalDisplacementRate:
+    def test_returns_none_when_no_article_exists(self, tmp_path):
+        missing_path = str(tmp_path / "nonexistent.pdf")
+
+        with pytest.warns(UserWarning, match="No MLR articles found"):
+            assert historical_displacement.load_mlr_total_displacement_rate(article_paths=(missing_path,)) is None
+
+    @pytest.mark.skipif(
+        not os.path.exists("data/raw/dws/mlr/mid_1990s_1999.pdf"),
+        reason="MLR articles not downloaded; run download_dws.py",
+    )
+    def test_real_articles_produce_a_rate_in_the_documented_magnitude_range(self):
+        """historical_displacement.py's module docstring documents dws_long_tenured as
+        0.56-1.69%; the MLR figure is a different denominator (long-tenured workers
+        employed, not total employment) and is expected to run higher, 1.2-2.0%."""
+        total_rate_df = historical_displacement.load_mlr_total_displacement_rate()
+        assert total_rate_df is not None
+
+        rate_series = historical_displacement.mlr_displacement_rate(total_rate_df)
+
+        assert rate_series.index.min() == 1981
+        assert rate_series.index.max() == 2000
+        assert rate_series.min() >= 0.012
+        assert rate_series.max() <= 0.020
+
+
+class TestPlotDisplacementRateHistory:
+    """plot_displacement_rate_history draws the six D sources across two axes split
+    by denominator (see the function's own docstring). These tests check the
+    plumbing — the file gets written, every source lands in exactly one group,
+    a missing source degrades rather than crashes, and the footnote's distinct-value
+    counts are computed from the data passed in rather than hardcoded — not the
+    pixels themselves.
+    """
+
+    @staticmethod
+    def _rate_table(sources=DISPLACEMENT_SOURCES):
+        rows = []
+        for source in sources:
+            if source == "productivity":
+                years = range(1981, 2008)
+            elif source == "mlr_long_tenured":
+                years = range(1981, 1984)
+            else:
+                years = range(2005, 2008)
+            year_list = list(years)
+            for index, year in enumerate(year_list):
+                rows.append(
+                    {
+                        "year": year,
+                        "source": source,
+                        "displacement_rate": 0.01 + 0.001 * index,
+                        "n_observations": len(year_list),
+                        "is_interpolated": source != "productivity",
+                    }
+                )
+        return pd.DataFrame(rows)[historical_displacement.OUTPUT_COLUMNS]
+
+    def test_writes_the_named_chart_file(self, tmp_path):
+        plot_displacement_rate_history(self._rate_table(), output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()
+
+    def test_every_non_productivity_source_has_exactly_one_denominator_group_and_a_color(self):
+        """productivity is drawn as a reference line, not a denominator series, so it is
+        deliberately excluded from both groups. Every other named source must land in
+        exactly one group and have an assigned line color — a future new source that
+        skipped this registration would silently vanish from the chart instead of
+        failing loudly."""
+        grouped_sources = set(TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES) | set(LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES)
+
+        assert set(TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES).isdisjoint(LONG_TENURED_EMPLOYMENT_DENOMINATOR_SOURCES)
+        assert grouped_sources == set(DISPLACEMENT_SOURCES) - {"productivity"}
+        assert set(historical_displacement.SOURCE_COLORS) == grouped_sources
+
+    def test_default_source_is_drawn_in_the_total_employment_panel(self):
+        """DEFAULT_SOURCE must be legible as the rate the model actually uses; if it ever
+        moved to the long-tenured group, the chart's bold/marker emphasis (applied only
+        within the total-employment loop) would silently land on the wrong series."""
+        assert DEFAULT_SOURCE in TOTAL_EMPLOYMENT_DENOMINATOR_SOURCES
+
+    def test_a_missing_source_degrades_rather_than_crashing(self, tmp_path):
+        """build_displacement_rate_table can legitimately omit a source (e.g. no MLR
+        articles on disk) — the chart must still draw the sources it does have."""
+        dws_only_rate_table_df = self._rate_table(sources=[source for source in DISPLACEMENT_SOURCES if source != "mlr_long_tenured"])
+
+        plot_displacement_rate_history(dws_only_rate_table_df, output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()
+
+    def test_runs_with_only_productivity_available(self, tmp_path):
+        productivity_only_rate_table_df = self._rate_table(sources=["productivity"])
+
+        plot_displacement_rate_history(productivity_only_rate_table_df, output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()
+
+    @staticmethod
+    def _capture_saved_figures(monkeypatch):
+        """Intercept plt.close so a test can inspect the figure after
+        plot_displacement_rate_history saves and closes it."""
+        captured_figures = []
+        original_close = historical_displacement.plt.close
+
+        def _capture_then_close(figure):
+            captured_figures.append(figure)
+            original_close(figure)
+
+        monkeypatch.setattr(historical_displacement.plt, "close", _capture_then_close)
+        return captured_figures
+
+    def test_productivity_is_drawn_only_on_the_total_employment_panel(self, tmp_path, monkeypatch):
+        """productivity has no displacement denominator at all — it is smoothed
+        productivity growth, not a count over any population — so plotting it against
+        the long-tenured panel's "% of long-tenured workers employed" axis would assert
+        a denominator it does not have, and matching heights on both panels would
+        invite exactly the cross-panel comparison the two-panel split exists to
+        prevent."""
+        captured_figures = self._capture_saved_figures(monkeypatch)
+
+        plot_displacement_rate_history(self._rate_table(), output_dir=str(tmp_path))
+
+        total_employment_axis, long_tenured_axis = captured_figures[0].axes[:2]
+        total_employment_labels = total_employment_axis.get_legend_handles_labels()[1]
+        long_tenured_labels = long_tenured_axis.get_legend_handles_labels()[1]
+
+        assert any("Productivity" in label for label in total_employment_labels)
+        assert not any("Productivity" in label for label in long_tenured_labels)
+        assert not any(line.get_label() == "productivity" or "Productivity" in line.get_label() for line in long_tenured_axis.get_lines())
+
+    def test_long_tenured_panel_scales_to_its_own_narrow_range(self, tmp_path, monkeypatch):
+        """The 'not comparable to the panel above' title has to be backed by the
+        geometry: if the long-tenured axis were stretched to match productivity's much
+        wider range, the two panels would look comparable despite the label."""
+        rows = []
+        for year in range(1981, 2001):
+            # A wide-swinging productivity series, 0%-6%, so a shared scale would be obvious.
+            rows.append(
+                {
+                    "year": year,
+                    "source": "productivity",
+                    "displacement_rate": 0.06 if year % 2 == 0 else 0.0,
+                    "n_observations": 20,
+                    "is_interpolated": False,
+                }
+            )
+            # mlr_long_tenured stays in a narrow 1.2%-1.6% band.
+            rows.append(
+                {
+                    "year": year,
+                    "source": "mlr_long_tenured",
+                    "displacement_rate": 0.012 + 0.00002 * (year - 1981),
+                    "n_observations": 20,
+                    "is_interpolated": True,
+                }
+            )
+        narrow_mlr_rate_table_df = pd.DataFrame(rows)[historical_displacement.OUTPUT_COLUMNS]
+        captured_figures = self._capture_saved_figures(monkeypatch)
+
+        plot_displacement_rate_history(narrow_mlr_rate_table_df, output_dir=str(tmp_path))
+
+        _, long_tenured_axis = captured_figures[0].axes[:2]
+        _, ylim_max = long_tenured_axis.get_ylim()
+
+        # mlr_long_tenured tops out at 1.6; productivity peaks at 6.0. A shared or
+        # matched scale would push this well past 3; the panel's own data does not.
+        assert ylim_max < 3.0
+
+    def test_footnote_reports_distinct_value_counts_computed_from_the_data(self, tmp_path, monkeypatch):
+        """The footnote's '10 distinct values across 21 years' style claim must be
+        computed from the frame passed in, not hardcoded — otherwise it silently goes
+        stale the next time the DWS or MLR panel grows a survey."""
+        captured_figures = self._capture_saved_figures(monkeypatch)
+
+        rate_table_df = self._rate_table()
+        plot_displacement_rate_history(rate_table_df, output_dir=str(tmp_path))
+
+        footnote_text = captured_figures[0].texts[-1].get_text()
+        dws_long_tenured_df = rate_table_df[rate_table_df["source"] == "dws_long_tenured"]
+        mlr_df = rate_table_df[rate_table_df["source"] == "mlr_long_tenured"]
+        assert (
+            f"dws_long_tenured holds {dws_long_tenured_df['displacement_rate'].nunique()} distinct values "
+            f"across {len(dws_long_tenured_df)} years" in footnote_text
+        )
+        assert f"mlr_long_tenured holds {mlr_df['displacement_rate'].nunique()} across {len(mlr_df)}" in footnote_text
+
+    def test_real_output_table_produces_a_chart(self, tmp_path):
+        """Integration check against the file the pipeline actually writes."""
+        if not os.path.exists(historical_displacement.OUTPUT_PATH):
+            pytest.skip("historical_displacement_rate.csv not built; run historical_displacement.py")
+
+        rate_table_df = pd.read_csv(historical_displacement.OUTPUT_PATH)
+        plot_displacement_rate_history(rate_table_df, output_dir=str(tmp_path))
+
+        assert (tmp_path / CHART_NAME).exists()

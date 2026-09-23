@@ -66,12 +66,23 @@ class TestTitleHelpers:
 
 class TestGenerationMap:
     def test_every_year_in_year_configs_has_a_generation(self):
-        for year_suffix, _ in YEAR_CONFIGS:
-            assert year_suffix in GENERATION_BY_YEAR
-        assert GENERATION_BY_YEAR["09"] == "soc2000"
-        assert GENERATION_BY_YEAR["10"] == "soc2010"
-        assert GENERATION_BY_YEAR["19"] == "hybrid"
-        assert GENERATION_BY_YEAR["21"] == "soc2018"
+        for year_key, _ in YEAR_CONFIGS:
+            assert year_key in GENERATION_BY_YEAR
+        assert GENERATION_BY_YEAR["2009"] == "soc2000"
+        assert GENERATION_BY_YEAR["2010"] == "soc2010"
+        assert GENERATION_BY_YEAR["2019"] == "hybrid"
+        assert GENERATION_BY_YEAR["2021"] == "soc2018"
+
+
+class TestGenerationYearKeys:
+    def test_generation_keys_are_four_digit_years(self):
+        assert all(len(year_key) == 4 and year_key.isdigit() for year_key in GENERATION_BY_YEAR)
+
+    def test_soc_generation_boundaries_are_unchanged(self):
+        assert GENERATION_BY_YEAR["2009"] == "soc2000"
+        assert GENERATION_BY_YEAR["2010"] == "soc2010"
+        assert GENERATION_BY_YEAR["2019"] == "hybrid"
+        assert GENERATION_BY_YEAR["2021"] == "soc2018"
 
 
 class TestResolveOewsCodes:
@@ -287,25 +298,25 @@ class TestBuildHarmonizedUnits:
 
     def _oews_codes_by_year(self):
         return {
-            "09": pd.DataFrame(
+            "2009": pd.DataFrame(
                 {"OCC_CODE": ["15-1031", "15-1099", "11-9011", "11-9012", "43-0001"], "OCC_TITLE": ["a", "b", "c", "d", "e"]}
             ),
-            "10": pd.DataFrame(
+            "2010": pd.DataFrame(
                 {"OCC_CODE": ["15-1132", "15-1199", "11-9013", "29-1111", "43-0002"], "OCC_TITLE": ["a", "b", "c", "d", "e"]}
             ),
-            "18": pd.DataFrame({"OCC_CODE": ["15-1132", "15-1199", "11-9013", "29-1141"], "OCC_TITLE": ["a", "b", "c", "d"]}),
-            "19": pd.DataFrame({"OCC_CODE": ["15-1252", "15-1299", "11-9013", "29-1141"], "OCC_TITLE": ["a", "b", "c", "d"]}),
-            "22": pd.DataFrame({"OCC_CODE": ["15-1252", "15-1299", "11-9013", "29-1141"], "OCC_TITLE": ["a", "b", "c", "d"]}),
+            "2018": pd.DataFrame({"OCC_CODE": ["15-1132", "15-1199", "11-9013", "29-1141"], "OCC_TITLE": ["a", "b", "c", "d"]}),
+            "2019": pd.DataFrame({"OCC_CODE": ["15-1252", "15-1299", "11-9013", "29-1141"], "OCC_TITLE": ["a", "b", "c", "d"]}),
+            "2022": pd.DataFrame({"OCC_CODE": ["15-1252", "15-1299", "11-9013", "29-1141"], "OCC_TITLE": ["a", "b", "c", "d"]}),
         }
 
     def test_relabel_chain_forms_one_unit_and_residual_edge_is_pruned(self, tmp_path):
         crosswalk_dir, aggregate_path = self._write_fixture_crosswalks(tmp_path)
         result = build_harmonized_units(self._oews_codes_by_year(), crosswalk_dir, aggregate_path)
         assert isinstance(result, HarmonizationResult)
-        developers_2009 = result.membership_df.query("year == '09' and oews_code == '15-1031'")["unit_id"].iloc[0]
-        developers_2022 = result.membership_df.query("year == '22' and oews_code == '15-1252'")["unit_id"].iloc[0]
+        developers_2009 = result.membership_df.query("year == '2009' and oews_code == '15-1031'")["unit_id"].iloc[0]
+        developers_2022 = result.membership_df.query("year == '2022' and oews_code == '15-1252'")["unit_id"].iloc[0]
         assert developers_2009 == developers_2022 == "U-15-1252"
-        residual_2009 = result.membership_df.query("year == '09' and oews_code == '15-1099'")["unit_id"].iloc[0]
+        residual_2009 = result.membership_df.query("year == '2009' and oews_code == '15-1099'")["unit_id"].iloc[0]
         assert residual_2009 == "U-15-1299"
         assert len(result.pruned_edges_df) == 1
         assert result.pruned_edges_df.iloc[0]["from_code"] == "15-1099"
@@ -314,33 +325,33 @@ class TestBuildHarmonizedUnits:
     def test_merge_and_aggregate_seed_land_in_one_unit(self, tmp_path):
         crosswalk_dir, aggregate_path = self._write_fixture_crosswalks(tmp_path)
         result = build_harmonized_units(self._oews_codes_by_year(), crosswalk_dir, aggregate_path)
-        farm_units = set(result.membership_df.query("year == '09' and oews_code in ['11-9011', '11-9012']")["unit_id"])
+        farm_units = set(result.membership_df.query("year == '2009' and oews_code in ['11-9011', '11-9012']")["unit_id"])
         assert farm_units == {"U-11-9013"}
-        nurses_2010 = result.membership_df.query("year == '10' and oews_code == '29-1111'")["unit_id"].iloc[0]
+        nurses_2010 = result.membership_df.query("year == '2010' and oews_code == '29-1111'")["unit_id"].iloc[0]
         assert nurses_2010 == "U-29-1141"
 
     def test_discontinued_codes_get_a_discontinued_unit(self, tmp_path):
         crosswalk_dir, aggregate_path = self._write_fixture_crosswalks(tmp_path)
         result = build_harmonized_units(self._oews_codes_by_year(), crosswalk_dir, aggregate_path)
-        clerks_unit = result.membership_df.query("year == '10' and oews_code == '43-0002'")["unit_id"].iloc[0]
+        clerks_unit = result.membership_df.query("year == '2010' and oews_code == '43-0002'")["unit_id"].iloc[0]
         assert clerks_unit == "U-43-0001-discontinued"
         assert result.unit_summary_df.set_index("unit_id").loc[clerks_unit, "discontinued"]
 
     def test_completeness_marks_years_missing_a_member(self, tmp_path):
         crosswalk_dir, aggregate_path = self._write_fixture_crosswalks(tmp_path)
         oews_codes_by_year = self._oews_codes_by_year()
-        oews_codes_by_year["18"] = oews_codes_by_year["18"][oews_codes_by_year["18"]["OCC_CODE"] != "11-9013"]
+        oews_codes_by_year["2018"] = oews_codes_by_year["2018"][oews_codes_by_year["2018"]["OCC_CODE"] != "11-9013"]
         result = build_harmonized_units(oews_codes_by_year, crosswalk_dir, aggregate_path)
         completeness = result.completeness_df.set_index(["unit_id", "year"])["complete"]
-        assert not completeness.loc[("U-11-9013", "18")]
-        assert completeness.loc[("U-11-9013", "10")]
-        assert completeness.loc[("U-15-1252", "09")]
+        assert not completeness.loc[("U-11-9013", "2018")]
+        assert completeness.loc[("U-11-9013", "2010")]
+        assert completeness.loc[("U-15-1252", "2009")]
 
     def test_no_pruning_fuses_developers_with_the_residual(self, tmp_path):
         crosswalk_dir, aggregate_path = self._write_fixture_crosswalks(tmp_path)
         result = build_harmonized_units(self._oews_codes_by_year(), crosswalk_dir, aggregate_path, prune_residual_edges=False)
-        developers = result.membership_df.query("year == '22' and oews_code == '15-1252'")["unit_id"].iloc[0]
-        residual = result.membership_df.query("year == '22' and oews_code == '15-1299'")["unit_id"].iloc[0]
+        developers = result.membership_df.query("year == '2022' and oews_code == '15-1252'")["unit_id"].iloc[0]
+        residual = result.membership_df.query("year == '2022' and oews_code == '15-1299'")["unit_id"].iloc[0]
         assert developers == residual
         assert result.pruned_edges_df.empty
 
@@ -350,7 +361,7 @@ class TestBuildHarmonizedTrends:
         membership_df = pd.DataFrame(
             {
                 "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-11-9013"],
-                "year": ["21", "21", "22", "23", "23", "22", "23"],
+                "year": ["2021", "2021", "2022", "2023", "2023", "2022", "2023"],
                 "oews_code": ["15-1132", "15-1133", "15-1252", "15-1252", "15-1253", "11-9013", "11-9013"],
                 "oews_title": ["a", "b", "c", "c", "d", "e", "e"],
             }
@@ -358,7 +369,7 @@ class TestBuildHarmonizedTrends:
         completeness_df = pd.DataFrame(
             {
                 "unit_id": ["U-15-1252", "U-15-1252", "U-15-1252", "U-11-9013", "U-11-9013", "U-11-9013"],
-                "year": ["21", "22", "23", "21", "22", "23"],
+                "year": ["2021", "2022", "2023", "2021", "2022", "2023"],
                 "complete": [True, True, True, False, True, True],
             }
         )
@@ -376,13 +387,13 @@ class TestBuildHarmonizedTrends:
 
     def _year_frames(self):
         return {
-            "21": pd.DataFrame(
+            "2021": pd.DataFrame(
                 {"OCC_CODE": ["15-1132", "15-1133"], "OCC_TITLE": ["a", "b"], "TOT_EMP": [600.0, 400.0], "A_MEDIAN": [100.0, 120.0]}
             ),
-            "22": pd.DataFrame(
+            "2022": pd.DataFrame(
                 {"OCC_CODE": ["15-1252", "11-9013"], "OCC_TITLE": ["c", "e"], "TOT_EMP": [1100.0, 50.0], "A_MEDIAN": [110.0, 60.0]}
             ),
-            "23": pd.DataFrame(
+            "2023": pd.DataFrame(
                 {
                     "OCC_CODE": ["15-1252", "15-1253", "11-9013"],
                     "OCC_TITLE": ["c", "d", "e"],
@@ -393,44 +404,44 @@ class TestBuildHarmonizedTrends:
         }
 
     def test_unit_employment_sums_members_and_growth_columns_follow(self):
-        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["21", "22", "23"]).set_index("unit_id")
-        assert trends_df.loc["U-15-1252", "TOT_EMP_21"] == 1000.0
-        assert trends_df.loc["U-15-1252", "TOT_EMP_23"] == 1210.0
-        assert trends_df.loc["U-15-1252", "emp_growth_22_23"] == pytest.approx(0.1)
-        assert trends_df.loc["U-15-1252", "hist_emp_growth_21_22"] == pytest.approx(0.1)
+        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["2021", "2022", "2023"]).set_index("unit_id")
+        assert trends_df.loc["U-15-1252", "TOT_EMP_2021"] == 1000.0
+        assert trends_df.loc["U-15-1252", "TOT_EMP_2023"] == 1210.0
+        assert trends_df.loc["U-15-1252", "emp_growth_2022_2023"] == pytest.approx(0.1)
+        assert trends_df.loc["U-15-1252", "hist_emp_growth_2021_2022"] == pytest.approx(0.1)
 
     def test_unit_wage_is_employment_weighted_over_members_with_a_median(self):
-        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["21", "22", "23"]).set_index("unit_id")
-        assert trends_df.loc["U-15-1252", "A_MEDIAN_21"] == pytest.approx(108.0)
-        assert trends_df.loc["U-15-1252", "A_MEDIAN_23"] == pytest.approx(115.0)
+        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["2021", "2022", "2023"]).set_index("unit_id")
+        assert trends_df.loc["U-15-1252", "A_MEDIAN_2021"] == pytest.approx(108.0)
+        assert trends_df.loc["U-15-1252", "A_MEDIAN_2023"] == pytest.approx(115.0)
 
     def test_incomplete_year_is_nan(self):
-        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["21", "22", "23"]).set_index("unit_id")
-        assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_21"])
-        assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_21_22"])
-        assert trends_df.loc["U-11-9013", "emp_growth_22_23"] == pytest.approx(0.1)
+        trends_df = build_harmonized_trends(self._year_frames(), self._harmonization(), ["2021", "2022", "2023"]).set_index("unit_id")
+        assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_2021"])
+        assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_2021_2022"])
+        assert trends_df.loc["U-11-9013", "emp_growth_2022_2023"] == pytest.approx(0.1)
 
     def test_memberless_year_is_nan_even_when_flagged_complete(self):
         harmonization = self._harmonization()
         completeness_df = harmonization.completeness_df
-        memberless_year_row = (completeness_df["unit_id"] == "U-11-9013") & (completeness_df["year"] == "21")
+        memberless_year_row = (completeness_df["unit_id"] == "U-11-9013") & (completeness_df["year"] == "2021")
         completeness_df.loc[memberless_year_row, "complete"] = True
-        trends_df = build_harmonized_trends(self._year_frames(), harmonization, ["21", "22", "23"]).set_index("unit_id")
-        assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_21"])
-        assert pd.isna(trends_df.loc["U-11-9013", "A_MEDIAN_21"])
-        assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_21_22"])
+        trends_df = build_harmonized_trends(self._year_frames(), harmonization, ["2021", "2022", "2023"]).set_index("unit_id")
+        assert pd.isna(trends_df.loc["U-11-9013", "TOT_EMP_2021"])
+        assert pd.isna(trends_df.loc["U-11-9013", "A_MEDIAN_2021"])
+        assert pd.isna(trends_df.loc["U-11-9013", "hist_emp_growth_2021_2022"])
 
     def test_units_without_an_anchor_year_member_are_dropped(self):
         harmonization = self._harmonization()
         harmonization.membership_df = harmonization.membership_df[harmonization.membership_df["unit_id"] != "U-11-9013"]
-        trends_df = build_harmonized_trends(self._year_frames(), harmonization, ["21", "22", "23"])
+        trends_df = build_harmonized_trends(self._year_frames(), harmonization, ["2021", "2022", "2023"])
         assert list(trends_df["unit_id"]) == ["U-15-1252"]
 
     def test_boundary_report_counts_large_moves(self):
         trends_df = pd.DataFrame(
-            {"unit_id": ["a", "b", "c"], "hist_emp_growth_18_19": [0.5, 0.01, None], "emp_growth_22_23": [0.02, -0.3, 0.1]}
+            {"unit_id": ["a", "b", "c"], "hist_emp_growth_2018_2019": [0.5, 0.01, None], "emp_growth_2022_2023": [0.02, -0.3, 0.1]}
         )
         report_df = boundary_continuity_report(trends_df).set_index("period")
-        assert report_df.loc["18_19", "n_units"] == 2
-        assert report_df.loc["18_19", "share_abs_growth_over_25pct"] == pytest.approx(0.5)
-        assert report_df.loc["22_23", "share_abs_growth_over_25pct"] == pytest.approx(1 / 3)
+        assert report_df.loc["2018_2019", "n_units"] == 2
+        assert report_df.loc["2018_2019", "share_abs_growth_over_25pct"] == pytest.approx(0.5)
+        assert report_df.loc["2022_2023", "share_abs_growth_over_25pct"] == pytest.approx(1 / 3)

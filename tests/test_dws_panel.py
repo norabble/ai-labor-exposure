@@ -14,6 +14,15 @@ rows — the release repeats that label under Total, Men, Women and again for ea
 industry panel, with a different count each time. Only the first is the
 all-workers total, so a parser that matched the label without taking the first
 match would silently report 212 thousand displaced instead of 3,324.
+
+tests/fixtures/dws_archive_2016.html is a byte-identical copy of the real
+archived release (verified with `cmp` after committing) rather than a trimmed
+fixture, because it exercises `parse_archived_text_release`'s plain-text
+`<PRE>`-block layout: dot-leader-padded labels, fixed-width-aligned (not
+delimited) numeric columns, and labels wrapped across two physical lines. A
+hand-trimmed fixture risks losing the exact whitespace that layout depends on,
+and a committed fixture is also subject to the trailing-whitespace pre-commit
+hook, which is why that hook excludes tests/fixtures/.
 """
 
 import os
@@ -21,17 +30,25 @@ import os
 import pandas as pd
 import pytest
 
+import dws_panel
 from dws_panel import (
+    ARCHIVE_DIR,
     DWS_TO_SOC_MAJOR,
+    MLR_ARTICLE_PATHS,
     PANEL_COLUMNS,
+    SEED_PANEL_PATH,
     STRUCTURAL_REASON,
+    _archive_years_available,
     build_release_panel,
     load_dws_panel,
     merge_panel,
+    parse_archived_release,
+    parse_archived_text_release,
     parse_occupation_table,
     parse_reason_table,
     parse_survey_period,
     parse_total_table,
+    rebuild_historical_panel_from_raw,
     verify_soc_coverage,
 )
 
@@ -41,6 +58,8 @@ TABLE_5_FIXTURE = os.path.join(FIXTURE_DIR, "dws_table5_sample.html")
 TABLE_8_FIXTURE = os.path.join(FIXTURE_DIR, "dws_table8_sample.html")
 
 RAW_RELEASE_PRESENT = os.path.exists("data/raw/dws/disp_t05.html")
+ARCHIVES_PRESENT = os.path.isdir(ARCHIVE_DIR) and bool(_archive_years_available(ARCHIVE_DIR))
+MLR_ARTICLES_PRESENT = all(os.path.exists(path) for path in MLR_ARTICLE_PATHS)
 
 
 class TestSocCoverage:
@@ -191,6 +210,7 @@ class TestMergePanel:
             "period_years": 3,
             "source_table": "table_5_occupation",
             "group_name": group_name,
+            "mlr_occupation": "",
             "soc_majors": "43",
             "displaced_thousands": displaced_thousands,
             "reason": "all",
@@ -248,3 +268,536 @@ class TestAgainstDownloadedRelease:
         # Ten occupation groups, three reasons, one all-tenures total.
         assert len(release_panel_df) == 14
         assert release_panel_df["survey_year"].nunique() == 1
+
+
+class TestArchiveUrls:
+    def test_nine_archived_surveys_are_listed(self):
+        from download_dws import ARCHIVE_RELEASE_URLS
+
+        assert sorted(ARCHIVE_RELEASE_URLS) == [2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022, 2024]
+
+    def test_urls_use_the_verified_release_dates(self):
+        from download_dws import ARCHIVE_RELEASE_URLS
+
+        assert ARCHIVE_RELEASE_URLS[2022].endswith("disp_08262022.htm")
+        assert ARCHIVE_RELEASE_URLS[2008].endswith("disp_08202008.htm")
+
+    def test_every_url_is_under_the_archive_path(self):
+        from download_dws import ARCHIVE_RELEASE_URLS
+
+        assert all("/news.release/archives/" in url for url in ARCHIVE_RELEASE_URLS.values())
+
+
+class TestMlrArticleUrls:
+    def test_three_articles_cover_the_pre_2008_window(self):
+        from download_dws import MLR_ARTICLE_URLS
+
+        assert set(MLR_ARTICLE_URLS) == {"mid_1990s_1999", "strong_labor_market_2001", "displacement_1999_2000_2004"}
+
+    def test_urls_point_at_the_verified_pdfs(self):
+        from download_dws import MLR_ARTICLE_URLS
+
+        assert MLR_ARTICLE_URLS["mid_1990s_1999"].endswith("/opub/mlr/1999/07/art2full.pdf")
+        assert MLR_ARTICLE_URLS["displacement_1999_2000_2004"].endswith("/opub/mlr/2004/06/art4full.pdf")
+
+
+# A synthetic HTML archive whose only Table-8-signature candidate (a "Characteristic"
+# table with an employment-status breakdown) reports a "Total, 20 years and over"
+# total (900) below Table 5's own published long-tenured total (1,005) — the
+# invariant `_select_total_table` requires is never satisfied, so the all-tenures
+# row must be skipped rather than guessed. The occupation table carries all ten
+# DWS_TO_SOC_MAJOR leaf groups so the rest of the release still parses normally.
+_ZERO_CANDIDATE_TOTAL_TABLE_FIXTURE = (
+    "<html><body>"
+    "<p>Workers displaced between January 2016 and December 2018.</p>"
+    "<table>"
+    "<tr><th>Occupation of lost job</th><th>Total</th></tr>"
+    "<tr><th>Occupation of lost job</th><th>Total</th></tr>"
+    "<tr><td>Total, 20 years and over</td><td>1005</td></tr>"
+    + "".join(f"<tr><td>{group_name.title()}</td><td>100</td></tr>" for group_name in DWS_TO_SOC_MAJOR)
+    + "</table>"
+    "<table>"
+    "<tr><th>Characteristic</th><th>Total</th><th>Percent Employed</th><th>Percent Unemployed</th>"
+    "<th>Percent Not In Labor Force</th></tr>"
+    "<tr><th>Characteristic</th><th>Total</th><th>Percent Employed</th><th>Percent Unemployed</th>"
+    "<th>Percent Not In Labor Force</th></tr>"
+    "<tr><td>Total, 20 years and over</td><td>900</td><td>100.0</td><td>50.0</td><td>20.0</td></tr>"
+    "</table>"
+    "</body></html>"
+)
+
+
+class TestArchiveParsing:
+    """Parsing the four archived releases that render their tables as HTML."""
+
+    FIXTURE_PATH = "tests/fixtures/dws_archive_2022.html"
+
+    @classmethod
+    def _fixture_html(cls):
+        with open(cls.FIXTURE_PATH, encoding="utf-8") as fixture_file:
+            return fixture_file.read()
+
+    def test_ten_leaf_occupation_rows_are_extracted(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        assert len(occupation_rows) == 10
+
+    def test_occupation_group_names_match_the_soc_mapping(self):
+        """Case-insensitively: the release prints Title Case, DWS_TO_SOC_MAJOR is keyed lowercase.
+
+        _occupation_rows stores the release's own casing and lowercases only for the
+        lookup, so the current-release and archived-release paths agree.
+        """
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        assert {name.lower() for name in occupation_rows["group_name"]} == set(DWS_TO_SOC_MAJOR)
+
+    def test_every_occupation_row_resolves_to_soc_majors(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        assert occupation_rows["soc_majors"].notna().all()
+
+    def test_survey_year_is_stamped_on_every_row(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        assert (panel_df["survey_year"] == 2022).all()
+
+    def test_the_displacement_window_is_read_from_the_release_not_the_survey_year(self):
+        """The 2022 survey reports displacement over 2019-2021, not 2022."""
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        assert panel_df["period_start_year"].iloc[0] == 2019
+        assert panel_df["period_end_year"].iloc[0] == 2021
+        assert panel_df["period_years"].iloc[0] == 3
+
+    def test_the_window_is_not_derived_from_the_survey_year_by_a_fixed_offset(self):
+        """Every real archive has window == survey_year-3..survey_year-1, so no real
+        fixture can tell a correct parser from one applying a fixed offset. This
+        states a window matching no offset from any survey year.
+        """
+        from dws_panel import _parse_archived_period
+
+        release_html = "<html><body><p>Workers displaced between January 2010 and December 2014.</p></body></html>"
+        assert _parse_archived_period(release_html) == (2010, 2014)
+
+    def test_an_unreadable_window_raises_rather_than_guessing(self):
+        from dws_panel import _parse_archived_period
+
+        with pytest.raises(ValueError):
+            _parse_archived_period("<html><body><p>No window stated here.</p></body></html>")
+
+    def test_counts_are_positive_and_suppressed_values_are_not_zero(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        present = panel_df["displaced_thousands"].dropna()
+        assert (present > 0).all()
+
+    def test_columns_match_the_existing_panel_schema(self):
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        assert list(panel_df.columns) == PANEL_COLUMNS
+
+    def test_a_plain_text_archive_yields_an_empty_frame_rather_than_raising(self):
+        """2008-2016 archives use <PRE> blocks and are handled by a separate parser."""
+        panel_df = parse_archived_release("<html><body><pre>Total 1234</pre></body></html>", 2012)
+        assert panel_df.empty
+        assert list(panel_df.columns) == PANEL_COLUMNS
+
+    def test_table_8_all_tenures_row_is_selected_by_the_invariant(self):
+        """Table 8 shares its column signature with two other same-shaped tables on the
+        page (Table 1 and Table 3), both of which merely repeat Table 5's own
+        long-tenured total rather than exceeding it — only Table 8 (all tenures,
+        including short-tenured workers) actually exceeds that baseline.
+        """
+        panel_df = parse_archived_release(self._fixture_html(), 2022)
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["tenure_class"].iloc[0] == "all_tenures"
+        assert total_rows["reason"].iloc[0] == "all"
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+
+    def test_table_8_row_matches_the_current_releases_row_shape(self):
+        """The archived-release row must carry the same non-numeric shape as the 2026
+        current-release row (source_table, tenure_class, reason, group_name,
+        measurement_basis) — only the count itself differs between releases.
+        """
+        from dws_panel import parse_total_table
+
+        archived_panel_df = parse_archived_release(self._fixture_html(), 2022)
+        archived_total_row = archived_panel_df[archived_panel_df["source_table"] == "table_8_all_tenures"].iloc[0]
+        current_release_total_row = parse_total_table(TABLE_8_FIXTURE).iloc[0]
+
+        for shared_column in ["source_table", "tenure_class", "reason", "group_name", "measurement_basis"]:
+            assert archived_total_row[shared_column] == current_release_total_row[shared_column], shared_column
+
+    def test_no_candidate_exceeding_the_invariant_skips_with_a_warning(self, capsys):
+        """A fixture where the only Table-8-signature candidate does NOT exceed Table
+        5's long-tenured total must be skipped, not guessed at.
+        """
+        panel_df = parse_archived_release(_ZERO_CANDIDATE_TOTAL_TABLE_FIXTURE, 2019)
+
+        assert panel_df[panel_df["source_table"] == "table_8_all_tenures"].empty
+        captured_output = capsys.readouterr().out
+        assert "2019" in captured_output
+        assert "Could not uniquely identify Table 8" in captured_output
+
+    def test_no_candidate_exceeding_the_invariant_still_yields_occupation_rows(self):
+        """The skip is scoped to the all-tenures row; the occupation table it shares a
+        page with must still parse.
+        """
+        panel_df = parse_archived_release(_ZERO_CANDIDATE_TOTAL_TABLE_FIXTURE, 2019)
+
+        assert len(panel_df[panel_df["source_table"] == "table_5_occupation"]) == 10
+
+
+# A minimal synthetic occupation table in the same dot-leader / whitespace-run
+# layout as the real 2008-2016 archives, with the Farming leaf's count suppressed
+# as a dash rather than a real value. Embedded in a full <html> page with the
+# window footnote sentence, so parse_archived_text_release can be exercised
+# end-to-end without depending on which real year happens to suppress a count.
+_SYNTHETIC_PLAIN_TEXT_ARCHIVE = """
+<html><body><pre>
+Table 5. Long-tenured displaced workers (1) by occupation of lost job and employment status in January 2016
+(Numbers in thousands)
+              Occupation of lost job                  Total
+                                                                  Total      Employed   Unemployed  Not in the
+                                                                                                   labor force
+
+     Total, 20 years and over (2).................     3,191      100.0        65.5        15.9        18.6
+
+ Management, business, and financial operations occupations       702      100.0        72.1        14.6        13.3
+ Professional and related occupations...........       598      100.0        65.5        12.3        22.3
+ Service occupations..............................       313      100.0        63.4        19.0        17.6
+ Sales and related occupations..................       340      100.0        66.1        18.3        15.6
+ Office and administrative support occupations..       479      100.0        61.1        13.0        25.9
+ Farming, fishing, and forestry occupations.....          -      100.0         (3)         (3)         (3)
+ Construction and extraction occupations........       193      100.0        61.1        28.5        10.4
+ Installation, maintenance, and repair occupations       102      100.0        62.3        16.4        21.3
+ Production occupations.........................       246      100.0        55.3        21.1        23.6
+ Transportation and material moving occupations        171      100.0        78.9         9.1        12.0
+
+   1 Data refer to persons who had 3 or more years of tenure on a job they had lost or left between January 2013
+and December 2015 because of plant or company closings or moves, insufficient work, or the abolishment of
+their positions or shifts.
+   2 Total includes a small number who did not report occupation.
+   3 Data not shown where base is less than 75,000.
+</pre></body></html>
+"""
+
+
+class TestArchiveTextParsing:
+    """Parsing the five archived releases (2008-2016) that lay tables out as plain-text <PRE> blocks."""
+
+    FIXTURE_PATH = "tests/fixtures/dws_archive_2016.html"
+
+    @classmethod
+    def _fixture_html(cls):
+        with open(cls.FIXTURE_PATH, encoding="utf-8") as fixture_file:
+            return fixture_file.read()
+
+    def test_ten_leaf_occupation_rows_are_extracted_from_the_real_fixture(self):
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+
+        assert len(occupation_rows) == 10
+
+    def test_group_names_match_the_soc_mapping_case_insensitively(self):
+        """The release prints Title Case; DWS_TO_SOC_MAJOR is keyed lowercase — expected and correct."""
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+
+        assert {group_name.lower() for group_name in occupation_rows["group_name"]} == set(DWS_TO_SOC_MAJOR)
+        assert occupation_rows["soc_majors"].notna().all()
+
+    def test_dispatches_through_parse_archived_release_by_content_not_index(self):
+        """parse_archived_release must detect the plain-text layout and delegate on its own."""
+        dispatched_panel_df = parse_archived_release(self._fixture_html(), 2016)
+        direct_panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+
+        # Ten occupation leaves, three reasons, one all-tenures total.
+        assert len(dispatched_panel_df) == len(direct_panel_df) == 14
+
+    def test_table_8_row_is_produced_and_exceeds_the_leaf_sum(self):
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["tenure_class"].iloc[0] == "all_tenures"
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+        assert total_rows["displaced_thousands"].iloc[0] == 7440
+
+    def test_the_window_comes_from_the_release_text(self):
+        """The 2016 survey reports displacement over 2013-2015, not 2016."""
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+
+        assert panel_df["period_start_year"].iloc[0] == 2013
+        assert panel_df["period_end_year"].iloc[0] == 2015
+        assert panel_df["period_years"].iloc[0] == 3
+
+    def test_columns_match_the_existing_panel_schema(self):
+        panel_df = parse_archived_text_release(self._fixture_html(), 2016)
+
+        assert list(panel_df.columns) == PANEL_COLUMNS
+
+    def test_comma_thousands_separator_parses_correctly_not_truncated_at_the_comma(self):
+        from dws_panel import _pre_table_count_string
+
+        count_string = _pre_table_count_string("3,191")
+
+        assert count_string == "3191"
+        assert pd.to_numeric(count_string) == 3191.0
+
+    def test_a_suppressed_dash_becomes_nan_not_zero(self):
+        """A dash means the base was under 75,000, which is not the same as no displacement."""
+        panel_df = parse_archived_text_release(_SYNTHETIC_PLAIN_TEXT_ARCHIVE, 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"].copy()
+        occupation_rows["group_name"] = occupation_rows["group_name"].str.lower()
+        occupation_rows = occupation_rows.set_index("group_name")
+
+        farming_value = occupation_rows.loc["farming, fishing, and forestry occupations", "displaced_thousands"]
+
+        assert pd.isna(farming_value)
+
+    def test_other_leaf_counts_in_the_synthetic_archive_are_unaffected_by_the_suppression(self):
+        panel_df = parse_archived_text_release(_SYNTHETIC_PLAIN_TEXT_ARCHIVE, 2016)
+        occupation_rows = panel_df[panel_df["source_table"] == "table_5_occupation"]
+        present_counts = occupation_rows["displaced_thousands"].dropna()
+
+        assert (present_counts > 0).all()
+        assert len(present_counts) == 9
+
+
+class TestArchiveTextParsingTableEightAcrossSurveyYears:
+    """Table 8 for each of the five plain-text archives (2008-2016), one test per
+    survey year, as required by task 10d.
+
+    2016 has a committed byte-identical fixture (dws_archive_2016.html) and always
+    runs. The other four years' archives are fetched by download_dws.py into
+    data/raw/dws/archives/, which — like data/raw/dws/disp_t05.html above
+    (RAW_RELEASE_PRESENT) — is gitignored rather than committed, so those cases
+    skip rather than fail when the file has not been downloaded, e.g. in CI.
+    """
+
+    @staticmethod
+    def _archive_path(survey_year):
+        return os.path.join("data", "raw", "dws", "archives", f"disp_{survey_year}.html")
+
+    def test_2016_table_8_exceeds_the_leaf_sum(self):
+        with open("tests/fixtures/dws_archive_2016.html", encoding="utf-8") as fixture_file:
+            panel_df = parse_archived_text_release(fixture_file.read(), 2016)
+
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+
+    @pytest.mark.parametrize("survey_year", [2008, 2010, 2012, 2014])
+    def test_downloaded_archive_table_8_exceeds_the_leaf_sum(self, survey_year):
+        archive_path = self._archive_path(survey_year)
+        if not os.path.exists(archive_path):
+            pytest.skip(f"{archive_path} not downloaded")
+
+        with open(archive_path, encoding="utf-8", errors="replace") as archive_file:
+            panel_df = parse_archived_text_release(archive_file.read(), survey_year)
+
+        total_rows = panel_df[panel_df["source_table"] == "table_8_all_tenures"]
+        leaf_sum = panel_df[panel_df["source_table"] == "table_5_occupation"]["displaced_thousands"].sum()
+
+        assert len(total_rows) == 1
+        assert total_rows["displaced_thousands"].iloc[0] > leaf_sum
+
+
+class TestMeasurementBasis:
+    def test_existing_rows_are_labelled_as_counts(self):
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        modern = panel_df[panel_df["survey_year"] >= 2008]
+        assert (modern["measurement_basis"] == "count_thousands").all()
+
+    def test_mlr_rows_are_labelled_as_rates(self):
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        historical = panel_df[panel_df["survey_year"] < 2008]
+        assert not historical.empty
+        assert (historical["measurement_basis"] == "rate_percent").all()
+
+    def test_rates_and_counts_are_never_summed_together(self):
+        """Replaces the earlier version of this test, which only asserted that each
+        survey_year in the committed seed happens to carry one measurement_basis — a
+        property of the `period_end_year + 1` key derivation (MLR keys are odd years,
+        DWS count keys even), not of any consumer's summing behaviour; it would still
+        pass with both production filters deleted, because on the real seed the
+        separation also holds by two incidental mechanisms (MLR rows carry NaN counts
+        under `table_5_occupation`/`table_8_all_tenures`/`table_2_reason`, and use a
+        distinct `source_table`, `mlr_table_2_occupation`, that neither consumer reads).
+        A test that reuses the real seed cannot distinguish the filter mattering from
+        those incidental mechanisms already protecting it, so the actually-discriminating
+        versions of this property are synthetic and live beside each production
+        consumer: `test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_rate`
+        (tests/test_historical_displacement.py, for `dws_displacement_rate`) and
+        `test_a_rate_row_masquerading_as_a_count_does_not_inflate_the_observed_total`
+        (tests/test_composition_displacement_validation.py, for `_count_measured_rows`).
+        Both construct a rate row that shares its consumer's own source_table and a
+        large, non-NaN `displaced_thousands`, and both were verified by deleting their
+        production filter and confirming the test then fails. What this test still
+        checks, meaningfully: the seed's own survey_year-to-measurement_basis mapping,
+        which the two synthetic tests above take as given rather than re-deriving.
+        """
+        panel_df = pd.read_csv("seeds/dws_displacement_panel.csv")
+        per_year = panel_df.groupby("survey_year")["measurement_basis"].nunique()
+        assert (per_year == 1).all()
+
+
+def _synthetic_archive_row(survey_year):
+    return {
+        "survey_year": survey_year,
+        "period_start_year": survey_year - 3,
+        "period_end_year": survey_year - 1,
+        "period_years": 3,
+        "source_table": "table_8_all_tenures",
+        "group_name": "Total",
+        "mlr_occupation": "",
+        "soc_majors": "",
+        "displaced_thousands": 1000.0 + survey_year,
+        "displacement_rate_percent": float("nan"),
+        "reason": "all",
+        "tenure_class": "all_tenures",
+        "measurement_basis": "count_thousands",
+        "source": "news_release_archive",
+    }
+
+
+def _synthetic_mlr_rate_row(period_start_year, period_end_year, mlr_occupation="Professional specialty"):
+    return {
+        "period_label": f"{period_start_year}-{str(period_end_year)[-2:]}",
+        "period_start_year": period_start_year,
+        "period_end_year": period_end_year,
+        "mlr_occupation": mlr_occupation,
+        "displacement_rate_percent": 2.5,
+    }
+
+
+class TestRebuildHistoricalPanelFromRaw:
+    """rebuild_historical_panel_from_raw is the committed, tested entry point that
+
+    replaces the seed-rebuild procedure that previously existed only as prose in
+    the implementation plan (I4 in the 2026-09-15 final review). These tests
+    isolate the orchestration logic — combining archive and MLR rows, deduplicating
+    overlaps, and handling missing raw sources — from the real parsers, which
+    already have their own extensive tests elsewhere in this file and in
+    tests/test_mlr_displacement.py. See TestRebuildHistoricalPanelFromRawAgainstRealFiles
+    below for the integration-level check against the actual downloaded archives,
+    MLR PDFs, and the committed seed.
+    """
+
+    def test_combines_archive_and_mlr_rows(self, monkeypatch, tmp_path):
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        (archive_dir / "disp_2010.html").write_text("<html></html>")
+        mlr_path = tmp_path / "article.pdf"
+        mlr_path.write_text("not a real pdf, parse_displacement_rate_table is monkeypatched")
+
+        monkeypatch.setattr(dws_panel, "parse_archived_release", lambda html, year: pd.DataFrame([_synthetic_archive_row(year)]))
+        monkeypatch.setattr(dws_panel, "parse_displacement_rate_table", lambda path: pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]))
+
+        combined_df = rebuild_historical_panel_from_raw(archive_dir=str(archive_dir), mlr_article_paths=(str(mlr_path),))
+
+        assert set(combined_df["source"]) == {"news_release_archive", "mlr_article"}
+        assert list(combined_df.columns) == PANEL_COLUMNS
+
+    def test_deduplicates_overlapping_mlr_periods_keeping_the_later_article(self, monkeypatch, tmp_path):
+        """Two articles reporting the same (period, occupation) pair must not double the row --
+        mirrors historical_displacement.load_mlr_total_displacement_rate's own dedup rule."""
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        first_article = tmp_path / "first.pdf"
+        first_article.write_text("stub")
+        second_article = tmp_path / "second.pdf"
+        second_article.write_text("stub")
+
+        rate_frames_by_path = {
+            str(first_article): pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]),
+            str(second_article): pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]),
+        }
+        monkeypatch.setattr(dws_panel, "parse_displacement_rate_table", lambda path: rate_frames_by_path[path])
+
+        combined_df = rebuild_historical_panel_from_raw(
+            archive_dir=str(archive_dir), mlr_article_paths=(str(first_article), str(second_article))
+        )
+
+        assert len(combined_df) == 1
+
+    def test_missing_archive_dir_still_returns_mlr_rows(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(dws_panel, "parse_displacement_rate_table", lambda path: pd.DataFrame([_synthetic_mlr_rate_row(1981, 1982)]))
+
+        combined_df = rebuild_historical_panel_from_raw(
+            archive_dir=str(tmp_path / "does_not_exist"), mlr_article_paths=(str(tmp_path / "article.pdf"),)
+        )
+
+        # The MLR path doesn't exist either, so both contributions are empty, but the
+        # function must not raise -- it returns an empty, correctly-shaped frame.
+        assert combined_df.empty
+        assert list(combined_df.columns) == PANEL_COLUMNS
+
+    def test_missing_mlr_articles_still_returns_archive_rows(self, monkeypatch, tmp_path):
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        (archive_dir / "disp_2010.html").write_text("<html></html>")
+        monkeypatch.setattr(dws_panel, "parse_archived_release", lambda html, year: pd.DataFrame([_synthetic_archive_row(year)]))
+
+        combined_df = rebuild_historical_panel_from_raw(
+            archive_dir=str(archive_dir), mlr_article_paths=(str(tmp_path / "does_not_exist.pdf"),)
+        )
+
+        assert len(combined_df) == 1
+        assert combined_df.iloc[0]["source"] == "news_release_archive"
+
+    def test_discovers_archive_years_from_the_directory_listing(self, tmp_path):
+        """A future archive (e.g. 2028, once BLS publishes one) must be picked up from
+        the directory listing alone, with no code change -- not from a hardcoded year list."""
+        archive_dir = tmp_path / "archives"
+        archive_dir.mkdir()
+        (archive_dir / "disp_2008.html").write_text("")
+        (archive_dir / "disp_2028.html").write_text("")
+        (archive_dir / "disp_t02.html").write_text("")  # current-release file; must not match
+        (archive_dir / "not_an_archive.txt").write_text("")
+
+        assert _archive_years_available(str(archive_dir)) == [2008, 2028]
+
+
+@pytest.mark.skipif(not (ARCHIVES_PRESENT and MLR_ARTICLES_PRESENT), reason="raw DWS archives or MLR articles not downloaded")
+class TestRebuildHistoricalPanelFromRawAgainstRealFiles:
+    """Integration-level check against the real downloaded archives and MLR PDFs,
+    skipped (not failed) when they are absent, the same convention every other
+    real-file test in this suite follows. Reproduces the 2026-09-15 final review's
+    own spot-check: rebuilding from raw sources and comparing against the
+    committed seed's historical portion (everything except the current rolling
+    release, which this function deliberately excludes -- see its docstring)."""
+
+    def test_matches_the_committed_seeds_historical_portion_exactly(self):
+        rebuilt_df = rebuild_historical_panel_from_raw()
+
+        seed_df = pd.read_csv(SEED_PANEL_PATH, dtype={"soc_majors": str, "mlr_occupation": str}).fillna(
+            {"soc_majors": "", "mlr_occupation": ""}
+        )
+        historical_seed_df = seed_df[seed_df["source"] != "news_release"]
+
+        assert len(rebuilt_df) == len(historical_seed_df)
+
+        sort_columns = ["survey_year", "source_table", "group_name", "reason", "mlr_occupation"]
+        merged_df = (
+            historical_seed_df.sort_values(sort_columns)
+            .reset_index(drop=True)
+            .merge(
+                rebuilt_df.sort_values(sort_columns).reset_index(drop=True),
+                on=sort_columns,
+                how="outer",
+                suffixes=("_seed", "_rebuilt"),
+                indicator=True,
+            )
+        )
+        assert (merged_df["_merge"] == "both").all(), "every row must match by key between the seed and the rebuild"
+
+        for value_column in ["displaced_thousands", "displacement_rate_percent"]:
+            seed_values = merged_df[f"{value_column}_seed"]
+            rebuilt_values = merged_df[f"{value_column}_rebuilt"]
+            both_nan = seed_values.isna() & rebuilt_values.isna()
+            assert ((seed_values == rebuilt_values) | both_nan).all(), f"{value_column} mismatch between seed and rebuild"

@@ -38,6 +38,7 @@ Usage:
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 
 import ipums_cps_variables as ipums_variables
 from composition_displacement_validation import soc_major_to_dws_group
@@ -170,3 +171,72 @@ def tabulate_total(employed_df: pd.DataFrame, year: int, weight_column: str) -> 
     months_observed = int(employed_df["MONTH"].nunique())
     total_thousands = float(employed_df[weight_column].astype(float).sum()) / months_observed / 1000.0
     return {"year": year, "total_thousands": total_thousands, "months_observed": months_observed}
+
+
+BOOTSTRAP_REPLICATES = 200
+BOOTSTRAP_BLOCK_SIZE = 50
+BOOTSTRAP_SEED = 20260923
+
+
+def bootstrap_group_variance(
+    group_codes: np.ndarray,
+    values: np.ndarray,
+    cluster_ids: np.ndarray,
+    scale: float,
+    replicates: int = BOOTSTRAP_REPLICATES,
+    seed: int = BOOTSTRAP_SEED,
+) -> pd.Series:
+    """Variance of each group's scaled total under a Poisson(1) household-cluster bootstrap.
+
+    Every cluster draws one weight per replicate and all of its records share it,
+    so records from one household move together. Replicates are drawn in blocks so
+    a year's ~100k households never need a full clusters x replicates matrix at once.
+    """
+    cluster_codes, cluster_index = np.unique(np.asarray(cluster_ids), return_inverse=True)
+    group_labels, group_index = np.unique(np.asarray(group_codes), return_inverse=True)
+    group_by_cluster = sparse.csr_matrix(
+        (np.asarray(values, dtype=float), (group_index, cluster_index)), shape=(len(group_labels), len(cluster_codes))
+    )
+    random_generator = np.random.default_rng(seed)
+    replicate_blocks = []
+    remaining_replicates = replicates
+    while remaining_replicates > 0:
+        block_size = min(BOOTSTRAP_BLOCK_SIZE, remaining_replicates)
+        cluster_weights = random_generator.poisson(1.0, size=(len(cluster_codes), block_size)).astype(float)
+        replicate_blocks.append(np.asarray(group_by_cluster @ cluster_weights))
+        remaining_replicates -= block_size
+    replicate_totals = np.hstack(replicate_blocks) * scale
+    return pd.Series(replicate_totals.var(axis=1, ddof=1), index=group_labels)
+
+
+def cluster_bootstrap_variance(
+    spine_df: pd.DataFrame,
+    weight_column: str = "WTFINL",
+    replicates: int = BOOTSTRAP_REPLICATES,
+    seed: int = BOOTSTRAP_SEED,
+) -> pd.DataFrame:
+    """Sampling variance of every (occ1990dd, universe) annual mean, in thousands squared.
+
+    Adjacent years are treated as independent downstream, which overstates growth
+    noise because half the sample carries over — conservative, and documented.
+    """
+    months_observed = spine_df["MONTH"].nunique()
+    scale = 1.0 / (months_observed * 1000.0)
+    cluster_ids = household_cluster_ids(spine_df).to_numpy()
+    variance_frames = []
+    for universe in UNIVERSES:
+        in_universe = universe_mask(spine_df, universe).to_numpy()
+        if not in_universe.any():
+            continue
+        variance = bootstrap_group_variance(
+            spine_df["occ1990dd"].to_numpy()[in_universe],
+            spine_df[weight_column].to_numpy(dtype=float)[in_universe],
+            cluster_ids[in_universe],
+            scale,
+            replicates,
+            seed,
+        )
+        variance_frames.append(
+            pd.DataFrame({"occ1990dd": variance.index.astype(int), "universe": universe, "sampling_variance": variance.to_numpy()})
+        )
+    return pd.concat(variance_frames, ignore_index=True)

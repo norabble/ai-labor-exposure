@@ -133,3 +133,41 @@ class TestTotal:
 
 def test_module_does_not_import_ipumspy_at_top_level():
     assert "ipumspy" not in cps_detailed_panel.__dict__
+
+
+import numpy as np  # noqa: E402
+
+from cps_detailed_panel import bootstrap_group_variance, cluster_bootstrap_variance  # noqa: E402
+
+
+class TestBootstrapGroupVariance:
+    def test_matches_the_analytic_poisson_variance(self):
+        # 400 single-record clusters of weight 1000, scaled to thousands: total = sum(w_i), Var = 400.
+        cluster_count = 400
+        variance = bootstrap_group_variance(
+            np.full(cluster_count, 7), np.full(cluster_count, 1000.0), np.arange(cluster_count), scale=1 / 1000.0, replicates=4000
+        )
+        assert variance.loc[7] == pytest.approx(400.0, rel=0.10)
+
+    def test_records_in_one_household_move_together(self):
+        # 200 clusters of two records each: each cluster total is 2, so Var = 200 * 2**2 = 800, not 400.
+        cluster_ids = np.repeat(np.arange(200), 2)
+        variance = bootstrap_group_variance(np.full(400, 7), np.full(400, 1000.0), cluster_ids, scale=1 / 1000.0, replicates=4000)
+        assert variance.loc[7] == pytest.approx(800.0, rel=0.10)
+
+    def test_is_deterministic_under_a_fixed_seed(self):
+        arguments = (np.array([1, 1, 2]), np.array([1.0, 2.0, 3.0]), np.array([0, 1, 2]), 1.0)
+        first = bootstrap_group_variance(*arguments, replicates=60, seed=5)
+        second = bootstrap_group_variance(*arguments, replicates=60, seed=5)
+        pd.testing.assert_series_equal(first, second)
+
+
+class TestClusterBootstrapVariance:
+    def test_one_row_per_unit_and_universe(self):
+        person_df = person_records(
+            [{"occ1990dd": 4, "CPSID": household} for household in range(30)]
+            + [{"occ1990dd": 8, "CPSID": 100 + household, "CLASSWKR": 13} for household in range(30)]
+        )
+        variance_df = cluster_bootstrap_variance(person_df, replicates=50)
+        assert set(zip(variance_df["occ1990dd"], variance_df["universe"])) == {(4, "all_employed"), (8, "all_employed"), (4, "wage_salary")}
+        assert (variance_df["sampling_variance"] > 0).all()

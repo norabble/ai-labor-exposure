@@ -36,13 +36,25 @@ Usage:
   python cps_detailed_panel.py promote
 """
 
+import os
+import shutil
+import sys
+from dataclasses import dataclass
+
 import numpy as np
 import pandas as pd
 from scipy import sparse
 
+import download_ipums_cps
 import ipums_cps_variables as ipums_variables
 from composition_displacement_validation import soc_major_to_dws_group
-from occ1990dd_reference import soc_reference_prefix
+from occ1990dd_reference import (
+    load_census_code_list,
+    load_dorn_crosswalk,
+    load_occ1990dd_groups,
+    soc_reference_prefix,
+    uncovered_codes,
+)
 
 UNIVERSES = ("all_employed", "wage_salary")
 TABULATION_COLUMNS = ["year", "occ1990dd", "universe", "employed_thousands", "person_months", "distinct_households", "months_observed"]
@@ -240,3 +252,304 @@ def cluster_bootstrap_variance(
             pd.DataFrame({"occ1990dd": variance.index.astype(int), "universe": universe, "sampling_variance": variance.to_numpy()})
         )
     return pd.concat(variance_frames, ignore_index=True)
+
+
+TABULATED_DIR = os.path.join(download_ipums_cps.RAW_DIR, "tabulated")
+REBUILT_PANEL_PATH = "data/output/cps_detailed_occupation_panel_rebuilt.csv"
+REBUILT_CROSSTAB_PATH = "data/output/cps_detailed_occ_crosstab_rebuilt.csv"
+REBUILT_GATES_PATH = "data/output/cps_detailed_gates_rebuilt.csv"
+SEED_PATH = "seeds/cps_detailed_occupation_panel.csv"
+CROSSTAB_SEED_PATH = "seeds/cps_detailed_occ_crosstab.csv"
+GATES_SEED_PATH = "seeds/cps_detailed_gates.csv"
+PUBLISHED_TEN_GROUP_PANEL_PATH = "seeds/cps_occupation_panel.csv"
+TOTAL_EMPLOYMENT_SERIES_ID = "LNU02000000"
+
+GATE_COLUMNS = ["gate", "scope", "observed", "threshold", "gated", "passed"]
+COMPLETE_YEAR_MONTHS = 12
+G1_FIRST_GATED_YEAR = 2003
+G1_TOLERANCE = 0.01
+G2_TOLERANCE = 0.01
+G6_MAXIMUM_UNMAPPED_SHARE = 0.01
+REQUIRED_GATES = ("G1", "G2", "G5", "G6")
+
+
+class GateFailureError(RuntimeError):
+    """A seed was about to be promoted from a build whose gates did not all pass."""
+
+
+def _as_bool(column: pd.Series) -> pd.Series:
+    """True only for real true values; NaN and 'False' read back from CSV are False."""
+    return column.astype(str).str.strip().str.lower().eq("true")
+
+
+def spine_lookup() -> dict[int, int]:
+    """IPUMS OCC1990 (1990 Census basis) -> occ1990dd, from Dorn's occ1990 table."""
+    crosswalk_df = load_dorn_crosswalk("1990")
+    return dict(zip(crosswalk_df["source_code"].astype(int), crosswalk_df["occ1990dd"].astype(int)))
+
+
+def gate_weight_column(year: int) -> str:
+    """The weight whose totals match BLS's published figures in that year."""
+    return "COMPWT" if year >= ipums_variables.COMPOSITE_WEIGHT_FIRST_YEAR else "WTFINL"
+
+
+def ten_group_lookups() -> dict[str, dict[int, str]]:
+    """Per coding block, raw Census code -> Phase 1 CPS group."""
+    return {block: census_code_ten_group_lookup(load_census_code_list(vintage)) for block, (_, _, vintage) in CODING_BLOCKS.items()}
+
+
+@dataclass
+class YearTables:
+    """Everything one year of microdata contributes to the seeds and the gates."""
+
+    panel_df: pd.DataFrame
+    crosstab_df: pd.DataFrame
+    ten_group_df: pd.DataFrame
+    summary: dict
+
+
+def build_year_tables(year: int, person_df: pd.DataFrame, spine: dict[int, int], lookups_by_block: dict[str, dict[int, str]]) -> YearTables:
+    """Tabulate one year: panel with variance, raw-code crosstab, direct ten-group totals, total and G6 share."""
+    employed_df = select_civilian_employed(person_df)
+    spine_df, unmapped_share = attach_occ1990dd(employed_df, spine)
+    panel_df = tabulate_year(spine_df, year).merge(cluster_bootstrap_variance(spine_df), on=["occ1990dd", "universe"], how="left")
+    gate_weight = gate_weight_column(year)
+    coding_block = coding_block_for_year(year)
+    ten_group_df = (
+        tabulate_ten_groups_direct(employed_df, year, lookups_by_block[coding_block], gate_weight)
+        if coding_block
+        else pd.DataFrame(columns=["year", "cps_group", "employed_thousands", "months_observed"])
+    )
+    summary = {**tabulate_total(employed_df, year, gate_weight), "unmapped_share": unmapped_share}
+    return YearTables(panel_df[PANEL_COLUMNS], tabulate_crosstab(spine_df, year), ten_group_df, summary)
+
+
+def read_year_persons(year: int, raw_dir: str = download_ipums_cps.RAW_DIR) -> pd.DataFrame | None:
+    """A downloaded year's civilian employed records, or None if the year is not downloaded."""
+    extract_dir = os.path.join(raw_dir, "basic", str(year))
+    if not download_ipums_cps.extract_is_downloaded(extract_dir):
+        return None
+    chunk_frames = [
+        select_civilian_employed(chunk_df[ipums_variables.BASIC_MONTHLY_VARIABLES])
+        for chunk_df in download_ipums_cps.read_extract(extract_dir)
+    ]
+    return pd.concat(chunk_frames, ignore_index=True)
+
+
+def _year_cache_paths(year: int, tabulated_dir: str) -> dict[str, str]:
+    return {name: os.path.join(tabulated_dir, f"{year}_{name}.csv") for name in ("panel", "crosstab", "ten_group", "summary")}
+
+
+def write_year_cache(year: int, year_tables: YearTables, tabulated_dir: str = TABULATED_DIR) -> None:
+    """Cache one year's tables, so an interrupted 44-year build resumes where it stopped."""
+    os.makedirs(tabulated_dir, exist_ok=True)
+    cache_paths = _year_cache_paths(year, tabulated_dir)
+    year_tables.panel_df.to_csv(cache_paths["panel"], index=False)
+    year_tables.crosstab_df.to_csv(cache_paths["crosstab"], index=False)
+    year_tables.ten_group_df.to_csv(cache_paths["ten_group"], index=False)
+    pd.DataFrame([year_tables.summary]).to_csv(cache_paths["summary"], index=False)
+
+
+def read_year_cache(year: int, tabulated_dir: str = TABULATED_DIR) -> YearTables | None:
+    """A cached year, or None if any of its four files is missing."""
+    cache_paths = _year_cache_paths(year, tabulated_dir)
+    if not all(os.path.exists(path) for path in cache_paths.values()):
+        return None
+    return YearTables(
+        pd.read_csv(cache_paths["panel"]),
+        pd.read_csv(cache_paths["crosstab"]),
+        pd.read_csv(cache_paths["ten_group"]),
+        pd.read_csv(cache_paths["summary"]).iloc[0].to_dict(),
+    )
+
+
+def _published_year_is_complete(published_panel_df: pd.DataFrame) -> pd.Series:
+    """Per published row: 12 recorded months, or no month count and a later published year exists."""
+    latest_year = published_panel_df["year"].max()
+    months = (
+        published_panel_df["months_observed"]
+        if "months_observed" in published_panel_df.columns
+        else pd.Series(np.nan, index=published_panel_df.index)
+    )
+    return (months == COMPLETE_YEAR_MONTHS) | (months.isna() & (published_panel_df["year"] < latest_year))
+
+
+def gate_g1(ten_group_df: pd.DataFrame, published_panel_df: pd.DataFrame) -> pd.DataFrame:
+    """G1: microdata mapped to the ten groups through raw OCC, against Phase 1's published series.
+
+    Gated from 2003 in complete years at 1%; every other matched row is reported.
+    """
+    published_df = published_panel_df.assign(published_complete=_published_year_is_complete(published_panel_df))
+    published_df = published_df.rename(columns={"employed_thousands": "published_thousands"})[
+        ["year", "cps_group", "published_thousands", "published_complete"]
+    ]
+    merged_df = ten_group_df.merge(published_df, on=["year", "cps_group"], how="inner")
+    relative_difference = (merged_df["employed_thousands"] / merged_df["published_thousands"] - 1).abs()
+    gated = (
+        (merged_df["months_observed"] == COMPLETE_YEAR_MONTHS)
+        & merged_df["published_complete"]
+        & (merged_df["year"] >= G1_FIRST_GATED_YEAR)
+    )
+    return pd.DataFrame(
+        {
+            "gate": "G1",
+            "scope": merged_df["year"].astype(str) + " " + merged_df["cps_group"],
+            "observed": relative_difference,
+            "threshold": G1_TOLERANCE,
+            "gated": gated,
+            "passed": (relative_difference <= G1_TOLERANCE).where(gated, None),
+        }
+    )[GATE_COLUMNS]
+
+
+def gate_g2(totals_df: pd.DataFrame, published_totals: pd.Series | None) -> pd.DataFrame:
+    """G2: economy-wide employment against LNU02000000 annual means — gated at 1% from 1998, reported before."""
+    if published_totals is None:
+        return pd.DataFrame(
+            [
+                {
+                    "gate": "G2",
+                    "scope": f"{TOTAL_EMPLOYMENT_SERIES_ID} unavailable",
+                    "observed": np.nan,
+                    "threshold": G2_TOLERANCE,
+                    "gated": True,
+                    "passed": False,
+                }
+            ]
+        )
+    published_thousands = totals_df["year"].map(published_totals)
+    relative_difference = (totals_df["total_thousands"] / published_thousands - 1).abs()
+    gated = (
+        (totals_df["year"] >= ipums_variables.COMPOSITE_WEIGHT_FIRST_YEAR)
+        & (totals_df["months_observed"] == COMPLETE_YEAR_MONTHS)
+        & published_thousands.notna()
+    )
+    return pd.DataFrame(
+        {
+            "gate": "G2",
+            "scope": totals_df["year"].astype(str),
+            "observed": relative_difference,
+            "threshold": G2_TOLERANCE,
+            "gated": gated,
+            "passed": (relative_difference <= G2_TOLERANCE).where(gated, None),
+        }
+    )[GATE_COLUMNS]
+
+
+def gate_g5(panel_df: pd.DataFrame, groups_df: pd.DataFrame) -> pd.DataFrame:
+    """G5: every occ1990dd code carrying employment falls in exactly one Dorn group."""
+    missing_codes = uncovered_codes(panel_df.loc[panel_df["employed_thousands"] > 0, "occ1990dd"].unique(), groups_df)
+    return pd.DataFrame(
+        [
+            {
+                "gate": "G5",
+                "scope": f"codes in no Dorn group: {missing_codes}",
+                "observed": float(len(missing_codes)),
+                "threshold": 0.0,
+                "gated": True,
+                "passed": not missing_codes,
+            }
+        ]
+    )
+
+
+def gate_g6(unmapped_by_year: pd.Series) -> pd.DataFrame:
+    """G6 (pinned by this plan): OCC1990 employment with no occ1990dd is at most 1% in every year."""
+    return pd.DataFrame(
+        {
+            "gate": "G6",
+            "scope": unmapped_by_year.index.astype(str),
+            "observed": unmapped_by_year.to_numpy(dtype=float),
+            "threshold": G6_MAXIMUM_UNMAPPED_SHARE,
+            "gated": True,
+            "passed": unmapped_by_year.to_numpy(dtype=float) <= G6_MAXIMUM_UNMAPPED_SHARE,
+        }
+    )[GATE_COLUMNS]
+
+
+def all_gates_pass(gates_df: pd.DataFrame, required_gates: tuple[str, ...] = REQUIRED_GATES) -> bool:
+    """True only if every required gate has at least one gated row and every gated row passed."""
+    gated_df = gates_df[_as_bool(gates_df["gated"])]
+    if any(gate not in set(gated_df["gate"]) for gate in required_gates):
+        return False
+    return bool(_as_bool(gated_df["passed"]).all())
+
+
+def promote_rebuilt(promotions: dict[str, str], gates_path: str, required_gates: tuple[str, ...] = REQUIRED_GATES) -> None:
+    """Copy rebuilt tables to their seed paths — only if the build's gate record shows every gate passed."""
+    gates_df = pd.read_csv(gates_path)
+    if not all_gates_pass(gates_df, required_gates):
+        failing_df = gates_df[_as_bool(gates_df["gated"]) & ~_as_bool(gates_df["passed"])]
+        raise GateFailureError(
+            f"Refusing to promote: {len(failing_df)} gated check(s) failed.\n{failing_df.head(25).to_string(index=False)}"
+        )
+    for source_path, destination_path in promotions.items():
+        shutil.copyfile(source_path, destination_path)
+
+
+def build_rebuilt_tables(
+    first_year: int,
+    last_year: int,
+    raw_dir: str = download_ipums_cps.RAW_DIR,
+    tabulated_dir: str = TABULATED_DIR,
+    panel_path: str = REBUILT_PANEL_PATH,
+    crosstab_path: str = REBUILT_CROSSTAB_PATH,
+    gates_path: str = REBUILT_GATES_PATH,
+) -> pd.DataFrame:
+    """Tabulate every downloaded year, run gates G1, G2, G5 and G6, and write the rebuilt tables and gate record."""
+    if ipums_variables.VERIFICATION_STATUS != "verified":
+        raise RuntimeError("ipums_cps_variables is unverified — complete plan Task 2 before tabulating real data")
+    from historical_displacement import fetch_annual_means
+
+    spine = spine_lookup()
+    lookups_by_block = ten_group_lookups()
+    collected_tables = []
+    for year in range(first_year, last_year + 1):
+        year_tables = read_year_cache(year, tabulated_dir)
+        if year_tables is None:
+            person_df = read_year_persons(year, raw_dir)
+            if person_df is None:
+                print(f"  {year}: not downloaded; skipped")
+                continue
+            year_tables = build_year_tables(year, person_df, spine, lookups_by_block)
+            write_year_cache(year, year_tables, tabulated_dir)
+        collected_tables.append(year_tables)
+        print(f"  {year}: {len(year_tables.panel_df)} cells, unmapped share {year_tables.summary['unmapped_share']:.4f}")
+
+    panel_df = pd.concat([tables.panel_df for tables in collected_tables], ignore_index=True)
+    crosstab_df = collapse_crosstab(pd.concat([tables.crosstab_df for tables in collected_tables], ignore_index=True))
+    ten_group_df = pd.concat([tables.ten_group_df for tables in collected_tables], ignore_index=True)
+    summary_df = pd.DataFrame([tables.summary for tables in collected_tables])
+
+    gates_df = pd.concat(
+        [
+            gate_g1(ten_group_df, pd.read_csv(PUBLISHED_TEN_GROUP_PANEL_PATH)),
+            gate_g2(summary_df, fetch_annual_means(TOTAL_EMPLOYMENT_SERIES_ID, first_year, last_year)),
+            gate_g5(panel_df, load_occ1990dd_groups()),
+            gate_g6(summary_df.set_index("year")["unmapped_share"]),
+        ],
+        ignore_index=True,
+    )
+    for output_path, output_df in ((panel_path, panel_df), (crosstab_path, crosstab_df), (gates_path, gates_df)):
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        output_df.to_csv(output_path, index=False)
+    print(f"  Gates: {'ALL PASS' if all_gates_pass(gates_df) else 'FAILED'} — {gates_path}")
+    return gates_df
+
+
+def main(arguments: list[str]) -> None:
+    """Command-line entry: `build FIRST_YEAR LAST_YEAR` or `promote`."""
+    if arguments[:1] == ["build"] and len(arguments) == 3:
+        build_rebuilt_tables(int(arguments[1]), int(arguments[2]))
+    elif arguments == ["promote"]:
+        promote_rebuilt(
+            {REBUILT_PANEL_PATH: SEED_PATH, REBUILT_CROSSTAB_PATH: CROSSTAB_SEED_PATH, REBUILT_GATES_PATH: GATES_SEED_PATH},
+            REBUILT_GATES_PATH,
+        )
+        print(f"  Promoted to {SEED_PATH}, {CROSSTAB_SEED_PATH}, {GATES_SEED_PATH}")
+    else:
+        raise SystemExit("usage: python cps_detailed_panel.py build FIRST_YEAR LAST_YEAR | promote")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

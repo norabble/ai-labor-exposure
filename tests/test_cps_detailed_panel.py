@@ -171,3 +171,110 @@ class TestClusterBootstrapVariance:
         variance_df = cluster_bootstrap_variance(person_df, replicates=50)
         assert set(zip(variance_df["occ1990dd"], variance_df["universe"])) == {(4, "all_employed"), (8, "all_employed"), (4, "wage_salary")}
         assert (variance_df["sampling_variance"] > 0).all()
+
+
+from cps_detailed_panel import (  # noqa: E402
+    GateFailureError,
+    all_gates_pass,
+    build_rebuilt_tables,
+    gate_g1,
+    gate_g2,
+    gate_g5,
+    gate_g6,
+    promote_rebuilt,
+)
+
+SALES = "sales and related occupations"
+
+
+def _published(rows):
+    return pd.DataFrame(rows, columns=["year", "cps_group", "employed_thousands", "months_observed"])
+
+
+class TestGateG1:
+    def test_a_complete_year_within_one_percent_passes(self):
+        rebuilt_df = pd.DataFrame({"year": [2010], "cps_group": [SALES], "employed_thousands": [100.5], "months_observed": [12]})
+        published_df = _published([[2010, SALES, 100.0, None], [2011, SALES, 100.0, None]])
+        gate_df = gate_g1(rebuilt_df, published_df)
+        assert gate_df["gated"].tolist() == [True]
+        assert gate_df["passed"].tolist() == [True]
+
+    def test_a_two_percent_gap_fails(self):
+        rebuilt_df = pd.DataFrame({"year": [2010], "cps_group": [SALES], "employed_thousands": [102.0], "months_observed": [12]})
+        gate_df = gate_g1(rebuilt_df, _published([[2010, SALES, 100.0, None], [2011, SALES, 100.0, None]]))
+        assert gate_df["passed"].tolist() == [False]
+
+    def test_the_latest_published_year_without_a_month_count_is_not_gated(self):
+        # A year with no month count is complete only if a later published year exists.
+        rebuilt_df = pd.DataFrame({"year": [2011], "cps_group": [SALES], "employed_thousands": [150.0], "months_observed": [12]})
+        gate_df = gate_g1(rebuilt_df, _published([[2010, SALES, 100.0, None], [2011, SALES, 100.0, None]]))
+        assert gate_df["gated"].tolist() == [False]
+
+    def test_partial_rebuilt_years_are_reported_not_gated(self):
+        rebuilt_df = pd.DataFrame({"year": [2010], "cps_group": [SALES], "employed_thousands": [150.0], "months_observed": [8]})
+        gate_df = gate_g1(rebuilt_df, _published([[2010, SALES, 100.0, None], [2011, SALES, 100.0, None]]))
+        assert gate_df["gated"].tolist() == [False]
+
+
+class TestGateG2:
+    def test_years_from_1998_are_gated_and_earlier_years_reported(self):
+        totals_df = pd.DataFrame({"year": [1997, 1998], "total_thousands": [130.0, 100.5], "months_observed": [12, 12]})
+        gate_df = gate_g2(totals_df, pd.Series({1997: 100.0, 1998: 100.0}))
+        assert gate_df["gated"].tolist() == [False, True]
+        assert bool(gate_df["passed"].iloc[1])
+
+    def test_an_unavailable_published_series_fails_rather_than_passing_vacuously(self):
+        totals_df = pd.DataFrame({"year": [2010], "total_thousands": [100.0], "months_observed": [12]})
+        gate_df = gate_g2(totals_df, None)
+        assert gate_df["gated"].tolist() == [True]
+        assert gate_df["passed"].tolist() == [False]
+
+
+class TestGateG5AndG6:
+    def test_g5_fails_when_an_employed_code_is_in_no_group(self):
+        panel_df = pd.DataFrame({"occ1990dd": [4, 905], "employed_thousands": [10.0, 1.0]})
+        groups_df = pd.DataFrame({"occ1990dd": [4], "dorn_group": ["exec"]})
+        assert gate_g5(panel_df, groups_df)["passed"].tolist() == [False]
+
+    def test_g6_gates_every_year_at_one_percent(self):
+        gate_df = gate_g6(pd.Series({1983: 0.004, 1984: 0.02}))
+        assert gate_df["passed"].tolist() == [True, False]
+
+
+def _gate_row(gate, gated, passed):
+    return {"gate": gate, "scope": "x", "observed": 0.0, "threshold": 0.01, "gated": gated, "passed": passed}
+
+
+class TestAllGatesPass:
+    def test_every_required_gate_must_have_a_gated_row(self):
+        gates_df = pd.DataFrame([_gate_row("G1", True, True), _gate_row("G2", False, None)])
+        assert not all_gates_pass(gates_df, ("G1", "G2"))
+
+    def test_a_reported_row_never_blocks(self):
+        gates_df = pd.DataFrame([_gate_row("G1", True, True), _gate_row("G1", False, None)])
+        assert all_gates_pass(gates_df, ("G1",))
+
+
+class TestPromote:
+    def test_refuses_when_a_gate_failed_and_copies_nothing(self, tmp_path):
+        gates_path = tmp_path / "gates.csv"
+        pd.DataFrame([_gate_row("G1", True, False)]).to_csv(gates_path, index=False)
+        source, destination = tmp_path / "rebuilt.csv", tmp_path / "seed.csv"
+        source.write_text("a\n1\n")
+        with pytest.raises(GateFailureError):
+            promote_rebuilt({str(source): str(destination)}, str(gates_path), ("G1",))
+        assert not destination.exists()
+
+    def test_copies_when_every_gate_passed(self, tmp_path):
+        gates_path = tmp_path / "gates.csv"
+        pd.DataFrame([_gate_row("G1", True, True)]).to_csv(gates_path, index=False)
+        source, destination = tmp_path / "rebuilt.csv", tmp_path / "seed.csv"
+        source.write_text("a\n1\n")
+        promote_rebuilt({str(source): str(destination)}, str(gates_path), ("G1",))
+        assert destination.read_text() == "a\n1\n"
+
+
+def test_the_build_refuses_until_task_2_has_verified_ipums(monkeypatch):
+    monkeypatch.setattr(ipums_variables, "VERIFICATION_STATUS", "unverified")
+    with pytest.raises(RuntimeError, match="Task 2"):
+        build_rebuilt_tables(1983, 1983)

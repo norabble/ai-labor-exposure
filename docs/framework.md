@@ -812,13 +812,19 @@ sensitivity check are in `docs/charts/composition_model_signal_over_time_cps.md`
 
 The CPS instrument above runs at ten occupation groups. Phase 2 raises the
 cross-sectional n by tabulating IPUMS CPS microdata directly, rather than the
-published ten-series route above, onto two finer grains — **~330 `occ1990dd`
+published ten-series route above, onto two finer grains — **333 `occ1990dd`
 occupations** (Autor and Dorn's time-consistent spine, chosen because Phase 1
 already pinned it and because a detailed 1983–2002 Census→SOC crosswalk does
-not exist published) and a **22-SOC-major rollup**, both 1983–2026 — plus a
-Displaced Worker Supplement validation at the coarser **Dorn partition,
-~25 occupation groups per survey**, the finest resolution DWS cell sizes can
-support. Neither grain replaces the ten-group CPS instrument above; each level
+not exist published), excluding the unclassified code 999, and a
+**22-SOC-major rollup**, both 1983–2026 — plus a Displaced Worker Supplement
+validation at the coarser **Dorn partition, ~25 occupation groups per
+survey**, the finest resolution DWS cell sizes can support. The
+published-crosswalk chain (below) reaches only **328 of the 333** codes; the
+remaining five exist solely in pre-2010 Census vintages with no route to a
+modern SOC code at all. Of the 328 the chain reaches, only **307 meet the 0.8
+labeled-share floor** with the model's real scores (measured 2026-09-23) —
+the rest are diluted below that floor by unlabeled SOC constituents. Neither
+grain replaces the ten-group CPS instrument above; each level
 writes its own files (`cps_detailed_*`, `occ1990dd_*`, `cps_major_*`,
 `dws_detailed_*`), and none carries a `level` column. CI never tabulates this
 level; `cps_detailed_panel.py` and `dws_detailed_panel.py` run only locally,
@@ -847,6 +853,29 @@ and the design returns for review. **This measured error is a lower bound for
 occupation vintages to SOC, so the compounded error in exactly the stretch
 Phase 2 buys (the pre-1994 span, spanning the 1990–91 downturn) cannot itself
 be measured and is not claimed to be bounded by the 2003+ figure.
+
+**Every build-time and pipeline-time gate, and what promotes a seed.** A
+seed is written only if every gate its build's gate record depends on
+passed — `promote_rebuilt` in `cps_detailed_panel.py` and
+`dws_detailed_panel.py` refuses to promote otherwise:
+
+| Gate | Check | Threshold | Runs in |
+|---|---|---|---|
+| **G1** | Microdata mapped to Phase 1's ten CPS groups through raw `OCC`, bypassing the bridge, against Phase 1's published series | Within 1% per group-year, `COMPWT`, gated from 2003 onward (`G1_TOLERANCE = 0.01`, `G1_FIRST_GATED_YEAR = 2003`); reported only before 2003 | Build (`cps_detailed_panel.py`) |
+| **G2** | Economy-wide civilian employment against the published CPS annual mean (`LNU02000000`) | Within 1% from 1998 (`G2_TOLERANCE = 0.01`), `COMPWT`; reported only before 1998 | Build (`cps_detailed_panel.py`) |
+| **G3** | Long-tenured displacement by Phase 1's ten groups against published Table 5 rows | Within 3% of the published figure or half a published thousand, whichever is looser (`G3_TOLERANCE = 0.03`, `G3_ROUNDING_THOUSANDS = 0.5`) | Build (`dws_detailed_panel.py`) |
+| **G4** | Chained vs. direct `occ1990dd` scores, correlated across units | r ≥ 0.8 in every coding block (`G4_MINIMUM_R = 0.8`); below it, no detailed-level or rollup result file is written and the design returns for review | Pipeline (`occ1990dd_soc_bridge.py`, from the committed crosstab seed) |
+| **G5** | Every `occ1990dd` code carrying employment falls in exactly one Dorn group | Structural — the partition must be exhaustive and non-overlapping | Build (`cps_detailed_panel.py`) and test |
+| **G6** | Civilian employment carrying an `OCC1990` code Dorn's table cannot map to any `occ1990dd` code | At most 1% of civilian employment, every year (`G6_MAXIMUM_UNMAPPED_SHARE = 0.01`) — added by the implementation plan, beyond the original design's gate list | Build (`cps_detailed_panel.py`) |
+| **G6D** | Lost-job weight in the DWS supplement reaching no `occ1990dd` code | At most 1% of lost-job weight, every survey (`G6D_MAXIMUM_UNMAPPED_SHARE = 0.01`) — added by the implementation plan | Build (`dws_detailed_panel.py`) |
+
+G1, G2, G5 and G6 gate `cps_detailed_panel.py`'s promotion
+(`REQUIRED_GATES = ("G1", "G2", "G5", "G6")`); G3 and G6D gate
+`dws_detailed_panel.py`'s (`REQUIRED_GATES = ("G3", "G6D")`) — two separate
+gate records, since the two builds promote independently. G4 alone runs in
+the pipeline rather than the build, because it needs the model's current
+scores, which change with every re-synthesis; it is checked fresh on every
+`main.py composition` run rather than once at build time.
 
 **Year-over-year noise at this grain is accepted by decision, not corrected.**
 A median-size `occ1990dd` occupation (~90k workers) carries a level relative

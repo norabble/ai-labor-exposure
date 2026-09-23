@@ -10,7 +10,7 @@ Each dot is one BLS-matched occupation. The x-axis is the rebound-adjusted expos
 
 ## The negative relationship is by construction
 
-Occupations with high rebound-adjusted exposure are predominantly Bounded — high `bounded_exposure_contribution` and low `pct_unbounded`. The dynamic model assigns these occupations large gross displacement and near-zero absorption, producing large negative net employment changes. Occupations near the origin on the x-axis are predominantly Unbounded — low gross displacement and high absorption — producing positive net changes.
+Occupations with high rebound-adjusted exposure are predominantly Bounded — high `bounded_exposure_contribution` and low `absorption_capacity`. The dynamic model assigns these occupations large gross displacement and near-zero absorption, producing large negative net employment changes. Occupations near the origin on the x-axis are predominantly Unbounded — low gross displacement and high absorption — producing positive net changes.
 
 The two models therefore tell complementary, not contradictory, stories about the same underlying structure.
 
@@ -18,13 +18,13 @@ The two models therefore tell complementary, not contradictory, stories about th
 
 The red (Bounded) cluster forms a near-linear diagonal from the upper-left (low exposure, slight positive change) to the lower-right (high exposure, deeply negative change). The linearity reflects that for a pure Bounded occupation, `net_employment_change ≈ −gross_displacement ≈ −bounded_exposure_contribution`.
 
-## Adversarial occupations: near the origin
+## Adversarial occupations: low exposure, positive net change
 
-Adversarial occupations (teal) cluster tightly around (0, 0). Their rebound-adjusted exposure is low (high rebound absorbs most of their penetration) and their net employment change is near zero (modest gross displacement, modest absorption). They sit in the corner where neither model assigns them much impact — appropriate for a demand type where arms-race escalation absorbs nearly all AI penetration.
+Adversarial occupations (teal) sit at low rebound-adjusted exposure (high rebound absorbs most of their penetration) and, because they absorb displaced labor on the same footing as Unbounded occupations, at moderately positive net employment change — just below the Unbounded ceiling, since their 0.1×penetration exposure still counts as displacement. The framework defines Adversarial as a carve-out from Unbounded, and both models now treat it that way.
 
 ## Unbounded occupations: two clusters
 
-Most Unbounded occupations cluster in the upper-left: low exposure score, positive or near-zero net change. But a subset — Data Warehousing Specialists, Computer Programmers, Business Intelligence Analysts — sits above the x-axis with moderate positive net change even at moderate exposure levels. These occupations are Unbounded-dominant (high `pct_unbounded`) but also have genuine AI penetration, so they receive meaningful absorption while contributing little gross displacement. The dynamic model treats them as net winners even though the rebound model assigns them a non-trivial (though moderate) exposure score.
+Most Unbounded occupations cluster in the upper-left: low exposure score, positive or near-zero net change. But a subset — Data Warehousing Specialists, Computer Programmers, Business Intelligence Analysts — sits above the x-axis with moderate positive net change even at moderate exposure levels. These occupations are Unbounded-dominant (high `absorption_capacity`) but also have genuine AI penetration, so they receive meaningful absorption while contributing little gross displacement. The dynamic model treats them as net winners even though the rebound model assigns them a non-trivial (though moderate) exposure score.
 
 ## How to read both models together
 

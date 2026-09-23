@@ -12,13 +12,13 @@ Each bar is one occupation. The x-axis is the dynamic model's `net_employment_ch
 
 The distribution has a pronounced spike near zero and long tails in both directions. This shape is a direct consequence of model structure:
 
-**The spike:** Most Bounded occupations have very low AI penetration — their gross displacement is near zero, and since they have little Unbounded capacity, their absorption is also near zero. Several hundred occupations accumulate at roughly 0%.
+**The spike:** Most Bounded occupations have very low AI penetration — their gross displacement is near zero, and since they have little absorption capacity, their absorption is also near zero. Several hundred occupations accumulate at roughly 0%.
 
 **The left tail:** A small number of heavily-penetrated Bounded occupations (Medical Records Specialists, Office Clerks, Customer Service Representatives) carry large gross displacement that is not offset by any Unbounded absorption. These generate the long left tail reaching −40%.
 
-**The right tail:** Pure Unbounded occupations (Nurse Midwives, Cardiologists, Computer Programmers) absorb displaced labor in proportion to their total employment, producing a spread of positive values. The ceiling around +25% is a model ceiling: any occupation with `pct_unbounded ≈ 1` and near-zero displacement receives the same absorption rate — `total_displaced / employment_weighted_avg_pct_unbounded` — so they converge.
+**The right tail:** Pure Unbounded occupations (Nurse Midwives, Cardiologists, Computer Programmers) absorb displaced labor in proportion to their total employment, producing a spread of positive values. The ceiling around +16% is a model ceiling: any occupation with `absorption_capacity ≈ 1` and near-zero displacement receives the same absorption rate — `total_displaced / employment_weighted_avg_absorption_capacity` — so they converge. Adversarial-dominant occupations sit just below the ceiling: they absorb on the same footing as Unbounded ones, but their 0.1×penetration exposure still counts as displacement.
 
-## The mean (+4.1%) is not the typical outcome
+## The mean (+2.9%) is not the typical outcome
 
 The mean is pulled rightward by the Unbounded tail. The median is closer to zero. Most occupations experience near-zero net change; the distribution is better summarized by its shape than its mean.
 

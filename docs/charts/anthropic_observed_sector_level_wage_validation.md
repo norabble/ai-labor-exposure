@@ -6,38 +6,40 @@
 
 ## What this chart shows
 
-Same layout as `anthropic_observed_sector_level_employment_validation.png` but with sector mean wage growth on the y-axis. Four panels: 2022→23, 2023→24, 2024→25, composite.
+Same layout as `anthropic_observed_sector_level_employment_validation.png` but with the growth of each major group's median wage (from `bls_sector_trends.csv`) on the y-axis. Four panels: 2022→23, 2023→24, 2024→25, composite.
 
 ## Correlation by period
 
 | Period | r | p |
 |--------|---|---|
-| 2022→2023 | −0.416 | 0.054 |
-| 2023→2024 | −0.315 | 0.154 |
-| 2024→2025 | +0.321 | 0.145 |
-| Composite | +0.299 | 0.177 |
+| 2022→2023 | −0.442 | 0.040 |
+| 2023→2024 | −0.484 | 0.022 |
+| 2024→2025 | +0.190 | 0.397 |
+| Composite | −0.502 | 0.017 |
 
-## The 2022→23 negative correlation is a post-COVID confound
+## Sectors with high observed coverage had the weakest median-wage growth
 
-**r = −0.416, p = 0.054** in 2022→23 appears borderline significant, but it reflects the same post-COVID wage recovery confound identified in the Eloundou model (see `eloundou_sector_level_wage_validation.md`).
+Measured against each major group's own median wage, this is the one sector-level wage result in the pipeline that is significant and robust: the composite r = −0.502 (p = 0.017) stays between −0.45 and −0.63 (all p ≤ 0.040) when any single sector is dropped, and two of the three annual periods are significant on their own. The direction is the hypothesised one for a gross coverage measure.
 
-The sectors with the highest observed AI task coverage are knowledge-work sectors (Computer and Mathematical at ~30–35%, Business/Financial at ~25–30%) that were insulated from COVID labor shortages and posted moderate wage growth in 2022→23. The sectors with the lowest observed AI coverage are physical and care occupations (Building/Grounds at ~2–3%, Food Prep at ~3–5%, Construction at ~3–5%) that experienced severe COVID labor shortages and posted above-average catch-up wage growth in 2022→23.
+The sectors with the highest observed coverage — Computer and Mathematical (35%), Office and Administrative Support (34%), Business and Financial (29%), Sales (27%), Legal (21%), Arts and Media (18%), Education (18%) — all posted composite median-wage growth of 5% to 16% over 2022→25, against 16% to 19% for Construction, Production, Installation and Repair, Food Preparation, Management, and Architecture and Engineering.
 
-For the Eloundou model, excluding the 6 most obvious post-COVID recovery sectors drops the 2022→23 wage correlation from r = −0.507 to r = −0.287 (p = 0.282), losing all significance. The same pattern almost certainly applies here — both measures assign low scores to physical sectors, so both pick up the same confound.
+## How much of this is the post-COVID recovery
 
-## The cross-model agreement does not rescue the finding
+Part. The sectors with the lowest coverage are physical and care occupations that were wage-suppressed during COVID and recovered first, and the 2022→23 period carries that catch-up. But excluding the six most obvious recovery sectors (Construction, Production, Personal Care, Food Preparation, Installation and Repair, Healthcare Support) leaves the 2022→23 correlation at r = −0.322 and the composite at r = −0.421 (p = 0.105) — attenuated, not gone. The remaining relationship is low wage growth in the high-coverage knowledge sectors themselves, which the recovery story does not explain.
 
-The fact that both Eloundou and Anthropic observed show negative 2022→23 wage correlations was initially interpreted as strengthening the case for a real AI wage signal. However, both measures share the same structural property: they assign low scores to physical, site-dependent sectors. The agreement simply reflects that both measures are correlated with the post-COVID recovery confound in the same direction. It is not independent evidence of an AI mechanism.
+## The Eloundou measure does not share this result
 
 | Period | Eloundou wage r | Anthropic observed wage r |
 |--------|----------------|--------------------------|
-| 2022→2023 | −0.504 * | −0.416 † |
-| 2023→2024 | +0.228 | −0.315 |
-| 2024→2025 | +0.380 | +0.321 |
-| Composite | +0.245 | +0.299 |
+| 2022→2023 | −0.394 | −0.442 * |
+| 2023→2024 | −0.333 | −0.484 * |
+| 2024→2025 | +0.298 | +0.190 |
+| Composite | −0.345 | −0.502 * |
 
-(* p<0.05, † p<0.10)
+(* p<0.05)
+
+Both measures assign low scores to physical sectors, so both pick up the recovery confound in 2022→23. Only observed coverage — what AI is actually being used for, rather than what it theoretically could do — carries a signal beyond it. See `eloundou_sector_level_wage_validation.md`.
 
 ## What this means for the wage validation
 
-There is no credible AI-driven wage signal in 2022→23 from either model. The 2024→25 positive trending (r ≈ +0.30–+0.38) across both models is more interesting — if it holds in future BLS releases, it would be consistent with a genuine AI productivity-to-wage transmission in exposed sectors — but with n = 22 it remains inconclusive.
+Neither demand-type model has a sector-level wage signal (`sector_level_wage_validation.md`, `dynamic_sector_level_wage_validation.md`), so the demand-type discount discards wage information the underlying coverage measure carries. Whether the coverage–wage relationship is AI-driven or a composition effect of knowledge-sector wage cycles cannot be settled at n = 22; the 2024→25 sign flip to weakly positive is worth watching in future releases.

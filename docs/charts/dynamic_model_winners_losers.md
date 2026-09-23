@@ -10,7 +10,7 @@ The top half shows the 20 occupations with the largest positive `net_employment_
 
 ## The split is categorical
 
-Every gainer is Unbounded; every loser is Bounded. There are no mixed cases in the top 40. This is a structural consequence of the model: Unbounded occupations contribute zero gross displacement (their Adversarial and Bounded contributions are zero by definition of being Unbounded-dominant), so their net change equals their absorption. Bounded occupations contribute large gross displacement and, having low `pct_unbounded`, absorb very little.
+Every gainer is Unbounded; every loser is Bounded. There are no mixed cases in the top 40. This is a structural consequence of the model: pure Unbounded occupations contribute zero gross displacement, so their net change equals their absorption. Bounded occupations contribute large gross displacement and, having little absorption capacity, absorb very little. Adversarial occupations absorb on the same footing as Unbounded ones (mean net change +9%, only 3 of 44 below zero), but their 0.1×penetration exposure still counts as displacement, so they never quite reach the ceiling and do not appear in the top 20.
 
 ## Losers: administrative and clerical work under concentrated pressure
 
@@ -23,10 +23,10 @@ These occupations also top the `highest_exposure_occupations.png` chart. The two
 
 ## Gainers: healthcare specialists and scientists
 
-The top 20 are dominated by healthcare specialists, scientists, and mathematical occupations — Nurse Midwives, Cardiologists, Ophthalmologists, Paramedics, Microbiologists, Neuropsychologists, Computer Programmers, Operations Research Analysts. Nearly all show approximately the same +25% gain.
+The top 20 are dominated by healthcare specialists, scientists, and mathematical occupations — Nurse Midwives, Cardiologists, Ophthalmologists, Paramedics, Microbiologists, Neuropsychologists, Computer Programmers, Operations Research Analysts. Nearly all show approximately the same +16% gain.
 
-The convergence to a common ceiling is a model artifact: any occupation with `pct_unbounded ≈ 1` receives the same absorption rate. The model does not distinguish between a Cardiologist and a Computer Programmer when distributing displaced labor — both have near-total Unbounded capacity, so both get the same rate.
+The convergence to a common ceiling is a model artifact: any occupation with `absorption_capacity ≈ 1` receives the same absorption rate. The model does not distinguish between a Cardiologist and a Computer Programmer when distributing displaced labor — both have near-total Unbounded capacity, so both get the same rate.
 
 ## A key interpretive limitation
 
-The model sends displaced administrative clerks to Nurse Midwives and Cardiologists by the conservation constraint. The math is correct under the model's assumptions, but the implied labor reallocation is not economically plausible over any near-to-medium term horizon: workers displaced from medical records transcription cannot retrain as surgeons. The absorption mechanism distributes displaced labor in proportion to total Unbounded headcount, not skill adjacency. A future version of the model would weight absorption by retraining feasibility or occupational proximity, which would dampen the gains for high-credential Unbounded occupations and increase them for Unbounded occupations that are more accessible to displaced workers.
+The model sends displaced administrative clerks to Nurse Midwives and Cardiologists by the conservation constraint. The math is correct under the model's assumptions, but the implied labor reallocation is not economically plausible over any near-to-medium term horizon: workers displaced from medical records transcription cannot retrain as surgeons. The absorption mechanism distributes displaced labor in proportion to total absorption-capacity headcount, not skill adjacency. A future version of the model would weight absorption by retraining feasibility or occupational proximity, which would dampen the gains for high-credential absorbing occupations and increase them for those that are more accessible to displaced workers.

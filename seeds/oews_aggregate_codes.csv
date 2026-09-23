@@ -1,0 +1,63 @@
+generation,oews_code,oews_title,member_soc_code,source
+soc2000,47-2111,Electricians,47-2111,missing_from_crosswalk
+soc2010,13-1078,"Human Resources, Training, and Labor Relations Specialists, All Other*",13-1071,title
+soc2010,13-1078,"Human Resources, Training, and Labor Relations Specialists, All Other*",13-1075,title
+soc2010,15-1179,"Information Security Analysts, Web Developers, and Computer Network Architects",15-1122,title
+soc2010,15-1179,"Information Security Analysts, Web Developers, and Computer Network Architects",15-1134,title
+soc2010,15-1179,"Information Security Analysts, Web Developers, and Computer Network Architects",15-1143,title
+soc2010,15-1799,"Computer Occupations, All Other*",15-1199,title
+soc2010,21-1798,"Community and Social Service Specialists, All Other*",21-1094,title
+soc2010,21-1798,"Community and Social Service Specialists, All Other*",21-1099,title
+soc2010,25-2041,"Special Education Teachers, Preschool, Kindergarten, and Elementary School*",25-2051,title
+soc2010,25-2041,"Special Education Teachers, Preschool, Kindergarten, and Elementary School*",25-2052,title
+soc2010,25-2041,"Special Education Teachers, Preschool, Kindergarten, and Elementary School*",25-2059,title
+soc2010,25-3999,"Teachers and Instructors, All Other*",25-3099,title
+soc2010,29-1111,Registered Nurses*,29-1141,title
+soc2010,29-1111,Registered Nurses*,29-1151,title
+soc2010,29-1111,Registered Nurses*,29-1161,title
+soc2010,29-1111,Registered Nurses*,29-1171,title
+soc2010,29-2037,Radiologic Technologists and Technicians*,29-2034,title
+soc2010,29-2037,Radiologic Technologists and Technicians*,29-2035,title
+soc2010,29-2799,"Health Technologists and Technicians, All Other*",29-2057,title
+soc2010,29-2799,"Health Technologists and Technicians, All Other*",29-2092,title
+soc2010,29-2799,"Health Technologists and Technicians, All Other*",29-2099,title
+soc2010,29-9799,"Healthcare Practitioners and Technical Workers, All Other*",29-9092,title
+soc2010,29-9799,"Healthcare Practitioners and Technical Workers, All Other*",29-9099,title
+soc2010,31-1012,"Nursing Aides, Orderlies, and Attendants*",31-1014,title
+soc2010,31-1012,"Nursing Aides, Orderlies, and Attendants*",31-1015,title
+soc2010,31-9799,"Healthcare Support Workers, All Other*",31-9097,title
+soc2010,31-9799,"Healthcare Support Workers, All Other*",31-9099,title
+soc2010,39-4831,"Funeral Service Managers, Directors, Morticians, and Undertakers",11-9061,title
+soc2010,39-4831,"Funeral Service Managers, Directors, Morticians, and Undertakers",39-4031,title
+soc2010,41-9799,"Sales and Related Workers, All Other*",41-9099,title
+soc2010,43-9799,"Office and Administrative Support Workers, All Other*",43-3099,title
+soc2010,43-9799,"Office and Administrative Support Workers, All Other*",43-9199,title
+soc2010,47-4799,"Construction and Related Workers, All Other*",47-2231,title
+soc2010,47-4799,"Construction and Related Workers, All Other*",47-4099,title
+soc2010,49-9799,"Installation, Maintenance, and Repair Workers, All Other*",49-9081,title
+soc2010,49-9799,"Installation, Maintenance, and Repair Workers, All Other*",49-9099,title
+soc2010,51-9399,"Production Workers, All Other*",51-3099,title
+soc2010,51-9399,"Production Workers, All Other*",51-9199,title
+soc2010,21-1018,"Substance Abuse, Behavioral Disorder, and Mental Health Counselors",21-1011,hybrid_file
+soc2010,21-1018,"Substance Abuse, Behavioral Disorder, and Mental Health Counselors",21-1014,hybrid_file
+soc2010,25-3097,"Teachers and Instructors, All Other, Except Substitute Teachers",25-3099,hybrid_file
+soc2010,25-3098,Substitute Teachers,25-3099,hybrid_file
+soc2010,51-2028,"Electrical, Electronic, and Electromechanical Assemblers, Except Coil Winders, Tapers, and Finishers",51-2022,hybrid_file
+soc2010,51-2028,"Electrical, Electronic, and Electromechanical Assemblers, Except Coil Winders, Tapers, and Finishers",51-2023,hybrid_file
+soc2010,51-2098,"Assemblers and Fabricators, All Other, Including Team Assemblers",51-2092,hybrid_file
+soc2010,51-2098,"Assemblers and Fabricators, All Other, Including Team Assemblers",51-2099,hybrid_file
+soc2010,53-1048,"First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors",53-1021,hybrid_file
+soc2010,53-1048,"First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors",53-1031,hybrid_file
+soc2018,21-1018,"Substance Abuse, Behavioral Disorder, and Mental Health Counselors",21-1011,title
+soc2018,21-1018,"Substance Abuse, Behavioral Disorder, and Mental Health Counselors",21-1014,title
+soc2018,25-2052,"Special Education Teachers, Kindergarten and Elementary School",25-2055,title
+soc2018,25-2052,"Special Education Teachers, Kindergarten and Elementary School",25-2056,title
+soc2018,25-9045,"Teaching Assistants, Except Postsecondary",25-9042,title
+soc2018,25-9045,"Teaching Assistants, Except Postsecondary",25-9043,title
+soc2018,25-9045,"Teaching Assistants, Except Postsecondary",25-9049,title
+soc2018,51-2028,"Electrical, Electronic, and Electromechanical Assemblers, Except Coil Winders, Tapers, and Finishers",51-2022,title
+soc2018,51-2028,"Electrical, Electronic, and Electromechanical Assemblers, Except Coil Winders, Tapers, and Finishers",51-2023,title
+soc2018,53-1047,"First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors",53-1042,title
+soc2018,53-1047,"First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors",53-1043,title
+soc2018,53-1047,"First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors",53-1044,title
+soc2018,53-1047,"First-Line Supervisors of Transportation and Material Moving Workers, Except Aircraft Cargo Handling Supervisors",53-1049,title

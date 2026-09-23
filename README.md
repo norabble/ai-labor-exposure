@@ -24,18 +24,24 @@ wage data (2022–2025). What the demand-type lens buys you:
 
 **Sectors with the most Unbounded "absorption capacity" are measurably gaining
 employment.** The dynamic equilibrium model's signed `net_employment_change`
-score correlates with actual BLS sector employment growth at **r = +0.528
-(p = 0.012)** economy-wide, strengthening to **r ≈ +0.54 (p < 0.01)** in both
-2023→24 and 2024→25. Raw "AI can do this task" coverage shows no comparable
-sector signal (r = +0.19, n.s.), confirming that the demand-type stratification
-is doing work. **Caveat:** extending the historical baseline back to 2005 reveals
-that the dynamic model's sector signal was already present pre-2022 (r ≈ +0.43–0.48
-in 2005→07) — Unbounded sectors have long grown faster. AI may be amplifying a
-pre-existing structural trend rather than producing a clean post-2022 break.
-The rebound-adjusted displacement score does not carry this pre-AI signal, making
-it the more specifically AI-attributable measure. Cleanly separating amplification
-from the secular baseline requires longer post-AI OEWS time series (2025→2026
-annual data is not yet available).
+score correlates with actual BLS sector employment growth at **r = +0.509
+(p = 0.015)** economy-wide, and **r = +0.53 (p = 0.011)** and **+0.48 (p = 0.023)**
+in 2023→24 and 2024→25. The result leans on one sector: dropping Office and
+Administrative Support leaves r = +0.34 (p = 0.13), so quote the leave-one-out
+range (+0.34 to +0.59) beside the headline. Raw "AI can do this task" coverage
+shows no comparable sector signal (Eloundou r = +0.02, n.s.), confirming that the
+demand-type stratification is doing work. **Caveat:** extending the historical
+baseline back to 2005 reveals that the dynamic model's sector signal was already
+present pre-2022 (r = +0.40 to +0.50 in 2006→09, +0.37 in 2017→18) — sectors
+with Unbounded and Adversarial demand have long grown faster, under earlier
+waves of automation as well. The AI-era values sit inside that pre-AI range, not
+above it. The demand-type classification is a general theory of labor-saving
+disruption, so a pre-AI analog is expected; what AI adds is the expectation of
+acceleration, which three post-2022 years cannot yet show. Sector growth is
+measured from BLS major-group totals, so these correlations do not depend on
+which detailed SOC codes survived the 2010 and 2018 code revisions.
+Occupation-level history is likewise measured on harmonized crosswalk units
+(`bls_harmonized_trends.csv`).
 
 ![Dynamic model sector-level employment validation](docs/charts/images/dynamic_sector_level_employment_validation.png)
 
@@ -88,7 +94,24 @@ Create a `.env` file in the project root:
 ```
 GCP_PROJECT_ID=your-gcp-project-id
 GCP_LOCATION=us-central1
+BLS_CONTACT_EMAIL=you@example.com
+BLS_API_KEY=your-bls-api-key
 ```
+
+`BLS_CONTACT_EMAIL` is required only by `download_dws.py`. BLS enforces its bot
+policy at the edge and answers 403 to any request whose User-Agent does not carry
+a parenthesised contact email. Note that it also refuses any User-Agent
+containing the string `github.com`, so a GitHub noreply address
+(`12345+you@users.noreply.github.com`) will not work — use a deliverable address
+or a provider alias such as `you+bls@gmail.com`. Your own address is what their
+policy asks for, and it is deliberately not committed to the repository.
+
+`BLS_API_KEY` is optional and used by `historical_displacement.py` for the BLS
+time-series API. Requests succeed without one, but a free key registered at
+https://data.bls.gov/registrationEngine/ raises the limits from 25 requests/day,
+25 series and 10 years per request to 500/day, 50 series and 20 years — enough to
+pull 2005–2025 in a single call. It is a different system from the news-release
+pages above, so it does not replace `BLS_CONTACT_EMAIL`.
 
 ## Running the Pipeline
 
@@ -110,6 +133,7 @@ make run-pipeline
 # or selectively:
 uv run main.py synthesize plot
 uv run main.py validate
+uv run main.py composition   # experimental: the demand composition model
 ```
 
 Stages:
@@ -139,15 +163,38 @@ Scores are non-negative; higher values indicate greater structural exposure pres
 
 ### Dynamic labor equilibrium (macro)
 
-A second model holds total employment constant and redistributes Bounded + Adversarial displacement economy-wide into Unbounded-capacity occupations:
+A second model holds total employment constant and redistributes Bounded + Adversarial displacement economy-wide into occupations whose demand can expand to receive it — Unbounded and Adversarial capacity (Adversarial is a carve-out from Unbounded, so it absorbs on the same footing):
 
 ```
-gross_displacement  = bounded_exposure_contribution + adversarial_exposure_contribution
-absorption          = (pct_unbounded / economy_avg_pct_unbounded) × total_displaced
+gross_displacement    = bounded_exposure_contribution + adversarial_exposure_contribution
+absorption_capacity   = pct_unbounded + pct_adversarial
+absorption            = (absorption_capacity / economy_avg_absorption_capacity) × total_displaced
 net_employment_change = absorption − gross_displacement
 ```
 
-The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.528 (p = 0.012) for composite employment growth, strengthening to r ≈ +0.54 (p < 0.01) in 2023→24 and 2024→25.
+The signed `net_employment_change` sums to zero by construction. Validated against BLS at the sector level: r = +0.509 (p = 0.015) for composite employment growth, r = +0.53 (p = 0.011) in 2023→24 and +0.48 (p = 0.023) in 2024→25; leave-one-sector-out range +0.34 to +0.59.
+
+### Demand composition (experimental)
+
+A third model asks whether the taxonomy is a *general* theory of how productivity shocks route into labor demand, rather than an AI-specific one. It is the dynamic model with every trace of technology-exposure data removed: displacement comes from demand-type composition alone, scaled by a single economy-wide displacement rate `D` drawn primarily from the BLS Displaced Worker Supplement.
+
+```
+gross_displacement    = D × [0.9 × pct_bounded + 0.1 × pct_adversarial]
+absorption_capacity   = pct_unbounded + pct_adversarial
+net_employment_change = K × absorption_capacity − gross_displacement
+```
+
+Because `K = D·κ` with `κ` a pure composition constant, the whole score vector scales with `D` and **`D` cancels out of every cross-sectional correlation**. That is what keeps the test non-circular: a single economy-wide scalar cannot manufacture a pattern across 22 sectors or 770 occupations, so `D` sets the amplitude and the taxonomy sets the shape.
+
+Regressing each model's per-period sector-level fit strength on the change in unemployment plus an AI-era indicator (n = 18 periods, COVID excluded) gives:
+
+| Term | Composition only | Dynamic, AI penetration |
+|---|---|---|
+| general baseline (intercept) | **+0.238, p = 0.0004** | +0.238, p < 0.0001 |
+| change in unemployment | **+0.160, p = 0.0024** | +0.076, p = 0.028 |
+| AI era | +0.093, p = 0.476 | **+0.238, p = 0.021** |
+
+The taxonomy has a real sector-level signal before AI, from a predictor carrying no technology data at all; its strength is strongly cyclical; and AI penetration adds a separable increment that composition alone does not. See [docs/framework.md](docs/framework.md) § Demand Composition Model.
 
 ## Outputs
 
@@ -155,6 +202,8 @@ The signed `net_employment_change` sums to zero by construction. Validated again
 |------|-------------|
 | `occupation_exposure_report.csv` | Per-occupation rebound-adjusted exposure score, demand type breakdown, penetration metrics, and exposure tier |
 | `occupation_dynamic_model_report.csv` | Dynamic equilibrium model — signed `net_employment_change` per occupation; employment-weighted sum = 0 |
+| `occupation_composition_model_report.csv` | Demand composition model — the same equilibrium with all AI data stripped from the predictor (experimental) |
+| `composition_cycle_decomposition.csv` | Each model's fit strength split into a general baseline, a cyclical component, and an AI-era increment |
 | `bls_trends.csv` | BLS employment and wage growth by occupation (2022–2025) |
 | `exposure_volume_by_occupation.csv` | Employment-weighted AI exposure by occupation |
 | `exposure_volume_by_group.csv` | Same metric rolled up to SOC major group |

@@ -143,3 +143,57 @@ def test_the_build_refuses_until_task_2_has_verified_ipums(monkeypatch):
     monkeypatch.setattr(ipums_variables, "VERIFICATION_STATUS", "unverified")
     with pytest.raises(RuntimeError, match="Task 2"):
         dws_detailed_panel.build_rebuilt_panel([2024])
+
+
+class TestHarmonizedRoute:
+    """Tests for the harmonized DWOCC1990 route (when DWS_LOST_JOB_OCC1990_VARIABLE is set)."""
+
+    @pytest.fixture
+    def harmonized_fixture(self, monkeypatch):
+        """Override the autouse fixture to enable the harmonized route."""
+        monkeypatch.setattr(ipums_variables, "DWS_DISPLACED_REASON_CODES", (1, 2, 3))
+        monkeypatch.setattr(ipums_variables, "DWS_LOST_JOB_OCC1990_VARIABLE", "DWOCC1990")
+
+    def harmonized_records(self, rows):
+        defaults = {
+            "YEAR": 2024,
+            "SERIAL": 1,
+            "AGE": 45,
+            ipums_variables.DWS_WEIGHT_VARIABLE: 2000.0,
+            ipums_variables.DWS_REASON_VARIABLE: 1,
+            ipums_variables.DWS_TENURE_VARIABLE: 5.0,
+            "DWOCC1990": 4,  # Known code from spine
+            ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 9999,  # Ignored in harmonized route
+        }
+        return pd.DataFrame([{**defaults, **row} for row in rows])
+
+    def test_known_dwocc1990_code_maps_through_spine_with_full_weight(self, harmonized_fixture):
+        """A record with a known 1990-basis code maps to its spine target with share 1 and unmapped share 0."""
+        # Code 4 maps to occ1990dd 4 in the spine
+        mapped_df, unmapped_share = attach_lost_job_occ1990dd(self.harmonized_records([{}]), 2024)
+        assert len(mapped_df) == 1
+        assert mapped_df["occ1990dd"].iloc[0] == 4
+        assert mapped_df["allocated_weight"].iloc[0] == 2000.0  # Full weight, no splitting
+        assert unmapped_share == pytest.approx(0.0)
+
+    def test_unknown_dwocc1990_code_is_reported_unmapped(self, harmonized_fixture):
+        """A DWOCC1990 value absent from the spine is reported in unmapped share."""
+        # Code 99999 is not in the spine
+        mapped_df, unmapped_share = attach_lost_job_occ1990dd(self.harmonized_records([{"DWOCC1990": 99999}]), 2024)
+        assert len(mapped_df) == 0
+        assert unmapped_share == pytest.approx(1.0)
+
+    def test_raw_dwocc_column_is_ignored_in_harmonized_route(self, harmonized_fixture):
+        """The raw DWOCC column value is ignored when DWOCC1990 is present."""
+        # DWOCC1990=4 (valid), DWOCC=9999 (invalid if used)
+        mapped_df, unmapped_share = attach_lost_job_occ1990dd(self.harmonized_records([{}]), 2024)
+        assert len(mapped_df) == 1
+        assert mapped_df["occ1990dd"].iloc[0] == 4  # Proves it used DWOCC1990, not DWOCC
+        assert unmapped_share == pytest.approx(0.0)
+
+    def test_mixed_known_and_unknown_dwocc1990_codes_split_unmapped(self, harmonized_fixture):
+        """Multiple records with a mix of known and unknown codes report split unmapped share."""
+        records = self.harmonized_records([{"DWOCC1990": 4}, {"DWOCC1990": 99999}])  # 50% known, 50% unknown
+        mapped_df, unmapped_share = attach_lost_job_occ1990dd(records, 2024)
+        assert len(mapped_df) == 1  # Only the known code is mapped
+        assert unmapped_share == pytest.approx(0.5)  # Half the weight is unmapped

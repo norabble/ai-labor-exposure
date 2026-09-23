@@ -27,6 +27,7 @@ Inputs:
 Outputs: none directly — cps_detailed_validation.py writes what these functions build.
 """
 
+import os
 from dataclasses import dataclass
 
 import numpy as np
@@ -40,6 +41,7 @@ from occ1990dd_reference import (
     load_census_code_list,
     load_dorn_crosswalk,
 )
+from synthesize_impacts import DEMAND_TYPE_PCT_COLUMNS, attach_dominant_demand
 
 OEWS_TRENDS_PATH = "data/output/bls_trends.csv"
 ANCHOR_YEAR = "2022"
@@ -137,3 +139,99 @@ def build_bridge_weights(anchor_employment: pd.Series, soc_tables: SocTables | N
     census_members_df = census_code_members(load_census_code_list(CHAIN_CENSUS_VINTAGE), CHAIN_CENSUS_VINTAGE, soc_tables)
     chain_edges_df = build_chain_edges(load_dorn_crosswalk(CHAIN_CENSUS_VINTAGE), census_members_df)
     return equal_division_weights(chain_edges_df, "occ1990dd", anchor_employment)
+
+
+COMPOSITION_REPORT_PATH = "data/output/occupation_composition_model_report.csv"
+DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
+ANTHROPIC_EXPOSURE_PATH = "data/raw/anthropic_job_exposure.csv"
+
+PCT_COLUMNS = list(DEMAND_TYPE_PCT_COLUMNS.values())
+# A SOC code is "labeled" when the demand composition model scored it.
+LABEL_SCORE_COLUMN = "composition_net_change"
+# The four era-test scores, in composition_era_validation.SCORE_CONFIGS order.
+SOC_SCORE_COLUMNS = ["composition_net_change", "net_employment_change", "occupation_exposure", "observed_exposure"]
+# Per-occupation displacement rates, for the Phase 2b predicted displacement.
+DISPLACEMENT_SCORE_COLUMNS = ["composition_gross_displacement", "dynamic_gross_displacement"]
+
+
+def score_units(weights_df: pd.DataFrame, owner_column: str, soc_scores_df: pd.DataFrame, score_columns: list[str]) -> pd.DataFrame:
+    """Weighted mean of each score over an owner's labeled SOC members, with the labeled share.
+
+    Weights are renormalised over the members that carry each column, so an
+    unlabeled member dilutes nothing — it only lowers `labeled_share`, which the
+    validation filters on. `dominant_demand` is re-derived from the blended pct_*
+    columns with attach_dominant_demand, never carried from a member.
+    """
+    merged_df = weights_df.merge(soc_scores_df, left_on="soc_2018_code", right_on="OCC_CODE", how="left")
+    is_labeled = (
+        merged_df[LABEL_SCORE_COLUMN].notna() if LABEL_SCORE_COLUMN in merged_df.columns else pd.Series(False, index=merged_df.index)
+    )
+    merged_df = merged_df.assign(is_labeled=is_labeled)
+    blended_columns = list(dict.fromkeys(score_columns + [column for column in PCT_COLUMNS if column in merged_df.columns]))
+
+    unit_rows = []
+    for owner, member_df in merged_df.groupby(owner_column):
+        unit_row: dict[str, float | int | str] = {
+            owner_column: owner,
+            "labeled_share": float(member_df.loc[member_df["is_labeled"], "weight"].sum()),
+        }
+        for column in blended_columns:
+            scored_df = member_df.dropna(subset=[column])
+            weight_total = scored_df["weight"].sum()
+            unit_row[column] = float((scored_df[column] * scored_df["weight"]).sum() / weight_total) if weight_total > 0 else float("nan")
+        unit_rows.append(unit_row)
+
+    units_df = pd.DataFrame(unit_rows)
+    if all(column in units_df.columns for column in PCT_COLUMNS):
+        units_df = attach_dominant_demand(units_df)
+    return units_df
+
+
+def load_soc_scores(
+    composition_report_path: str = COMPOSITION_REPORT_PATH,
+    dynamic_report_path: str = DYNAMIC_REPORT_PATH,
+    anthropic_path: str = ANTHROPIC_EXPOSURE_PATH,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Every model score per SOC 2018 code, and which of the four era-test scores are present.
+
+    Both reports call their net change `net_employment_change`; the composition
+    model's is renamed `composition_net_change`, matching composition_era_validation.
+    """
+    composition_df = pd.read_csv(
+        composition_report_path, usecols=["OCC_CODE", "net_employment_change", "gross_displacement", *PCT_COLUMNS]
+    ).rename(columns={"net_employment_change": "composition_net_change", "gross_displacement": "composition_gross_displacement"})
+    dynamic_df = pd.read_csv(
+        dynamic_report_path, usecols=["OCC_CODE", "net_employment_change", "occupation_exposure", "gross_displacement"]
+    ).rename(columns={"gross_displacement": "dynamic_gross_displacement"})
+    soc_scores_df = composition_df.merge(dynamic_df, on="OCC_CODE", how="outer", validate="one_to_one")
+
+    if os.path.exists(anthropic_path):
+        anthropic_df = pd.read_csv(anthropic_path).rename(columns={"occ_code": "OCC_CODE"})
+        if "observed_exposure" in anthropic_df.columns:
+            observed_df = anthropic_df[["OCC_CODE", "observed_exposure"]].drop_duplicates(subset=["OCC_CODE"])
+            soc_scores_df = soc_scores_df.merge(observed_df, on="OCC_CODE", how="left")
+
+    score_columns = [column for column in SOC_SCORE_COLUMNS if column in soc_scores_df.columns]
+    return soc_scores_df, score_columns
+
+
+def occ1990dd_composition_stability(
+    weights_df: pd.DataFrame, occupation_trends_df: pd.DataFrame, earliest_year: str = "1999"
+) -> pd.DataFrame:
+    """Share of each unit's bridge weight on SOC codes OEWS already published in `earliest_year`.
+
+    The detailed-grain version of cps_historical_panel.sector_composition_stability:
+    a bound on where carrying 2025 labels back is least safe, not a measure of
+    task-content drift.
+    """
+    antecedent_df = occupation_trends_df.drop_duplicates(subset=["OCC_CODE"]).set_index("OCC_CODE")
+    has_antecedent = antecedent_df[f"TOT_EMP_{earliest_year}"].notna()
+    stability_df = weights_df.assign(has_antecedent=weights_df["soc_2018_code"].map(has_antecedent).fillna(False).astype(bool))
+    stability_df["stable_weight"] = stability_df["weight"] * stability_df["has_antecedent"]
+    return (
+        stability_df.groupby("occ1990dd", as_index=False)["stable_weight"]
+        .sum()
+        .rename(columns={"stable_weight": "stable_share"})
+        .sort_values("stable_share")
+        .reset_index(drop=True)
+    )

@@ -108,3 +108,70 @@ class TestRealChain:
     def test_chief_executives_reach_soc_chief_executives(self, bridge_weights_df):
         # occ1990dd 4 is chief executives and general administrators (Dorn).
         assert "11-1011" in set(bridge_weights_df.loc[bridge_weights_df["occ1990dd"] == 4, "soc_2018_code"])
+
+
+from occ1990dd_soc_bridge import load_soc_scores, occ1990dd_composition_stability, score_units  # noqa: E402
+
+
+def _soc_scores(rows):
+    return pd.DataFrame(rows, columns=["OCC_CODE", "composition_net_change", "pct_bounded", "pct_unbounded", "pct_adversarial"])
+
+
+class TestScoreUnits:
+    def test_score_is_the_weighted_mean_over_labeled_members_only(self):
+        weights_df = pd.DataFrame({"occ1990dd": [1, 1, 1], "soc_2018_code": ["A", "B", "C"], "weight": [0.5, 0.25, 0.25]})
+        soc_scores_df = _soc_scores([["A", 0.2, 1.0, 0.0, 0.0], ["B", 0.8, 0.0, 1.0, 0.0]])  # C unlabeled
+        unit_df = score_units(weights_df, "occ1990dd", soc_scores_df, ["composition_net_change"])
+        # Renormalised over A and B: (0.5*0.2 + 0.25*0.8) / 0.75
+        assert unit_df.loc[0, "composition_net_change"] == pytest.approx(0.4)
+        assert unit_df.loc[0, "labeled_share"] == pytest.approx(0.75)
+
+    def test_dominant_demand_is_rederived_from_the_blended_composition(self):
+        """A unit whose largest member is Bounded can still be Unbounded-dominant once blended.
+
+        Regression guard for the Chief Executives failure mode: the label must come
+        from the aggregated pct_* columns, never be carried from a member.
+        """
+        weights_df = pd.DataFrame({"occ1990dd": [1, 1, 1], "soc_2018_code": ["A", "B", "C"], "weight": [0.4, 0.3, 0.3]})
+        soc_scores_df = _soc_scores([["A", 0.1, 0.6, 0.4, 0.0], ["B", 0.1, 0.1, 0.9, 0.0], ["C", 0.1, 0.1, 0.9, 0.0]])
+        unit_df = score_units(weights_df, "occ1990dd", soc_scores_df, ["composition_net_change"])
+        assert unit_df.loc[0, "dominant_demand"] == "Unbounded"
+        assert unit_df.loc[0, "pct_unbounded"] == pytest.approx(0.4 * 0.4 + 0.3 * 0.9 + 0.3 * 0.9)
+
+    def test_a_unit_with_no_labeled_member_has_nan_score_and_zero_labeled_share(self):
+        weights_df = pd.DataFrame({"occ1990dd": [9], "soc_2018_code": ["Z"], "weight": [1.0]})
+        unit_df = score_units(weights_df, "occ1990dd", _soc_scores([["A", 0.2, 1.0, 0.0, 0.0]]), ["composition_net_change"])
+        assert pd.isna(unit_df.loc[0, "composition_net_change"])
+        assert unit_df.loc[0, "labeled_share"] == 0.0
+
+
+class TestLoadSocScores:
+    def test_renames_the_two_net_change_columns_apart(self, tmp_path):
+        composition_path, dynamic_path = tmp_path / "composition.csv", tmp_path / "dynamic.csv"
+        pd.DataFrame(
+            {
+                "OCC_CODE": ["11-1011"],
+                "net_employment_change": [0.1],
+                "gross_displacement": [0.02],
+                "pct_bounded": [0.5],
+                "pct_unbounded": [0.5],
+                "pct_adversarial": [0.0],
+            }
+        ).to_csv(composition_path, index=False)
+        pd.DataFrame(
+            {"OCC_CODE": ["11-1011"], "net_employment_change": [0.3], "occupation_exposure": [0.4], "gross_displacement": [0.05]}
+        ).to_csv(dynamic_path, index=False)
+        soc_scores_df, score_columns = load_soc_scores(str(composition_path), str(dynamic_path), str(tmp_path / "absent.csv"))
+        assert soc_scores_df.loc[0, "composition_net_change"] == pytest.approx(0.1)
+        assert soc_scores_df.loc[0, "net_employment_change"] == pytest.approx(0.3)
+        assert soc_scores_df.loc[0, "composition_gross_displacement"] == pytest.approx(0.02)
+        assert soc_scores_df.loc[0, "dynamic_gross_displacement"] == pytest.approx(0.05)
+        assert score_columns == ["composition_net_change", "net_employment_change", "occupation_exposure"]
+
+
+class TestCompositionStability:
+    def test_stable_share_is_the_weight_on_members_oews_published_in_1999(self):
+        weights_df = pd.DataFrame({"occ1990dd": [1, 1], "soc_2018_code": ["A", "B"], "weight": [0.7, 0.3]})
+        occupation_trends_df = pd.DataFrame({"OCC_CODE": ["A", "B"], "TOT_EMP_1999": [100.0, None]})
+        stability_df = occ1990dd_composition_stability(weights_df, occupation_trends_df)
+        assert stability_df.loc[0, "stable_share"] == pytest.approx(0.7)

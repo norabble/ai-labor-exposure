@@ -277,6 +277,7 @@ def run_stage() -> None:
     import composition_era_validation
     import cps_detailed_validation
     import cps_historical_panel
+    import dws_detailed_validation
 
     synthesize()
     # Must run before composition_era_validation.run(), which reads
@@ -289,6 +290,8 @@ def run_stage() -> None:
     # seeds have not been built, which is always the case in CI before the first local build.
     cps_detailed_validation.run()
     composition_displacement_validation.run()
+    # Phase 2b: Dorn-group displacement validation from the IPUMS seeds; skips when absent.
+    dws_detailed_validation.run()
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 
+import dws_detailed_validation
 from dws_detailed_validation import build_detailed_displacement_comparison, latest_complete_employment, predicted_by_group
 
 GROUPS = ["exec", "prof", "cleric", "retsales", "product", "operator"]
@@ -55,6 +56,70 @@ def test_observed_proportional_to_predicted_gives_a_perfect_share_correlation():
     assert headline["n_groups"].iloc[0] == 6
 
 
+def test_share_rows_carry_the_leave_one_out_range_and_rate_rows_do_not():
+    comparison_df = build_detailed_displacement_comparison(*_inputs(lambda index: 5.0 * (index + 1)))
+    share_row = comparison_df[(comparison_df["model"] == "composition") & (comparison_df["measure"] == "share")].iloc[0]
+    assert share_row["leave_one_out_min"] <= share_row["leave_one_out_max"]
+    rate_row = comparison_df[(comparison_df["model"] == "composition") & (comparison_df["measure"] == "rate")].iloc[0]
+    assert pd.isna(rate_row["leave_one_out_min"])
+    assert pd.isna(rate_row["leave_one_out_max"])
+
+
 def test_a_constant_prediction_gives_no_correlation_row():
     comparison_df = build_detailed_displacement_comparison(*_inputs(lambda index: 5.0 * (index + 1)))
     assert comparison_df[comparison_df["model"] == "dynamic"].empty
+
+
+class TestRunWithdrawsOnAStaleG4Verdict:
+    """dws_detailed_validation.run() must never act on a possibly-stale
+    occ1990dd_bridge_check.csv left over from an earlier, different run."""
+
+    def _stub_common_inputs(self, monkeypatch, tmp_path):
+        dws_seed_path = tmp_path / "dws_panel.csv"
+        pd.DataFrame({"survey_year": [2024], "dorn_group": ["exec"], "tenure_class": ["all_tenures"], "displaced_thousands": [1.0]}).to_csv(
+            dws_seed_path, index=False
+        )
+        monkeypatch.setattr(dws_detailed_validation, "load_detailed_panel", lambda: pd.DataFrame({"placeholder": [1]}))
+        unit_scores_path = tmp_path / "occ1990dd_scores.csv"
+        pd.DataFrame({"occ1990dd": [1], "composition_gross_displacement": [0.01]}).to_csv(unit_scores_path, index=False)
+        monkeypatch.setattr(dws_detailed_validation, "UNIT_SCORES_OUTPUT_PATH", str(unit_scores_path))
+        monkeypatch.setattr(
+            dws_detailed_validation,
+            "build_detailed_displacement_comparison",
+            lambda *arguments: pd.DataFrame(
+                {
+                    "survey_year": [2024],
+                    "model": ["composition"],
+                    "tenure_class": ["all_tenures"],
+                    "measure": ["share"],
+                    "pearson_r": [0.5],
+                    "pearson_p": [0.1],
+                    "spearman_r": [0.5],
+                    "spearman_p": [0.1],
+                    "n_groups": [6],
+                }
+            ),
+        )
+        return dws_seed_path
+
+    def test_an_explicit_false_verdict_withholds_even_if_the_file_says_passed(self, monkeypatch, tmp_path):
+        dws_seed_path = self._stub_common_inputs(monkeypatch, tmp_path)
+        bridge_check_path = tmp_path / "bridge_check.csv"
+        pd.DataFrame({"coding_block": ["2003_2010"], "block_gate_passed": [True]}).to_csv(bridge_check_path, index=False)
+        monkeypatch.setattr(dws_detailed_validation, "BRIDGE_CHECK_OUTPUT_PATH", str(bridge_check_path))
+        monkeypatch.setattr(dws_detailed_validation, "g4_passed", lambda check_df: True)
+        with pytest.warns(UserWarning, match="G4"):
+            assert dws_detailed_validation.run(str(dws_seed_path), g4_passed_this_run=False) is None
+
+    def test_an_explicit_true_verdict_proceeds_even_without_a_bridge_check_file(self, monkeypatch, tmp_path):
+        dws_seed_path = self._stub_common_inputs(monkeypatch, tmp_path)
+        monkeypatch.setattr(dws_detailed_validation, "BRIDGE_CHECK_OUTPUT_PATH", str(tmp_path / "absent_bridge_check.csv"))
+        monkeypatch.setattr(dws_detailed_validation, "OUTPUT_PATH", str(tmp_path / "output.csv"))
+        result_df = dws_detailed_validation.run(str(dws_seed_path), g4_passed_this_run=True)
+        assert result_df is not None
+
+    def test_the_standalone_default_falls_back_to_the_on_disk_bridge_check(self, monkeypatch, tmp_path):
+        dws_seed_path = self._stub_common_inputs(monkeypatch, tmp_path)
+        monkeypatch.setattr(dws_detailed_validation, "BRIDGE_CHECK_OUTPUT_PATH", str(tmp_path / "absent_bridge_check.csv"))
+        with pytest.warns(UserWarning, match="G4"):
+            assert dws_detailed_validation.run(str(dws_seed_path)) is None

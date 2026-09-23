@@ -43,7 +43,19 @@ from occ1990dd_reference import load_occ1990dd_groups
 from occ1990dd_soc_bridge import g4_passed
 
 OUTPUT_PATH = "data/output/composition_model_displacement_validation_detailed.csv"
-OUTPUT_COLUMNS = ["survey_year", "model", "tenure_class", "measure", "pearson_r", "pearson_p", "spearman_r", "spearman_p", "n_groups"]
+OUTPUT_COLUMNS = [
+    "survey_year",
+    "model",
+    "tenure_class",
+    "measure",
+    "pearson_r",
+    "pearson_p",
+    "spearman_r",
+    "spearman_p",
+    "leave_one_out_min",
+    "leave_one_out_max",
+    "n_groups",
+]
 MODEL_RATE_COLUMNS = {"composition": "composition_gross_displacement", "dynamic": "dynamic_gross_displacement"}
 HEADLINE_TENURE_CLASS = "all_tenures"
 HEADLINE_MEASURE = "share"
@@ -120,13 +132,34 @@ def build_detailed_displacement_comparison(
                     continue
                 comparison_rows.append(
                     {"survey_year": int(survey_year), "model": model, "tenure_class": tenure_class, "measure": measure}
-                    | {column: correlations[column] for column in ("pearson_r", "pearson_p", "spearman_r", "spearman_p", "n_groups")}
+                    | {
+                        column: correlations.get(column, float("nan"))
+                        for column in (
+                            "pearson_r",
+                            "pearson_p",
+                            "spearman_r",
+                            "spearman_p",
+                            "leave_one_out_min",
+                            "leave_one_out_max",
+                            "n_groups",
+                        )
+                    }
                 )
     return pd.DataFrame(comparison_rows, columns=OUTPUT_COLUMNS)
 
 
-def run(dws_seed_path: str = DWS_SEED_PATH) -> pd.DataFrame | None:
-    """Score both models' displacement against every DWS survey at Dorn-group level."""
+def run(dws_seed_path: str = DWS_SEED_PATH, g4_passed_this_run: bool | None = None) -> pd.DataFrame | None:
+    """Score both models' displacement against every DWS survey at Dorn-group level.
+
+    `g4_passed_this_run` is the caller's own fresh verdict — pass
+    `cps_detailed_validation.LAST_RUN_G4_PASSED` from a `run_stage` that just ran that module in
+    the same pipeline invocation. Withholds unless it is exactly True: `cps_detailed_validation`
+    withholds on any failure or early return before writing `occ1990dd_bridge_check.csv`, so an
+    explicit False here means the file on disk (if any) does not reflect this run and must not be
+    trusted. Left at the default None when called standalone (e.g. from a shell or a notebook,
+    with no fresher verdict available) — that falls back to recomputing the verdict from the
+    on-disk bridge check, the same check this function has always made.
+    """
     if not os.path.exists(dws_seed_path):
         warnings.warn(
             f"{dws_seed_path} absent — built locally from IPUMS (dws_detailed_panel.py); detailed DWS validation skipped", stacklevel=2
@@ -136,7 +169,16 @@ def run(dws_seed_path: str = DWS_SEED_PATH) -> pd.DataFrame | None:
     if panel_df is None or not os.path.exists(UNIT_SCORES_OUTPUT_PATH):
         warnings.warn("The detailed CPS panel or occ1990dd scores are absent; detailed DWS validation skipped", stacklevel=2)
         return None
-    if not os.path.exists(BRIDGE_CHECK_OUTPUT_PATH) or not g4_passed(pd.read_csv(BRIDGE_CHECK_OUTPUT_PATH)):
+    if g4_passed_this_run is False:
+        warnings.warn(
+            "Gate G4 did not pass in this run; detailed DWS validation withheld rather than trusting a possibly stale "
+            "occ1990dd_bridge_check.csv from an earlier run",
+            stacklevel=2,
+        )
+        return None
+    if g4_passed_this_run is None and (
+        not os.path.exists(BRIDGE_CHECK_OUTPUT_PATH) or not g4_passed(pd.read_csv(BRIDGE_CHECK_OUTPUT_PATH))
+    ):
         warnings.warn(
             "Gate G4 has not passed; detailed DWS validation withheld, since its predictions travel through the bridge", stacklevel=2
         )

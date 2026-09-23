@@ -291,7 +291,9 @@ def run_stage() -> None:
     cps_detailed_validation.run()
     composition_displacement_validation.run()
     # Phase 2b: Dorn-group displacement validation from the IPUMS seeds; skips when absent.
-    dws_detailed_validation.run()
+    # g4_passed_this_run carries THIS run's gate G4 verdict from the call above, so this never
+    # trusts a possibly-stale occ1990dd_bridge_check.csv left over from an earlier, different run.
+    dws_detailed_validation.run(g4_passed_this_run=cps_detailed_validation.LAST_RUN_G4_PASSED)
 
 
 if __name__ == "__main__":

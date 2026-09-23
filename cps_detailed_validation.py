@@ -94,6 +94,12 @@ OCCUPATION_TRENDS_PATH = "data/output/bls_trends.csv"
 
 PERIOD_COLUMNS = ["period", "score", "fit_r", "fit_p", "n_units", "era", "is_covid", "is_seam", "reliability", "fit_r_corrected"]
 
+# This run's gate G4 verdict, set every time run() executes (including every early-return path)
+# so a caller — dws_detailed_validation.run(g4_passed_this_run=...) in particular — never acts on
+# a stale on-disk occ1990dd_bridge_check.csv left over from an earlier, different run. None means
+# "this run never reached the G4 check" (an earlier warning already explains why).
+LAST_RUN_G4_PASSED: bool | None = None
+
 
 def labeled_units(unit_scores_df: pd.DataFrame) -> pd.Index:
     """Units whose chained score rests on at least 80% labeled SOC weight."""
@@ -448,7 +454,14 @@ def run(
     A missing seed warns and skips, like every other seed-backed instrument here.
     A failed G4 still writes the bridge check but withholds every detailed-level
     and rollup result: a result resting on an unfit bridge is not published.
+
+    Sets the module-level `LAST_RUN_G4_PASSED` on every path (True, False, or None if this run
+    never reached the G4 check), so a caller can tell `dws_detailed_validation.run()` this run's
+    verdict rather than letting it trust a possibly-stale `occ1990dd_bridge_check.csv` from an
+    earlier run.
     """
+    global LAST_RUN_G4_PASSED
+    LAST_RUN_G4_PASSED = None
     panel_df = load_detailed_panel(seed_path)
     if panel_df is None:
         warnings.warn(
@@ -491,7 +504,8 @@ def run(
     _write(check_df, BRIDGE_CHECK_OUTPUT_PATH)
     for coding_block, block_r in check_df.groupby("coding_block")["block_pearson_r"].first().items():
         print(f"  G4 {coding_block}: chained vs direct r = {block_r:+.3f}")
-    if not g4_passed(check_df):
+    LAST_RUN_G4_PASSED = g4_passed(check_df)
+    if not LAST_RUN_G4_PASSED:
         warnings.warn(
             "Gate G4 failed: the chained bridge does not track direct Census-code scoring in every coding block. "
             "Detailed-level and 22-major results are withheld; the design returns for review.",

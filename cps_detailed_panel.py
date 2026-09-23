@@ -36,6 +36,8 @@ Usage:
   python cps_detailed_panel.py promote
 """
 
+import hashlib
+import json
 import os
 import shutil
 import sys
@@ -49,6 +51,7 @@ import download_ipums_cps
 import ipums_cps_variables as ipums_variables
 from composition_displacement_validation import soc_major_to_dws_group
 from occ1990dd_reference import (
+    DORN_CROSSWALK_DIR,
     load_census_code_list,
     load_dorn_crosswalk,
     load_occ1990dd_groups,
@@ -102,10 +105,21 @@ def universe_mask(person_df: pd.DataFrame, universe: str) -> pd.Series:
 
 
 def household_cluster_ids(person_df: pd.DataFrame) -> pd.Series:
-    """The bootstrap cluster of each record: a linked household, or a household-month, per Task 2's decision."""
-    if ipums_variables.HOUSEHOLD_CLUSTER == "CPSID":
-        return person_df["CPSID"].astype("int64").astype(str)
-    return person_df["YEAR"].astype(str) + "_" + person_df["MONTH"].astype(str) + "_" + person_df["SERIAL"].astype(str)
+    """The bootstrap cluster of each record: a linked household, or a household-month, per Task 2's decision.
+
+    CPSID == 0 means IPUMS could not link that household across months, not that every such
+    record belongs to the same household — collapsing them into one cluster "0" would badly
+    understate variance for any code with several unlinked records. Those records fall back to
+    their own household-month id (prefixed so a fallback id can never collide with a real CPSID).
+    """
+    household_month_ids = person_df["YEAR"].astype(str) + "_" + person_df["MONTH"].astype(str) + "_" + person_df["SERIAL"].astype(str)
+    if ipums_variables.HOUSEHOLD_CLUSTER != "CPSID":
+        return household_month_ids
+    cluster_ids = person_df["CPSID"].astype("int64")
+    return pd.Series(
+        np.where(cluster_ids == 0, "unlinked_" + household_month_ids, cluster_ids.astype(str)),
+        index=person_df.index,
+    )
 
 
 def tabulate_year(spine_df: pd.DataFrame, year: int, weight_column: str = "WTFINL") -> pd.DataFrame:
@@ -255,6 +269,8 @@ def cluster_bootstrap_variance(
 
 
 TABULATED_DIR = os.path.join(download_ipums_cps.RAW_DIR, "tabulated")
+SPINE_SEED_PATH = os.path.join(DORN_CROSSWALK_DIR, "occ1990_occ1990dd.csv")
+CACHE_MANIFEST_FILENAME = "manifest.json"
 REBUILT_PANEL_PATH = "data/output/cps_detailed_occupation_panel_rebuilt.csv"
 REBUILT_CROSSTAB_PATH = "data/output/cps_detailed_occ_crosstab_rebuilt.csv"
 REBUILT_GATES_PATH = "data/output/cps_detailed_gates_rebuilt.csv"
@@ -329,8 +345,11 @@ def read_year_persons(year: int, raw_dir: str = download_ipums_cps.RAW_DIR) -> p
     extract_dir = os.path.join(raw_dir, "basic", str(year))
     if not download_ipums_cps.extract_is_downloaded(extract_dir):
         return None
+    # reindex rather than a plain column selection: a variable ipums_variables.variables_for_year
+    # omitted for this year's extract (currently only COMPWT, before 1998) is absent from the
+    # downloaded CSV, and must read back as NaN here rather than raise KeyError.
     chunk_frames = [
-        select_civilian_employed(chunk_df[ipums_variables.BASIC_MONTHLY_VARIABLES])
+        select_civilian_employed(chunk_df.reindex(columns=ipums_variables.BASIC_MONTHLY_VARIABLES))
         for chunk_df in download_ipums_cps.read_extract(extract_dir)
     ]
     return pd.concat(chunk_frames, ignore_index=True)
@@ -348,6 +367,51 @@ def write_year_cache(year: int, year_tables: YearTables, tabulated_dir: str = TA
     year_tables.crosstab_df.to_csv(cache_paths["crosstab"], index=False)
     year_tables.ten_group_df.to_csv(cache_paths["ten_group"], index=False)
     pd.DataFrame([year_tables.summary]).to_csv(cache_paths["summary"], index=False)
+
+
+def compute_cache_manifest(spine_seed_path: str = SPINE_SEED_PATH) -> dict:
+    """Everything a cached year's tabulation depends on besides the raw microdata itself.
+
+    A per-year cache file only records the tabulation, not the constants and seed that produced
+    it — so a change to any of them (the employed/wage-salary universe definitions, the household
+    cluster choice, the bootstrap parameters, or the occ1990dd spine crosswalk itself) must
+    invalidate every cached year, not silently keep serving results built under the old
+    definitions. `spine_seed_path` is hashed by its contents, not its mtime, so a checkout that
+    changes the file's timestamp without changing its content is still a cache hit.
+    """
+    with open(spine_seed_path, "rb") as spine_file:
+        spine_sha256 = hashlib.sha256(spine_file.read()).hexdigest()
+    return {
+        "employed_empstat_codes": list(ipums_variables.EMPLOYED_EMPSTAT_CODES),
+        "wage_salary_classwkr_codes": list(ipums_variables.WAGE_SALARY_CLASSWKR_CODES),
+        "household_cluster": ipums_variables.HOUSEHOLD_CLUSTER,
+        "minimum_age": ipums_variables.MINIMUM_AGE,
+        "bootstrap_replicates": BOOTSTRAP_REPLICATES,
+        "bootstrap_block_size": BOOTSTRAP_BLOCK_SIZE,
+        "bootstrap_seed": BOOTSTRAP_SEED,
+        "spine_seed_sha256": spine_sha256,
+    }
+
+
+def _cache_manifest_path(tabulated_dir: str) -> str:
+    return os.path.join(tabulated_dir, CACHE_MANIFEST_FILENAME)
+
+
+def write_cache_manifest(tabulated_dir: str, spine_seed_path: str = SPINE_SEED_PATH) -> None:
+    """Record the constants and spine this build's cache was tabulated under."""
+    os.makedirs(tabulated_dir, exist_ok=True)
+    with open(_cache_manifest_path(tabulated_dir), "w") as manifest_file:
+        json.dump(compute_cache_manifest(spine_seed_path), manifest_file, sort_keys=True, indent=2)
+
+
+def cache_is_valid(tabulated_dir: str, spine_seed_path: str = SPINE_SEED_PATH) -> bool:
+    """True only if a manifest was already written here and it matches the current constants and spine."""
+    manifest_path = _cache_manifest_path(tabulated_dir)
+    if not os.path.exists(manifest_path):
+        return False
+    with open(manifest_path) as manifest_file:
+        stored_manifest = json.load(manifest_file)
+    return stored_manifest == compute_cache_manifest(spine_seed_path)
 
 
 def read_year_cache(year: int, tabulated_dir: str = TABULATED_DIR) -> YearTables | None:
@@ -479,10 +543,14 @@ def promote_rebuilt(promotions: dict[str, str], gates_path: str, required_gates:
     """Copy rebuilt tables to their seed paths — only if the build's gate record shows every gate passed."""
     gates_df = pd.read_csv(gates_path)
     if not all_gates_pass(gates_df, required_gates):
+        gated_gates = set(gates_df.loc[_as_bool(gates_df["gated"]), "gate"])
+        missing_gates = [gate for gate in required_gates if gate not in gated_gates]
         failing_df = gates_df[_as_bool(gates_df["gated"]) & ~_as_bool(gates_df["passed"])]
-        raise GateFailureError(
-            f"Refusing to promote: {len(failing_df)} gated check(s) failed.\n{failing_df.head(25).to_string(index=False)}"
-        )
+        message_parts = [f"Refusing to promote: {len(failing_df)} gated check(s) failed."]
+        if missing_gates:
+            message_parts.append(f"Required gate(s) with no gated row at all: {missing_gates}.")
+        message_parts.append(failing_df.head(25).to_string(index=False))
+        raise GateFailureError("\n".join(message_parts))
     for source_path, destination_path in promotions.items():
         shutil.copyfile(source_path, destination_path)
 
@@ -503,10 +571,16 @@ def build_rebuilt_tables(
 
     spine = spine_lookup()
     lookups_by_block = ten_group_lookups()
+    cache_valid = cache_is_valid(tabulated_dir)
+    if not cache_valid:
+        print(f"  Cache manifest at {tabulated_dir} is absent or stale (constants or spine seed changed) — recomputing every year")
     collected_tables = []
+    cached_year_count = 0
     for year in range(first_year, last_year + 1):
-        year_tables = read_year_cache(year, tabulated_dir)
-        if year_tables is None:
+        year_tables = read_year_cache(year, tabulated_dir) if cache_valid else None
+        if year_tables is not None:
+            cached_year_count += 1
+        else:
             person_df = read_year_persons(year, raw_dir)
             if person_df is None:
                 print(f"  {year}: not downloaded; skipped")
@@ -515,7 +589,13 @@ def build_rebuilt_tables(
             write_year_cache(year, year_tables, tabulated_dir)
         collected_tables.append(year_tables)
         print(f"  {year}: {len(year_tables.panel_df)} cells, unmapped share {year_tables.summary['unmapped_share']:.4f}")
+    write_cache_manifest(tabulated_dir)
+    print(f"  {cached_year_count} of {len(collected_tables)} tabulated years came from cache")
 
+    if not collected_tables:
+        raise RuntimeError(
+            f"No year in {first_year}-{last_year} is downloaded to {raw_dir} — nothing to tabulate. Run download_ipums_cps.py basic first."
+        )
     panel_df = pd.concat([tables.panel_df for tables in collected_tables], ignore_index=True)
     crosstab_df = collapse_crosstab(pd.concat([tables.crosstab_df for tables in collected_tables], ignore_index=True))
     ten_group_df = pd.concat([tables.ten_group_df for tables in collected_tables], ignore_index=True)

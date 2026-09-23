@@ -81,11 +81,11 @@ class FakeSession:
         self._responses = list(responses)
 
     def get(self, url, params=None, **kwargs):
-        self.calls.append(("GET", url, params))
+        self.calls.append(("GET", url, params, kwargs))
         return self._responses.pop(0)
 
     def post(self, url, params=None, json=None, headers=None, **kwargs):
-        self.calls.append(("POST", url, params, json, headers))
+        self.calls.append(("POST", url, params, json, headers, kwargs))
         return self._responses.pop(0)
 
 
@@ -180,6 +180,65 @@ class TestDownloadExtract:
 
         with pytest.raises(RuntimeError, match="sha256 mismatch"):
             client.download_extract(status, str(tmp_path))
+
+
+class TestRequestTimeouts:
+    """A hung TCP connection never returns from `Session.get`/`.post`, so
+    `wait_for_extract`'s overall timeout budget (checked only between calls) cannot
+    guard against it unless every individual request also carries its own timeout."""
+
+    def test_get_all_sample_info_passes_the_request_timeout(self):
+        fake_session = FakeSession([FakeResponse(json_data={"data": [], "links": {"nextPage": None}})])
+        client = download_ipums_cps.IpumsCpsApi("test-key", session=fake_session)
+
+        client.get_all_sample_info("cps")
+
+        _, _, _, call_kwargs = fake_session.calls[0]
+        assert call_kwargs.get("timeout") == download_ipums_cps.REQUEST_TIMEOUT_SECONDS
+
+    def test_submit_extract_passes_the_request_timeout(self):
+        fake_session = FakeSession([FakeResponse(json_data={"number": 1})])
+        client = download_ipums_cps.IpumsCpsApi("test-key", session=fake_session)
+
+        client.submit_extract({"description": "a probe extract"})
+
+        _, _, _, _, _, call_kwargs = fake_session.calls[0]
+        assert call_kwargs.get("timeout") == download_ipums_cps.REQUEST_TIMEOUT_SECONDS
+
+    def test_wait_for_extract_passes_the_request_timeout(self):
+        fake_session = FakeSession([FakeResponse(json_data={"status": "completed", "downloadLinks": {}})])
+        client = download_ipums_cps.IpumsCpsApi("test-key", session=fake_session)
+
+        client.wait_for_extract(42)
+
+        _, _, _, call_kwargs = fake_session.calls[0]
+        assert call_kwargs.get("timeout") == download_ipums_cps.REQUEST_TIMEOUT_SECONDS
+
+    def test_download_extract_passes_the_download_timeout_on_every_file(self, tmp_path):
+        data_content = b"YEAR,MONTH\n1983,1\n"
+        codebook_content = b"<codebook/>"
+        status = {
+            "downloadLinks": {
+                "data": {
+                    "url": "https://api.ipums.org/extracts/1/cps_00001.csv.gz",
+                    "bytes": len(data_content),
+                    "sha256": hashlib.sha256(data_content).hexdigest(),
+                },
+                "ddiCodebook": {
+                    "url": "https://api.ipums.org/extracts/1/cps_00001.xml",
+                    "bytes": len(codebook_content),
+                    "sha256": hashlib.sha256(codebook_content).hexdigest(),
+                },
+            }
+        }
+        fake_session = FakeSession([FakeResponse(content=data_content), FakeResponse(content=codebook_content)])
+        client = download_ipums_cps.IpumsCpsApi("test-key", session=fake_session)
+
+        client.download_extract(status, str(tmp_path))
+
+        assert len(fake_session.calls) == 2
+        for _, _, _, call_kwargs in fake_session.calls:
+            assert call_kwargs.get("timeout") == download_ipums_cps.DOWNLOAD_TIMEOUT_SECONDS
 
 
 class TestReadExtract:

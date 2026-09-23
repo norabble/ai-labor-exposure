@@ -59,6 +59,16 @@ EXTRACT_DATA_FORMAT = "csv"
 DEFAULT_POLL_INTERVAL_SECONDS = 30
 DEFAULT_WAIT_TIMEOUT_SECONDS = 12 * 60 * 60
 
+# `wait_for_extract`'s `timeout_seconds` budget is only checked between requests, so a request
+# that itself never returns (a hung TCP connection, not just IPUMS reporting "queued") would
+# defeat it silently without a per-call timeout on every `requests.Session` call below.
+REQUEST_TIMEOUT_SECONDS = 60
+# (connect, read), for the two file downloads only. `requests`' read timeout is a stall
+# detector — it resets on every chunk received rather than capping total transfer time — so
+# 300s tolerates a slow but steady multi-hundred-MB extract download while still catching a
+# connection that has genuinely gone silent; 10s fails fast if IPUMS never accepts the connection.
+DOWNLOAD_TIMEOUT_SECONDS = (10, 300)
+
 TERMINAL_FAILURE_STATUSES = {"failed", "canceled"}
 
 
@@ -121,7 +131,7 @@ class IpumsCpsApi:
         request_url = f"{IPUMS_API_BASE_URL}/metadata/samples"
         request_params = {"collection": collection, "version": IPUMS_API_VERSION, "pageSize": SAMPLES_PAGE_SIZE}
         while request_url:
-            response = self._session.get(request_url, params=request_params)
+            response = self._session.get(request_url, params=request_params, timeout=REQUEST_TIMEOUT_SECONDS)
             response.raise_for_status()
             response_body = response.json()
             for sample_record in response_body.get("data", []):
@@ -137,6 +147,7 @@ class IpumsCpsApi:
             params={"collection": ipums_variables.COLLECTION, "version": IPUMS_API_VERSION},
             json=extract_body,
             headers={"Content-Type": "application/json"},
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()
         return response.json()["number"]
@@ -157,7 +168,7 @@ class IpumsCpsApi:
         status_params = {"collection": ipums_variables.COLLECTION, "version": IPUMS_API_VERSION}
         started_at = time.monotonic()
         while True:
-            response = self._session.get(status_url, params=status_params)
+            response = self._session.get(status_url, params=status_params, timeout=REQUEST_TIMEOUT_SECONDS)
             response.raise_for_status()
             extract_status = response.json()
             status_value = extract_status["status"]
@@ -179,7 +190,7 @@ class IpumsCpsApi:
             file_link = download_links[file_key]
             file_url = file_link["url"]
             file_name = os.path.basename(urlparse(file_url).path)
-            response = self._session.get(file_url)
+            response = self._session.get(file_url, timeout=DOWNLOAD_TIMEOUT_SECONDS)
             response.raise_for_status()
             actual_sha256 = hashlib.sha256(response.content).hexdigest()
             expected_sha256 = file_link["sha256"]

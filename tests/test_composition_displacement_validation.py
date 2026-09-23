@@ -251,6 +251,34 @@ class TestCorrelateWithLeaveOneOut:
 
 
 class TestDisplacementPanel:
+    @pytest.fixture(autouse=True)
+    def _synthetic_model_reports(self, tmp_path, monkeypatch):
+        """
+        Point the builder at small synthetic model reports instead of the real
+        pipeline outputs, which CI never generates — without this the builder
+        returns None on a fresh checkout and every test here fails on it. One
+        occupation per mapped SOC major, with composition and dynamic
+        displacement ordered differently so the two models are distinguishable.
+        """
+        import composition_displacement_validation
+        from composition_displacement_validation import soc_major_to_dws_group
+
+        soc_majors = sorted(soc_major_to_dws_group())
+        report_paths = {}
+        for model_name, displacement_step in (("composition", 0.01), ("dynamic", -0.005)):
+            report_df = pd.DataFrame(
+                {
+                    "OCC_CODE": [f"{soc_major}-1011" for soc_major in soc_majors],
+                    "gross_displacement": [0.1 + displacement_step * index for index in range(len(soc_majors))],
+                    "TOT_EMP_2025": [1000.0 + 100.0 * index for index in range(len(soc_majors))],
+                }
+            )
+            report_paths[model_name] = tmp_path / f"{model_name}_report.csv"
+            report_df.to_csv(report_paths[model_name], index=False)
+
+        monkeypatch.setattr(composition_displacement_validation, "COMPOSITION_REPORT_PATH", str(report_paths["composition"]))
+        monkeypatch.setattr(composition_displacement_validation, "DYNAMIC_REPORT_PATH", str(report_paths["dynamic"]))
+
     @staticmethod
     def _multi_survey_panel():
         from composition_displacement_validation import soc_major_to_dws_group

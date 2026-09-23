@@ -175,3 +175,45 @@ class TestCompositionStability:
         occupation_trends_df = pd.DataFrame({"OCC_CODE": ["A", "B"], "TOT_EMP_1999": [100.0, None]})
         stability_df = occ1990dd_composition_stability(weights_df, occupation_trends_df)
         assert stability_df.loc[0, "stable_share"] == pytest.approx(0.7)
+
+
+from occ1990dd_soc_bridge import G4_MINIMUM_R, bridge_check, direct_unit_scores, g4_passed  # noqa: E402
+
+ALL_BLOCKS = ("2003_2010", "2011_2019", "2020_2026")
+
+
+class TestDirectUnitScores:
+    def test_direct_score_is_the_cps_employment_weighted_mean_of_census_code_scores(self):
+        crosstab_df = pd.DataFrame(
+            {"coding_block": ["2003_2010"] * 2, "occ1990dd": [4, 4], "census_code": [10, 20], "employed_thousands": [3.0, 1.0]}
+        )
+        census_scores = {"2003_2010": pd.DataFrame({"census_code": [10, 20], "composition_net_change": [0.2, 0.6]})}
+        direct_df = direct_unit_scores(crosstab_df, census_scores, ["composition_net_change"])
+        assert direct_df.loc[0, "composition_net_change"] == pytest.approx(0.3)
+
+
+def _check_inputs(direct_values_by_block):
+    chained_df = pd.DataFrame({"occ1990dd": [1, 2, 3, 4], "composition_net_change": [0.1, 0.2, 0.3, 0.4]})
+    direct_rows = [
+        {"coding_block": block, "occ1990dd": code, "composition_net_change": value}
+        for block, values in direct_values_by_block.items()
+        for code, value in zip([1, 2, 3, 4], values)
+    ]
+    return chained_df, pd.DataFrame(direct_rows)
+
+
+class TestBridgeCheck:
+    def test_every_block_tracking_the_chain_passes(self):
+        chained_df, direct_df = _check_inputs({block: [0.11, 0.19, 0.31, 0.42] for block in ALL_BLOCKS})
+        check_df = bridge_check(chained_df, direct_df)
+        assert (check_df["block_pearson_r"] >= G4_MINIMUM_R).all()
+        assert g4_passed(check_df)
+
+    def test_one_block_that_disagrees_fails_the_gate(self):
+        values = {block: [0.11, 0.19, 0.31, 0.42] for block in ALL_BLOCKS}
+        values["2020_2026"] = [0.4, 0.1, 0.3, 0.2]
+        assert not g4_passed(bridge_check(*_check_inputs(values)))
+
+    def test_a_missing_block_fails_rather_than_passing_vacuously(self):
+        values = {block: [0.11, 0.19, 0.31, 0.42] for block in ALL_BLOCKS[:2]}
+        assert not g4_passed(bridge_check(*_check_inputs(values)))

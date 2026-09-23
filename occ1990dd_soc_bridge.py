@@ -32,7 +32,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
+from cps_detailed_panel import CODING_BLOCKS
 from harmonize_soc import load_soc_2000_to_2010, load_soc_2010_to_2018, soc_vocabularies
 from occ1990dd_reference import (
     SOC_GENERATION_BY_CENSUS_VINTAGE,
@@ -235,3 +237,79 @@ def occ1990dd_composition_stability(
         .sort_values("stable_share")
         .reset_index(drop=True)
     )
+
+
+G4_MINIMUM_R = 0.8
+BRIDGE_CHECK_COLUMNS = [
+    "coding_block",
+    "occ1990dd",
+    "chained_score",
+    "direct_score",
+    "gap",
+    "block_pearson_r",
+    "threshold",
+    "block_gate_passed",
+]
+
+
+def census_scores_by_block(
+    soc_scores_df: pd.DataFrame, score_columns: list[str], anchor_employment: pd.Series, soc_tables: SocTables | None = None
+) -> dict[str, pd.DataFrame]:
+    """Per coding block, a score for every Census code of that block's vintage, straight from SOC."""
+    soc_tables = soc_tables or load_soc_tables()
+    block_scores: dict[str, pd.DataFrame] = {}
+    for coding_block, (_, _, census_vintage) in CODING_BLOCKS.items():
+        members_df = census_code_members(load_census_code_list(census_vintage), census_vintage, soc_tables)
+        census_weights_df = equal_division_weights(members_df, "census_code", anchor_employment)
+        block_scores[coding_block] = score_units(census_weights_df, "census_code", soc_scores_df, score_columns)
+    return block_scores
+
+
+def direct_unit_scores(crosstab_df: pd.DataFrame, census_scores: dict[str, pd.DataFrame], score_columns: list[str]) -> pd.DataFrame:
+    """Each unit scored through the raw Census codes CPS coded its workers into, weighted by CPS employment.
+
+    Diagnostic only: these never replace chained scores in a reported result,
+    because that would reopen the method seam Phase 1's D2 forbids.
+    """
+    unit_rows = []
+    for coding_block, block_census_scores_df in census_scores.items():
+        block_df = crosstab_df[crosstab_df["coding_block"] == coding_block].merge(
+            block_census_scores_df[["census_code", *score_columns]], on="census_code", how="inner"
+        )
+        for occ1990dd_code, unit_df in block_df.groupby("occ1990dd"):
+            unit_row: dict[str, float | int | str] = {"coding_block": coding_block, "occ1990dd": occ1990dd_code}
+            for column in score_columns:
+                scored_df = unit_df.dropna(subset=[column])
+                weight_total = scored_df["employed_thousands"].sum()
+                unit_row[column] = (
+                    float((scored_df[column] * scored_df["employed_thousands"]).sum() / weight_total) if weight_total > 0 else float("nan")
+                )
+            unit_rows.append(unit_row)
+    return pd.DataFrame(unit_rows, columns=["coding_block", "occ1990dd", *score_columns])
+
+
+def bridge_check(chained_scores_df: pd.DataFrame, direct_scores_df: pd.DataFrame, score_column: str = LABEL_SCORE_COLUMN) -> pd.DataFrame:
+    """Chained against direct score per unit and coding block, with each block's correlation and G4 verdict."""
+    paired_df = direct_scores_df[["coding_block", "occ1990dd", score_column]].rename(columns={score_column: "direct_score"})
+    paired_df = paired_df.merge(
+        chained_scores_df[["occ1990dd", score_column]].rename(columns={score_column: "chained_score"}), on="occ1990dd", how="inner"
+    ).dropna()
+    paired_df["gap"] = paired_df["direct_score"] - paired_df["chained_score"]
+
+    block_correlation: dict[str, float] = {}
+    for coding_block, block_df in paired_df.groupby("coding_block"):
+        enough_variation = len(block_df) >= 3 and block_df["direct_score"].nunique() > 1 and block_df["chained_score"].nunique() > 1
+        block_correlation[coding_block] = (
+            float(stats.pearsonr(block_df["chained_score"], block_df["direct_score"])[0]) if enough_variation else float("nan")
+        )
+
+    paired_df["block_pearson_r"] = paired_df["coding_block"].map(block_correlation)
+    paired_df["threshold"] = G4_MINIMUM_R
+    paired_df["block_gate_passed"] = paired_df["block_pearson_r"] >= G4_MINIMUM_R
+    return paired_df[BRIDGE_CHECK_COLUMNS].sort_values(["coding_block", "occ1990dd"]).reset_index(drop=True)
+
+
+def g4_passed(check_df: pd.DataFrame) -> bool:
+    """G4: every coding block present, each with chained-vs-direct r of at least 0.8."""
+    block_verdicts = check_df.groupby("coding_block")["block_gate_passed"].first()
+    return all(coding_block in block_verdicts.index and bool(block_verdicts[coding_block]) for coding_block in CODING_BLOCKS)

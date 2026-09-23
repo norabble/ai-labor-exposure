@@ -22,6 +22,15 @@ class TestSampleIds:
     def test_dws_id_is_the_january_sample(self):
         assert download_ipums_cps.dws_sample_id(2024) == "cps2024_01b"
 
+    def test_dws_id_uses_february_for_the_confirmed_february_survey_years(self):
+        """1994, 1996, 1998 and 2000 carried the supplement in February, not January
+        (confirmed against IPUMS's own DWSUPPWT availability table, 2026-09-23)."""
+        assert download_ipums_cps.dws_sample_id(1996) == "cps1996_02b"
+
+    def test_dws_id_resolves_the_suffix_for_a_february_survey_year(self):
+        published_samples = {"cps1996_02s"}
+        assert download_ipums_cps.dws_sample_id(1996, published_samples) == "cps1996_02s"
+
     def test_basic_monthly_id_without_published_samples_falls_back_to_the_b_guess(self):
         """Confirmed live 2026-09-23: IPUMS has no fixed 'b'/'s' rule per month, so without a
         published-sample list to resolve against, this can only guess 'b'."""
@@ -43,6 +52,23 @@ class TestSampleIds:
     def test_dws_id_resolves_to_the_published_s_suffix(self):
         published_samples = {"cps2024_01s"}
         assert download_ipums_cps.dws_sample_id(2024, published_samples) == "cps2024_01s"
+
+
+class TestDwsSampleMonth:
+    def test_january_for_most_survey_years(self):
+        assert ipums_variables.dws_sample_month(2024) == 1
+
+    def test_february_for_the_four_confirmed_february_years(self):
+        for survey_year in (1994, 1996, 1998, 2000):
+            assert ipums_variables.dws_sample_month(survey_year) == 2
+
+    def test_2002_is_january_not_february(self):
+        """A prior (unverified) reviewer claim placed 2002 in February; the live IPUMS
+        DWSUPPWT availability table shows it in January."""
+        assert ipums_variables.dws_sample_month(2002) == 1
+
+    def test_falls_back_to_january_for_an_unconfirmed_survey_year(self):
+        assert ipums_variables.dws_sample_month(2026) == ipums_variables.DWS_SAMPLE_MONTH_DEFAULT
 
 
 class TestNoIpumspyReference:
@@ -349,6 +375,21 @@ class TestFetchBasicMonthlyYear:
 
     def test_a_year_with_no_published_samples_returns_none(self, tmp_path):
         assert download_ipums_cps.fetch_basic_monthly_year(1975, raw_dir=str(tmp_path), client=FakeClient(set())) is None
+
+    def test_a_pre_1998_year_does_not_request_compwt(self, tmp_path, monkeypatch):
+        """COMPWT is only published from 1998 (confirmed live against its IPUMS availability
+        table); requesting it for an earlier year risks IPUMS rejecting the whole extract."""
+        requested = {}
+
+        def fake_submit(client, samples, variables, description, extract_dir):
+            requested["variables"] = variables
+            return extract_dir
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", fake_submit)
+        client = FakeClient({"cps1990_01b"})
+        download_ipums_cps.fetch_basic_monthly_year(1990, raw_dir=str(tmp_path), client=client)
+        assert "COMPWT" not in requested["variables"]
+        assert "OCC1990" in requested["variables"]
 
 
 class TestFetchDwsSurvey:

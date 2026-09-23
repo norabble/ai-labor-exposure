@@ -39,7 +39,7 @@ def displaced_records(rows):
 class TestVintages:
     @pytest.mark.parametrize(
         ("survey_year", "vintage"),
-        [(1984, "1980"), (1992, "1980"), (1994, "1990"), (2002, "1990"), (2004, "2002"), (2012, "2010"), (2020, "2018")],
+        [(1984, "1980"), (1990, "1980"), (1992, "1990"), (1994, "1990"), (2002, "1990"), (2004, "2002"), (2012, "2010"), (2020, "2018")],
     )
     def test_survey_year_to_raw_code_vintage(self, survey_year, vintage):
         assert lost_job_raw_vintage(survey_year) == vintage
@@ -81,6 +81,15 @@ class TestMapping:
         )
         _, unmapped_share = attach_lost_job_occ1990dd(displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 1}]), 2024)
         assert unmapped_share == pytest.approx(0.5)
+
+    def test_zero_total_weight_is_a_failure_not_a_vacuous_pass(self, monkeypatch):
+        """A survey with no displaced weight at all (e.g. a wrong sample month) must fail G6D, not report 0.0 unmapped."""
+        monkeypatch.setattr(
+            dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
+        )
+        empty_df = displaced_records([{}]).iloc[0:0]
+        _, unmapped_share = attach_lost_job_occ1990dd(empty_df, 2024)
+        assert unmapped_share == pytest.approx(1.0)
 
 
 class TestTabulateSurvey:
@@ -143,6 +152,36 @@ def test_the_build_refuses_until_task_2_has_verified_ipums(monkeypatch):
     monkeypatch.setattr(ipums_variables, "VERIFICATION_STATUS", "unverified")
     with pytest.raises(RuntimeError, match="Task 2"):
         dws_detailed_panel.build_rebuilt_panel([2024])
+
+
+def test_the_build_fails_g6d_when_a_downloaded_survey_has_zero_displaced_records(monkeypatch, tmp_path):
+    """A survey that IS downloaded but yields no displaced records (e.g. the wrong sample month
+    resolved) must fail closed through G6D rather than silently contributing nothing."""
+    monkeypatch.setattr(ipums_variables, "VERIFICATION_STATUS", "verified")
+    monkeypatch.setattr(dws_detailed_panel, "load_occ1990dd_groups", lambda: pd.DataFrame({"occ1990dd": [274], "dorn_group": ["retsales"]}))
+    empty_df = displaced_records([{}]).iloc[0:0]
+    monkeypatch.setattr(dws_detailed_panel, "read_survey_persons", lambda survey_year, raw_dir: empty_df)
+    published_path = tmp_path / "published_dws_panel.csv"
+    pd.DataFrame(columns=["survey_year", "source_table", "measurement_basis", "group_name", "displaced_thousands"]).to_csv(
+        published_path, index=False
+    )
+    monkeypatch.setattr(dws_detailed_panel, "PUBLISHED_DWS_PANEL_PATH", str(published_path))
+
+    gates_df = dws_detailed_panel.build_rebuilt_panel(
+        [2024], raw_dir=str(tmp_path / "raw"), panel_path=str(tmp_path / "panel.csv"), gates_path=str(tmp_path / "gates.csv")
+    )
+    g6d_df = gates_df[gates_df["gate"] == "G6D"]
+    assert not g6d_df.empty
+    assert g6d_df["observed"].iloc[0] == pytest.approx(1.0)
+    assert not g6d_df["passed"].iloc[0]
+    assert not dws_detailed_panel.all_gates_pass(gates_df, dws_detailed_panel.REQUIRED_GATES)
+
+
+def test_the_build_raises_a_clear_error_when_no_survey_is_downloaded(monkeypatch, tmp_path):
+    monkeypatch.setattr(ipums_variables, "VERIFICATION_STATUS", "verified")
+    monkeypatch.setattr(dws_detailed_panel, "read_survey_persons", lambda survey_year, raw_dir: None)
+    with pytest.raises(RuntimeError, match="[Nn]o.*download"):
+        dws_detailed_panel.build_rebuilt_panel([2024], raw_dir=str(tmp_path / "raw"))
 
 
 class TestHarmonizedRoute:

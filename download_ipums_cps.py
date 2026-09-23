@@ -109,13 +109,16 @@ def basic_monthly_sample_id(year: int, month: int, published_samples: set[str] |
 def dws_sample_id(survey_year: int, published_samples: set[str] | None = None) -> str:
     """IPUMS sample ID carrying one survey year's Displaced Worker Supplement.
 
-    The supplement rides inside that year's January basic-monthly sample rather than a
-    separately named sample, so this shares `basic_monthly_sample_id`'s 'b'/'s' resolution
-    (pass `published_samples` to resolve it correctly).
+    The supplement rides inside a basic-monthly sample rather than a separately named sample —
+    January for most survey years, but February for 1994, 1996, 1998 and 2000
+    (`ipums_variables.dws_sample_month`, confirmed against IPUMS's own DWSUPPWT availability
+    table) — and shares `basic_monthly_sample_id`'s 'b'/'s' suffix resolution (pass
+    `published_samples` to resolve it correctly).
     """
+    survey_month = ipums_variables.dws_sample_month(survey_year)
     if published_samples is not None:
-        return _resolve_month_sample_id(survey_year, ipums_variables.DWS_SAMPLE_MONTH, published_samples)
-    return ipums_variables.DWS_SAMPLE_PATTERN.format(year=survey_year)
+        return _resolve_month_sample_id(survey_year, survey_month, published_samples)
+    return ipums_variables.BASIC_MONTHLY_SAMPLE_PATTERN.format(year=survey_year, month=survey_month)
 
 
 def _api_key() -> str:
@@ -287,7 +290,7 @@ def fetch_basic_monthly_year(year: int, raw_dir: str = RAW_DIR, client=None) -> 
     return _submit_and_download(
         client,
         samples,
-        ipums_variables.BASIC_MONTHLY_VARIABLES,
+        ipums_variables.variables_for_year(year),
         f"ai-exposure deep history phase 2: basic monthly {year}",
         extract_dir,
     )

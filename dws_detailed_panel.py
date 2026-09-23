@@ -72,8 +72,13 @@ REQUIRED_GATES = ("G3", "G6D")
 
 
 def lost_job_raw_vintage(survey_year: int) -> str:
-    """The Census occupation-code vintage CPS used in a survey's January."""
-    if survey_year <= 1992:
+    """The Census occupation-code vintage CPS used in a survey year's resolved sample month.
+
+    CPS switched to 1990 Census occupation codes in January 1992, so a survey year's own
+    resolved month (see `ipums_cps_variables.dws_sample_month` — January for most years, February
+    for 1994/1996/1998/2000) never crosses that boundary within one survey year.
+    """
+    if survey_year <= 1991:
         return "1980"
     if survey_year <= 2002:
         return "1990"
@@ -134,7 +139,10 @@ def attach_lost_job_occ1990dd(displaced_df: pd.DataFrame, survey_year: int) -> t
     mapped_df = coded_df.merge(edges_df, on="raw_code", how="inner")
     mapped_df["allocated_weight"] = mapped_df[weight_column].astype(float) * mapped_df["share"]
     total_weight = coded_df[weight_column].astype(float).sum()
-    unmapped_share = float(1 - mapped_df["allocated_weight"].sum() / total_weight) if total_weight > 0 else 0.0
+    # A survey with no displaced weight at all (e.g. an empty extract, or a resolved sample month
+    # that carries no supplement) must fail G6D rather than report a vacuous 0.0 unmapped share —
+    # there is nothing here to have mapped successfully.
+    unmapped_share = float(1 - mapped_df["allocated_weight"].sum() / total_weight) if total_weight > 0 else 1.0
     return mapped_df, unmapped_share
 
 
@@ -252,6 +260,11 @@ def build_rebuilt_panel(
         direct_frames.append(ten_group_long_tenured_direct(displaced_df, survey_year))
         print(f"  {survey_year}: {len(displaced_df)} displaced records, unmapped share {unmapped_by_survey[survey_year]:.4f}")
 
+    if not survey_frames:
+        raise RuntimeError(
+            f"No survey in {survey_years or list(ipums_variables.DWS_SURVEY_YEARS)} is downloaded to {raw_dir} — "
+            "nothing to tabulate. Run download_ipums_cps.py dws first."
+        )
     panel_df = pd.concat(survey_frames, ignore_index=True)
     gates_df = pd.concat(
         [

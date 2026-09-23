@@ -34,6 +34,15 @@ import download_ipums_cps
 import ipums_cps_variables as ipums_variables
 
 PROBE_DIR = "data/raw/ipums/probe"
+# Includes 1983 and 1994 pre-1998 (COMPWT unavailable — Ruling 11) alongside 1998 itself, so the
+# probe's own COMPWT/CLASSWKR/OCC1990 coverage check spans both sides of that availability floor.
+# This one combined extract cannot fully substitute for per-year eligibility checking, though:
+# `run_basic_probe` requests ipums_variables.BASIC_MONTHLY_VARIABLES (including COMPWT) for every
+# sample here in a single extract, so it would not by itself reveal a real per-year rejection —
+# `download_ipums_cps.fetch_basic_monthly_year`'s per-year `variables_for_year` filtering is what
+# actually protects the real build; a genuinely single-vintage probe extract (one pre-1998 year
+# alone, requesting only `ipums_variables.variables_for_year(year)`) is the direct confirmation
+# Task 2 Step 6 still owes.
 BASIC_PROBE_MONTHS = [(1983, 1), (1988, 1), (1989, 1), (1994, 1), (1998, 1), (2003, 1), (2011, 1), (2020, 1)]
 DWS_PROBE_YEARS = (1984, 1994, 2002, 2004, 2020)
 OCC1990_MINIMUM_VALID_SHARE = 0.99
@@ -107,7 +116,10 @@ def run_samples() -> None:
     dws_present = [
         year for year in ipums_variables.DWS_SURVEY_YEARS if download_ipums_cps.dws_sample_id(year, published_samples) in published_samples
     ]
-    print(f"  DWS survey-year January samples present: {dws_present}")
+    # Not every survey year's supplement rides January's sample (1994, 1996, 1998 and 2000 carry
+    # it in February — ipums_variables.dws_sample_month), so this reports the resolved sample
+    # actually checked for each year rather than assuming January.
+    print(f"  DWS survey-year samples present (per-year resolved month): {dws_present}")
 
 
 def run_basic_probe() -> None:

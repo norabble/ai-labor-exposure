@@ -132,6 +132,99 @@ year. That check remains open pending the same registration blocker.
   be confirmed without a completed IPUMS CPS registration on the account
   behind `IPUMS_API_KEY`.
 
+## Addendum, 2026-09-23 (final whole-branch review, Ruling 10 / Ruling 11): DWS sample month and variable availability, confirmed against public cps.ipums.org pages
+
+The extract-submission blocker above (account not registered for IPUMS CPS)
+still holds — nothing below required an extract. Every fact in this addendum
+was read directly off IPUMS's own public variable pages
+(`https://cps.ipums.org/cps-action/variables/<NAME>`), which need no API key
+and are not affected by the registration gate.
+
+### DWS supplement month is not always January (Ruling 10, Critical finding 1)
+
+`ipums_cps_variables.py` and `download_ipums_cps.dws_sample_id` previously
+assumed the Displaced Worker Supplement always rides that survey year's
+January basic-monthly sample. A reviewer flagged this as wrong for 1994,
+1996, 1998, 2000 and 2002 (claimed February), "confident, unverified."
+
+Fetched `https://cps.ipums.org/cps-action/variables/DWSUPPWT` (the
+supplement's own weight variable) and read its "Availability" year x month
+grid, which marks exactly one month per survey year with an `X`:
+
+```
+1984 Jan   1986 Jan   1988 Jan   1990 Jan   1992 Jan
+1994 Feb   1996 Feb   1998 Feb   2000 Feb
+2002 Jan   2004 Jan   2006 Jan   2008 Jan   2010 Jan   2012 Jan
+2014 Jan   2016 Jan   2018 Jan   2020 Jan   2022 Jan   2024 Jan
+```
+
+(2026 has no row yet on the live table as of this check — the survey may not
+yet be conducted/published for that year.)
+
+**This confirms four of the reviewer's five flagged years (1994, 1996, 1998,
+2000) but refutes the fifth: 2002 is January, not February.** The reviewer's
+guess for 2002 would have picked the wrong sample.
+
+`DWS_SAMPLE_MONTH_BY_SURVEY_YEAR` in `ipums_cps_variables.py` now encodes this
+table exactly (source: the DWSUPPWT availability grid above, read 2026-09-23),
+with `dws_sample_month()` falling back to January (`DWS_SAMPLE_MONTH_DEFAULT`)
+only for 2026, which is unconfirmed and marked as such in the module. A wrong
+guess there is caught by two independent mechanisms: `dws_sample_id`'s live
+`published_samples` resolution (an entirely wrong month simply will not
+appear in the sample list IPUMS actually publishes for that year), and gate
+G6D's zero-weight-is-a-failure fix (`dws_detailed_panel.py`,
+`attach_lost_job_occ1990dd`) — a resolved sample that carries no supplement
+data would previously report a vacuous 0.0 unmapped share (a pass); it now
+reports 1.0 (a hard failure), and `build_rebuilt_panel` also now raises
+`RuntimeError` outright if a whole requested survey set downloads to nothing.
+
+**Step 6 addendum:** confirming DWSUPPWT's positive weight in each survey's
+*own* resolved-month extract (not just its presence in the schema) still
+requires the blocked extract step. Task 2 Step 6, when unblocked, must submit
+each survey year's single resolved sample (per
+`DWS_SAMPLE_MONTH_BY_SURVEY_YEAR`) and confirm `DWSUPPWT > 0` for at least one
+record before trusting that year — this is exactly the check gate G6D now
+also enforces at build time as a backstop, not a replacement for that
+verification step.
+
+### Per-variable availability ranges (Ruling 11, Important finding 2)
+
+Fetched each variable's own IPUMS availability table
+(`https://cps.ipums.org/cps-action/variables/<NAME>#availability`):
+
+| Variable | Availability (per its own IPUMS page) | Falls inside 1983–2026? |
+|---|---|---|
+| `COMPWT` | 1998–2026 | **Yes** — floor is 1998, inside the span |
+| `CPSID` | 1976–2026 | No — available for the whole span |
+| `OCC1990` | 1968–2026 | No — available for the whole span |
+| `CLASSWKR` | 1962–2026 | No — available for the whole span |
+| `DWOCC1990` | every DWS survey year 1984–2024 individually listed | No — present every survey year checked |
+| `DWOCC` | every DWS survey year 1984–2024 individually listed | No — present every survey year checked |
+| `DWREAS` | every DWS survey year 1984–2024 individually listed | No — present every survey year checked |
+| `DWYEARS` | every DWS survey year 1984–2024 individually listed | No — present every survey year checked |
+
+Only `COMPWT` has a floor that falls inside this project's request range, and
+it already matches the pre-existing `COMPOSITE_WEIGHT_FIRST_YEAR = 1998`
+constant — no correction needed there, only encoding it as an extract-request
+constraint rather than a gate-selection constant alone.
+`ipums_cps_variables.VARIABLE_FIRST_YEAR = {"COMPWT": 1998}` and
+`variables_for_year(year)` now filter `BASIC_MONTHLY_VARIABLES` per year
+before `download_ipums_cps.fetch_basic_monthly_year` submits an extract, and
+`cps_detailed_panel.read_year_persons` reindexes each chunk to the full
+`BASIC_MONTHLY_VARIABLES` column list (rather than a plain column selection)
+so a year that did not request `COMPWT` reads it back as `NaN` instead of
+raising `KeyError`. `gate_weight_column` already only reads `COMPWT` from
+1998 on, so this NaN never reaches a gate.
+
+The DWS variables (`DWOCC1990`, `DWOCC`, `DWREAS`, `DWYEARS`) needed no
+per-year filtering — IPUMS's own availability pages list every one of them as
+present for every DWS survey year 1984–2024 individually, so `DWS_VARIABLES`
+is unchanged. A single-vintage probe extract (one pre-1998 basic-monthly
+year, requesting only `variables_for_year(year)`) is still the direct,
+extract-level confirmation Task 2 Step 6 owes once the account is
+unblocked — this addendum's evidence is documentation-only, from each
+variable's own published page, not from a submitted extract.
+
 ## Next step for the user
 
 Register (or renew registration) for the IPUMS CPS collection at

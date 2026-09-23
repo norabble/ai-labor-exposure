@@ -55,6 +55,27 @@ OCC1990_NOT_IN_UNIVERSE = 999
 # BLS's published CPS estimates use composite weights from this year on.
 COMPOSITE_WEIGHT_FIRST_YEAR = 1998
 
+# Confirmed live 2026-09-23 against each variable's own IPUMS availability table
+# (cps.ipums.org/cps-action/variables/<NAME>#availability): COMPWT 1998-2026, CPSID 1976-2026,
+# OCC1990 1968-2026, CLASSWKR 1962-2026. Only COMPWT's floor falls inside this project's
+# 1983-2026 basic-monthly span, so it is the only basic-monthly variable whose extract
+# eligibility varies by year; the others are available in every year this project requests.
+VARIABLE_FIRST_YEAR: dict[str, int] = {"COMPWT": COMPOSITE_WEIGHT_FIRST_YEAR}
+
+
+def variables_for_year(year: int, variables: list[str] | None = None) -> list[str]:
+    """The subset of `variables` (default BASIC_MONTHLY_VARIABLES) IPUMS actually publishes for one year.
+
+    Requesting a variable outside its published range risks IPUMS rejecting the whole extract, or
+    silently omitting the column from the output — either way, callers should request only what a
+    year actually carries, and readers should still reindex to the full column list (see
+    `cps_detailed_panel.read_year_persons`) so a variable dropped here reads back as NaN rather
+    than raising KeyError.
+    """
+    candidate_variables = variables if variables is not None else BASIC_MONTHLY_VARIABLES
+    return [name for name in candidate_variables if year >= VARIABLE_FIRST_YEAR.get(name, 0)]
+
+
 # "CPSID" if households link across months in every year 1983-2026, otherwise
 # "household_month" (SERIAL within YEAR and MONTH) for the whole span — the
 # bootstrap design must be identical in every year (spec § Sampling variance).
@@ -62,11 +83,55 @@ HOUSEHOLD_CLUSTER = "CPSID"
 
 # ── Displaced Worker Supplement (Tasks 14-16). Confirmed in Task 2 Step 6. ──
 DWS_SURVEY_YEARS: tuple[int, ...] = tuple(range(1984, 2027, 2))
-# The supplement rides inside that year's January basic-monthly sample, which carries the same
-# unpredictable 'b'/'s' suffix as BASIC_MONTHLY_SAMPLE_PATTERN above; DWS_SAMPLE_MONTH plus
-# `download_ipums_cps.dws_sample_id`'s live resolution is what actually picks the right one.
-# DWS_SAMPLE_PATTERN is the offline/formatting fallback, and it guesses 'b'.
-DWS_SAMPLE_MONTH = 1
+# The supplement does NOT always ride January's sample. Confirmed live 2026-09-23 against the
+# DWSUPPWT variable's own availability table (https://cps.ipums.org/cps-action/variables/DWSUPPWT
+# -> "Availability" -> the year x month grid), which marks exactly one month per survey year with
+# 'X': January for every survey year except 1994, 1996, 1998 and 2000, which carry it in February.
+# This corrects an earlier reviewer claim that 2002 was also a February survey — the live table
+# shows 2002 as January. Years present in this table (1984-2024) cover every survey this project
+# uses except 2026, whose supplement (if BLS conducts and IPUMS publishes one) had not yet
+# appeared as of this check.
+DWS_SAMPLE_MONTH_BY_SURVEY_YEAR: dict[int, int] = {
+    1984: 1,
+    1986: 1,
+    1988: 1,
+    1990: 1,
+    1992: 1,
+    1994: 2,
+    1996: 2,
+    1998: 2,
+    2000: 2,
+    2002: 1,
+    2004: 1,
+    2006: 1,
+    2008: 1,
+    2010: 1,
+    2012: 1,
+    2014: 1,
+    2016: 1,
+    2018: 1,
+    2020: 1,
+    2022: 1,
+    2024: 1,
+    # 2026: unconfirmed — no row yet on the live availability table as of 2026-09-23. Falls back to
+    # January below; `download_ipums_cps.dws_sample_id`'s live sample resolution and gate G6D
+    # (zero total DWSUPPWT weight fails, per Ruling 10) catch a wrong guess here.
+}
+DWS_SAMPLE_MONTH_DEFAULT = 1
+
+
+def dws_sample_month(survey_year: int) -> int:
+    """The month whose CPS sample carries survey_year's Displaced Worker Supplement.
+
+    Falls back to DWS_SAMPLE_MONTH_DEFAULT (January) for a survey year absent from
+    DWS_SAMPLE_MONTH_BY_SURVEY_YEAR (currently only 2026) — unverified for that year; a wrong
+    guess is caught downstream (an empty extract, or gate G6D's zero-weight failure).
+    """
+    return DWS_SAMPLE_MONTH_BY_SURVEY_YEAR.get(survey_year, DWS_SAMPLE_MONTH_DEFAULT)
+
+
+# Offline/formatting fallback only, kept for callers that want a guessed sample id without a live
+# sample list; it always guesses January's 'b' id and does not reflect the February years above.
 DWS_SAMPLE_PATTERN = "cps{year}_01b"
 DWS_WEIGHT_VARIABLE = "DWSUPPWT"
 DWS_REASON_VARIABLE = "DWREAS"

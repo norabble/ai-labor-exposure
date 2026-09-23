@@ -8,6 +8,7 @@ from occ1990dd_reference import (
     OUTSIDE_GROUP_OCC1990DD,
     expand_soc_reference,
     known_occ1990dd_codes,
+    load_census_2002_to_2010,
     load_census_2018_to_2010,
     load_census_code_list,
     load_dorn_crosswalk,
@@ -97,3 +98,10 @@ class TestGroups:
     def test_uncovered_codes_reports_codes_outside_every_group(self):
         groups_df = pd.DataFrame({"occ1990dd": [4, 22], "dorn_group": ["exec", "exec"]})
         assert uncovered_codes({4, 22, 905}, groups_df) == [905]
+
+
+def test_2002_to_2010_covers_nearly_every_2002_code():
+    crosswalk_df = load_census_2002_to_2010()
+    codes_2002 = set(load_census_code_list("2002")["census_code"])
+    # Five 2002 codes (0210, 3130, 4550, 8230, 8240) have no 2010 successor in the Census sheet.
+    assert len(codes_2002 - set(crosswalk_df["census_2002"])) == 5

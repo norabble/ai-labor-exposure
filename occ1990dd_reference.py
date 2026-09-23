@@ -38,6 +38,7 @@ CENSUS_CODE_LISTS: dict[str, tuple[str, str]] = {
     "2018": ("2018-occupation-code-list-and-crosswalk.xlsx", "2018 Census Occ Code List"),
 }
 SOC_GENERATION_BY_CENSUS_VINTAGE = {"2002": "soc2000", "2010": "soc2010", "2018": "soc2018"}
+CENSUS_2002_TO_2010_SHEET = "2002to2010xwalk"
 CENSUS_2018_TO_2010_SHEET = "2010 to 2018 Crosswalk "
 
 _FOUR_DIGIT_CODE = r"\d{4}"
@@ -79,6 +80,20 @@ def load_census_code_list(vintage: str, code_list_dir: str = CENSUS_CODE_LIST_DI
             "soc_reference": code_rows_df[3].astype(str).str.strip().to_numpy(),
         }
     )
+
+
+def load_census_2002_to_2010(code_list_dir: str = CENSUS_CODE_LIST_DIR) -> pd.DataFrame:
+    """2002 Census codes paired with every 2010 Census code each became, from the 2010 file's crosswalk sheet.
+
+    Continuation rows leave the 2002 column blank, so it is forward-filled. 23
+    codes split into several 2010 codes; five have no 2010 successor at all.
+    """
+    file_name, _ = CENSUS_CODE_LISTS["2010"]
+    raw_df = pd.read_excel(os.path.join(code_list_dir, file_name), sheet_name=CENSUS_2002_TO_2010_SHEET, header=None, dtype=str)
+    census_2002 = raw_df[1].where(_is_four_digit(raw_df[1]).fillna(False)).ffill()
+    census_2010 = raw_df[4].where(_is_four_digit(raw_df[4]).fillna(False))
+    pairs_df = pd.DataFrame({"census_2002": census_2002, "census_2010": census_2010}).dropna()
+    return pairs_df.astype(int).drop_duplicates().reset_index(drop=True)
 
 
 def load_census_2018_to_2010(code_list_dir: str = CENSUS_CODE_LIST_DIR) -> pd.DataFrame:

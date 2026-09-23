@@ -275,6 +275,7 @@ def run_stage() -> None:
     """
     import composition_displacement_validation
     import composition_era_validation
+    import cps_detailed_validation
     import cps_historical_panel
 
     synthesize()
@@ -284,6 +285,9 @@ def run_stage() -> None:
     cps_historical_panel.run_stage()
     write_displacement_rate_table()
     composition_era_validation.run()
+    # Phase 2: detailed CPS levels from the IPUMS seeds. Skips with a warning when the
+    # seeds have not been built, which is always the case in CI before the first local build.
+    cps_detailed_validation.run()
     composition_displacement_validation.run()
 
 

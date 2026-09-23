@@ -36,6 +36,7 @@ Outputs:
 """
 
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -48,13 +49,31 @@ from cps_detailed_measurement import (
     HEADLINE_EXCLUDED_SEAM_PERIODS,
     HEADLINE_UNIVERSE,
     SEAM_PERIODS,
+    build_detailed_trends,
     eligible_for_period,
     fixed_set_units,
+    load_detailed_panel,
+    measure_vintage_seams,
+    period_reliability,
     relative_standard_errors,
     reliability_for_units,
 )
-from cps_detailed_panel import CODING_BLOCKS
+from cps_detailed_panel import CODING_BLOCKS, CROSSTAB_SEED_PATH, SEED_PATH
 from cps_historical_panel import compare_with_oews
+from occ1990dd_soc_bridge import (
+    COMPOSITION_REPORT_PATH,
+    DISPLACEMENT_SCORE_COLUMNS,
+    bridge_check,
+    build_bridge_weights,
+    census_scores_by_block,
+    direct_unit_scores,
+    g4_passed,
+    load_anchor_employment,
+    load_soc_scores,
+    load_soc_tables,
+    occ1990dd_composition_stability,
+    score_units,
+)
 
 RSE_CUTOFF = 0.20
 SWEEP_CUTOFFS = (0.10, 0.20, 0.30, None)
@@ -64,6 +83,14 @@ PERIOD_OUTPUT_PATH = "data/output/cps_detailed_period_correlations.csv"
 ERA_OUTPUT_PATH = "data/output/composition_model_era_comparison_cps_detailed.csv"
 CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition_cps_detailed.csv"
 SWEEP_OUTPUT_PATH = "data/output/cps_detailed_eligibility_sweep.csv"
+PANEL_OUTPUT_PATH = "data/output/cps_detailed_occupation_panel.csv"
+TRENDS_OUTPUT_PATH = "data/output/cps_detailed_trends.csv"
+RELIABILITY_OUTPUT_PATH = "data/output/cps_detailed_reliability.csv"
+SEAM_BREAKS_OUTPUT_PATH = "data/output/cps_detailed_seam_breaks.csv"
+UNIT_SCORES_OUTPUT_PATH = "data/output/occ1990dd_scores.csv"
+STABILITY_OUTPUT_PATH = "data/output/occ1990dd_composition_stability.csv"
+BRIDGE_CHECK_OUTPUT_PATH = "data/output/occ1990dd_bridge_check.csv"
+OCCUPATION_TRENDS_PATH = "data/output/bls_trends.csv"
 
 PERIOD_COLUMNS = ["period", "score", "fit_r", "fit_p", "n_units", "era", "is_covid", "is_seam", "reliability", "fit_r_corrected"]
 
@@ -368,6 +395,14 @@ def published_ten_group_agreement(rollup_df: pd.DataFrame, published_panel_df: p
     return agreement_df
 
 
+def _print_seam_summary(seam_df: pd.DataFrame) -> None:
+    absolute_growth = seam_df.assign(absolute_growth=seam_df["emp_growth"].abs()).dropna(subset=["absolute_growth"])
+    ordinary_growth = absolute_growth.loc[~absolute_growth["is_seam_period"], "absolute_growth"]
+    print(f"  Ordinary periods: median |growth| {ordinary_growth.median():.4f}, 95th percentile {ordinary_growth.quantile(0.95):.4f}")
+    for period, period_df in absolute_growth[absolute_growth["is_seam_period"]].groupby("period"):
+        print(f"  Seam {period}: median |growth| {period_df['absolute_growth'].median():.4f}, max {period_df['absolute_growth'].max():.4f}")
+
+
 def run_major_level(panel_df: pd.DataFrame, bridge_weights_df: pd.DataFrame, output_dir: str) -> pd.DataFrame | None:
     """The 22-major rollup: trends, era and cycle tests, chart, and both agreement reports."""
     print("\n── Demand composition model, CPS 22-SOC-major rollup (1983–2026) ──")
@@ -402,4 +437,68 @@ def run_major_level(panel_df: pd.DataFrame, bridge_weights_df: pd.DataFrame, out
             print(f"  Rollup vs OEWS sector growth (wage and salary): r = {agreement_r:+.3f}, n = {len(agreement_df)}")
             print("  Reported, never reconciled (Phase 1 D3).")
     _write(published_ten_group_agreement(rollup_df, pd.read_csv(PUBLISHED_TEN_GROUP_PANEL_PATH)), PUBLISHED_AGREEMENT_OUTPUT_PATH)
+    return era_df
+
+
+def run(
+    output_dir: str = "data/output/visualizations", seed_path: str = SEED_PATH, crosstab_seed_path: str = CROSSTAB_SEED_PATH
+) -> pd.DataFrame | None:
+    """Phase 2 pipeline entry: measurement tables, bridge scores, gate G4, then both detailed levels.
+
+    A missing seed warns and skips, like every other seed-backed instrument here.
+    A failed G4 still writes the bridge check but withholds every detailed-level
+    and rollup result: a result resting on an unfit bridge is not published.
+    """
+    panel_df = load_detailed_panel(seed_path)
+    if panel_df is None:
+        warnings.warn(
+            f"{seed_path} absent — it is built locally from IPUMS microdata (cps_detailed_panel.py); detailed CPS levels skipped",
+            stacklevel=2,
+        )
+        return None
+    if not os.path.exists(COMPOSITION_REPORT_PATH):
+        warnings.warn(f"{COMPOSITION_REPORT_PATH} absent; run the composition stage first — detailed CPS levels skipped", stacklevel=2)
+        return None
+
+    print("\n── CPS detailed-occupation panel (IPUMS, occ1990dd) ──")
+    _write(panel_df, PANEL_OUTPUT_PATH)
+    trends_df = build_detailed_trends(panel_df)
+    _write(trends_df, TRENDS_OUTPUT_PATH)
+    reliability_df = period_reliability(panel_df, trends_df)
+    _write(reliability_df, RELIABILITY_OUTPUT_PATH)
+    print(
+        f"  Reliability of year-over-year growth: median {reliability_df['reliability'].median():.3f} across {len(reliability_df)} periods"
+    )
+    seam_df = measure_vintage_seams(trends_df)
+    _write(seam_df, SEAM_BREAKS_OUTPUT_PATH)
+    _print_seam_summary(seam_df)
+
+    soc_scores_df, score_columns = load_soc_scores()
+    anchor_employment = load_anchor_employment()
+    soc_tables = load_soc_tables()
+    bridge_weights_df = build_bridge_weights(anchor_employment, soc_tables)
+    unit_scores_df = score_units(bridge_weights_df, "occ1990dd", soc_scores_df, score_columns + DISPLACEMENT_SCORE_COLUMNS)
+    _write(unit_scores_df, UNIT_SCORES_OUTPUT_PATH)
+    _write(occ1990dd_composition_stability(bridge_weights_df, pd.read_csv(OCCUPATION_TRENDS_PATH)), STABILITY_OUTPUT_PATH)
+
+    if not os.path.exists(crosstab_seed_path):
+        warnings.warn(f"{crosstab_seed_path} absent, so gate G4 cannot run — detailed CPS levels withheld", stacklevel=2)
+        return None
+    direct_scores_df = direct_unit_scores(
+        pd.read_csv(crosstab_seed_path), census_scores_by_block(soc_scores_df, score_columns, anchor_employment, soc_tables), score_columns
+    )
+    check_df = bridge_check(unit_scores_df, direct_scores_df)
+    _write(check_df, BRIDGE_CHECK_OUTPUT_PATH)
+    for coding_block, block_r in check_df.groupby("coding_block")["block_pearson_r"].first().items():
+        print(f"  G4 {coding_block}: chained vs direct r = {block_r:+.3f}")
+    if not g4_passed(check_df):
+        warnings.warn(
+            "Gate G4 failed: the chained bridge does not track direct Census-code scoring in every coding block. "
+            "Detailed-level and 22-major results are withheld; the design returns for review.",
+            stacklevel=2,
+        )
+        return None
+
+    era_df = run_detailed_level(unit_scores_df, direct_scores_df, panel_df, trends_df, score_columns, output_dir)
+    run_major_level(panel_df, bridge_weights_df, output_dir)
     return era_df

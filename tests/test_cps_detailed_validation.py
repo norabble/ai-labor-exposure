@@ -203,3 +203,64 @@ class TestAgreementReports:
         assert agreement_df.loc[2001, "segment"] == "bridge_2000_2002"
         assert agreement_df.loc[2010, "segment"] == "published_2003_on"
         assert agreement_df.loc[1990, "relative_difference"] == pytest.approx(0.10)
+
+
+import cps_detailed_validation  # noqa: E402
+
+
+class TestRun:
+    def test_a_missing_seed_warns_and_skips(self, tmp_path):
+        with pytest.warns(UserWarning, match="IPUMS"):
+            assert cps_detailed_validation.run(output_dir=str(tmp_path), seed_path=str(tmp_path / "absent.csv")) is None
+
+    def test_a_failed_g4_withholds_both_detailed_levels(self, tmp_path, monkeypatch):
+        panel_df, unit_scores_df = synthetic_inputs()
+        seed_path, crosstab_path = tmp_path / "panel.csv", tmp_path / "crosstab.csv"
+        panel_df.to_csv(seed_path, index=False)
+        pd.DataFrame({"coding_block": ["2003_2010"], "occ1990dd": [1], "census_code": [10], "employed_thousands": [1.0]}).to_csv(
+            crosstab_path, index=False
+        )
+
+        for output_name in (
+            "PANEL_OUTPUT_PATH",
+            "TRENDS_OUTPUT_PATH",
+            "RELIABILITY_OUTPUT_PATH",
+            "SEAM_BREAKS_OUTPUT_PATH",
+            "UNIT_SCORES_OUTPUT_PATH",
+            "STABILITY_OUTPUT_PATH",
+            "BRIDGE_CHECK_OUTPUT_PATH",
+        ):
+            monkeypatch.setattr(cps_detailed_validation, output_name, str(tmp_path / f"{output_name}.csv"))
+        monkeypatch.setattr(cps_detailed_validation, "COMPOSITION_REPORT_PATH", str(seed_path))  # any existing file
+        monkeypatch.setattr(
+            cps_detailed_validation, "load_soc_scores", lambda: (pd.DataFrame({"OCC_CODE": []}), ["composition_net_change"])
+        )
+        monkeypatch.setattr(cps_detailed_validation, "load_anchor_employment", lambda: pd.Series(dtype=float))
+        monkeypatch.setattr(cps_detailed_validation, "load_soc_tables", lambda: None)
+        monkeypatch.setattr(
+            cps_detailed_validation,
+            "build_bridge_weights",
+            lambda anchor, tables: pd.DataFrame({"occ1990dd": [1], "soc_2018_code": ["A"], "weight": [1.0]}),
+        )
+        monkeypatch.setattr(cps_detailed_validation, "score_units", lambda *arguments: unit_scores_df)
+        monkeypatch.setattr(cps_detailed_validation, "occ1990dd_composition_stability", lambda *arguments: pd.DataFrame())
+        monkeypatch.setattr(cps_detailed_validation, "OCCUPATION_TRENDS_PATH", str(seed_path))
+        monkeypatch.setattr(cps_detailed_validation, "census_scores_by_block", lambda *arguments: {})
+        monkeypatch.setattr(cps_detailed_validation, "direct_unit_scores", lambda *arguments: pd.DataFrame())
+        monkeypatch.setattr(
+            cps_detailed_validation,
+            "bridge_check",
+            lambda *arguments: pd.DataFrame({"coding_block": ["2003_2010"], "block_pearson_r": [0.3], "block_gate_passed": [False]}),
+        )
+
+        def must_not_run(*arguments, **keyword_arguments):
+            raise AssertionError("a detailed level ran despite a failed G4")
+
+        monkeypatch.setattr(cps_detailed_validation, "run_detailed_level", must_not_run)
+        monkeypatch.setattr(cps_detailed_validation, "run_major_level", must_not_run)
+        with pytest.warns(UserWarning, match="G4"):
+            assert (
+                cps_detailed_validation.run(output_dir=str(tmp_path), seed_path=str(seed_path), crosstab_seed_path=str(crosstab_path))
+                is None
+            )
+        assert os.path.exists(tmp_path / "BRIDGE_CHECK_OUTPUT_PATH.csv")

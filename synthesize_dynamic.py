@@ -70,6 +70,8 @@ Outputs:
   • data/output/visualizations/dynamic_vs_rebound_model_comparison.png
 """
 
+import warnings
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.stats as stats
@@ -118,9 +120,13 @@ def compute_absorption_scalar(occupation_df: pd.DataFrame, employment_col: str) 
     return displaced_labor / total_capacity
 
 
+AI_DISPLACEMENT_COMPONENTS = ("bounded_exposure_contribution", "adversarial_exposure_contribution")
+
+
 def compute_dynamic_equilibrium(
     merged_occupation_df: pd.DataFrame,
     employment_col: str,
+    displacement_components: tuple[str, ...] = AI_DISPLACEMENT_COMPONENTS,
 ) -> pd.DataFrame:
     """
     Compute signed net employment change for each occupation under labor conservation.
@@ -128,15 +134,44 @@ def compute_dynamic_equilibrium(
     Returns a DataFrame with one row per matched occupation containing gross
     displacement, absorption, net_employment_change, and carry-through columns
     for comparison with the existing rebound-adjusted model.
+
+    `displacement_components` names the columns summed into `gross_displacement`.
+    It defaults to the AI-penetration contributions, which is the only
+    AI-dependent quantity in this module — everything downstream
+    (`absorption_capacity`, the absorption scalar's denominator, conservation, the
+    sensitivity sweep, the jackknife) reads only the demand-type composition. The
+    demand composition model in synthesize_composition.py supplies its own
+    composition-derived components here instead, which is what lets it reuse this
+    equilibrium unchanged.
     """
     valid_occupation_df = merged_occupation_df.dropna(subset=[employment_col]).copy()
+
+    missing_components = [column for column in displacement_components if column not in valid_occupation_df.columns]
+    if missing_components:
+        raise ValueError(f"displacement components missing from the occupation frame: {missing_components}")
+
+    # An occupation with an unknown displacement component cannot be scored, and
+    # leaving it in breaks conservation rather than failing cleanly:
+    # compute_absorption_scalar sums with skipna, so the scalar would be pinned on
+    # a different row set than the one it is applied to, and the conservation
+    # assertion below would fire complaining about conservation when the real
+    # problem is missing input. Dropped here alongside missing employment.
+    scorable_occupation_df = valid_occupation_df.dropna(subset=list(displacement_components))
+    dropped_count = len(valid_occupation_df) - len(scorable_occupation_df)
+    if dropped_count:
+        warnings.warn(
+            f"Dropping {dropped_count} occupation(s) with a missing value in {list(displacement_components)}; "
+            f"they cannot be scored and would break labor conservation.",
+            stacklevel=2,
+        )
+    valid_occupation_df = scorable_occupation_df.copy()
 
     total_employment = valid_occupation_df[employment_col].sum()
     valid_occupation_df["employment_share"] = valid_occupation_df[employment_col] / total_employment
 
-    valid_occupation_df["gross_displacement"] = (
-        valid_occupation_df["bounded_exposure_contribution"] + valid_occupation_df["adversarial_exposure_contribution"]
-    )
+    # skipna=False so a component that is somehow still missing surfaces as NaN
+    # rather than being read as zero displacement.
+    valid_occupation_df["gross_displacement"] = valid_occupation_df[list(displacement_components)].sum(axis=1, skipna=False)
     valid_occupation_df = attach_absorption_capacity(valid_occupation_df)
 
     # Each occupation absorbs displaced labor in proportion to its capacity share,
@@ -163,8 +198,7 @@ def compute_dynamic_equilibrium(
         "pct_unbounded",
         "pct_adversarial",
         "absorption_capacity",
-        "bounded_exposure_contribution",
-        "adversarial_exposure_contribution",
+        *dict.fromkeys([*AI_DISPLACEMENT_COMPONENTS, *displacement_components]),
         "unbounded_exposure_contribution",
         "occupation_exposure",
         "gross_displacement",

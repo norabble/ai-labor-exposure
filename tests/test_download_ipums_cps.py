@@ -22,6 +22,28 @@ class TestSampleIds:
     def test_dws_id_is_the_january_sample(self):
         assert download_ipums_cps.dws_sample_id(2024) == "cps2024_01b"
 
+    def test_basic_monthly_id_without_published_samples_falls_back_to_the_b_guess(self):
+        """Confirmed live 2026-09-23: IPUMS has no fixed 'b'/'s' rule per month, so without a
+        published-sample list to resolve against, this can only guess 'b'."""
+        assert download_ipums_cps.basic_monthly_sample_id(1983, 1) == "cps1983_01b"
+
+    def test_basic_monthly_id_resolves_to_the_published_s_suffix(self):
+        published_samples = {"cps1983_01s"}
+        assert download_ipums_cps.basic_monthly_sample_id(1983, 1, published_samples) == "cps1983_01s"
+
+    def test_basic_monthly_id_prefers_b_when_march_publishes_both(self):
+        """March always carries both suffixes — 'b' the basic sample, 's' the unrelated ASEC
+        supplement — so 'b' must win even though 's' is also published that month."""
+        published_samples = {"cps1983_03b", "cps1983_03s"}
+        assert download_ipums_cps.basic_monthly_sample_id(1983, 3, published_samples) == "cps1983_03b"
+
+    def test_basic_monthly_id_falls_back_to_b_guess_when_neither_suffix_is_published(self):
+        assert download_ipums_cps.basic_monthly_sample_id(1975, 1, set()) == "cps1975_01b"
+
+    def test_dws_id_resolves_to_the_published_s_suffix(self):
+        published_samples = {"cps2024_01s"}
+        assert download_ipums_cps.dws_sample_id(2024, published_samples) == "cps2024_01s"
+
 
 class TestNoIpumspyReference:
     """ipumspy cannot be installed alongside this project's pandas 3 (Ruling 4), so

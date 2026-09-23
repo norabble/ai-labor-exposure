@@ -92,7 +92,11 @@ def run_samples() -> None:
     published_samples = download_ipums_cps.available_sample_ids(download_ipums_cps.make_client())
     present_years = []
     for year in range(ipums_variables.BASIC_MONTHLY_FIRST_YEAR, 2027):
-        months = [month for month in range(1, 13) if download_ipums_cps.basic_monthly_sample_id(year, month) in published_samples]
+        months = [
+            month
+            for month in range(1, 13)
+            if download_ipums_cps.basic_monthly_sample_id(year, month, published_samples) in published_samples
+        ]
         if months:
             present_years.append(year)
         if months and len(months) < 12:
@@ -100,7 +104,9 @@ def run_samples() -> None:
         elif not months:
             print(f"  {year}: NO basic-monthly samples under pattern {ipums_variables.BASIC_MONTHLY_SAMPLE_PATTERN}")
     print(f"  Years with samples: {present_years[0] if present_years else None}-{present_years[-1] if present_years else None}")
-    dws_present = [year for year in ipums_variables.DWS_SURVEY_YEARS if download_ipums_cps.dws_sample_id(year) in published_samples]
+    dws_present = [
+        year for year in ipums_variables.DWS_SURVEY_YEARS if download_ipums_cps.dws_sample_id(year, published_samples) in published_samples
+    ]
     print(f"  DWS survey-year January samples present: {dws_present}")
 
 
@@ -108,9 +114,11 @@ def run_basic_probe() -> None:
     """Submit one small extract across the coding vintages and print everything Task 2 must confirm."""
     client = download_ipums_cps.make_client()
     published_samples = download_ipums_cps.available_sample_ids(client)
-    latest_january = max(year for year in range(2020, 2027) if download_ipums_cps.basic_monthly_sample_id(year, 1) in published_samples)
+    latest_january = max(
+        year for year in range(2020, 2027) if download_ipums_cps.basic_monthly_sample_id(year, 1, published_samples) in published_samples
+    )
     probe_months = BASIC_PROBE_MONTHS + [(latest_january, 1)]
-    samples = [download_ipums_cps.basic_monthly_sample_id(year, month) for year, month in probe_months]
+    samples = [download_ipums_cps.basic_monthly_sample_id(year, month, published_samples) for year, month in probe_months]
     probe_dir = os.path.join(PROBE_DIR, "basic")
     if not download_ipums_cps.extract_is_downloaded(probe_dir):
         download_ipums_cps._submit_and_download(
@@ -141,7 +149,9 @@ def run_dws_probe() -> None:
     client = download_ipums_cps.make_client()
     published_samples = download_ipums_cps.available_sample_ids(client)
     samples = [
-        download_ipums_cps.dws_sample_id(year) for year in DWS_PROBE_YEARS if download_ipums_cps.dws_sample_id(year) in published_samples
+        download_ipums_cps.dws_sample_id(year, published_samples)
+        for year in DWS_PROBE_YEARS
+        if download_ipums_cps.dws_sample_id(year, published_samples) in published_samples
     ]
     probe_dir = os.path.join(PROBE_DIR, "dws")
     if not download_ipums_cps.extract_is_downloaded(probe_dir):

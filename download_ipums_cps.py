@@ -72,13 +72,49 @@ DOWNLOAD_TIMEOUT_SECONDS = (10, 300)
 TERMINAL_FAILURE_STATUSES = {"failed", "canceled"}
 
 
-def basic_monthly_sample_id(year: int, month: int) -> str:
-    """IPUMS sample ID for one basic-monthly CPS month, e.g. (1983, 1) -> 'cps1983_01b'."""
+def _resolve_month_sample_id(year: int, month: int, published_samples: set[str] | None) -> str:
+    """The ID IPUMS actually publishes for one CPS month, resolving the 'b'/'s' suffix.
+
+    Confirmed live 2026-09-23 (Task 2, Step 4): IPUMS does not use a fixed suffix per month —
+    of 523 basic-monthly month-samples published 1983-2025, some months publish as '...b' and
+    others as '...s' with no year/month rule. March is the one month that always publishes
+    both, because '03s' there names the unrelated ASEC supplement rather than a second basic
+    sample, so 'b' is checked first and preferred whenever both exist. Without
+    `published_samples` this can only guess 'b', which is wrong for any month IPUMS instead
+    published under 's'.
+    """
+    b_id = f"cps{year}_{month:02d}b"
+    if published_samples is None:
+        return b_id
+    if b_id in published_samples:
+        return b_id
+    s_id = f"cps{year}_{month:02d}s"
+    if s_id in published_samples:
+        return s_id
+    return b_id
+
+
+def basic_monthly_sample_id(year: int, month: int, published_samples: set[str] | None = None) -> str:
+    """IPUMS sample ID for one basic-monthly CPS month.
+
+    Pass `published_samples` (from `available_sample_ids`) to resolve IPUMS's actual per-month
+    suffix; see `_resolve_month_sample_id`. Without it, this returns the 'b' guess from
+    `BASIC_MONTHLY_SAMPLE_PATTERN`, kept only for offline/formatting use.
+    """
+    if published_samples is not None:
+        return _resolve_month_sample_id(year, month, published_samples)
     return ipums_variables.BASIC_MONTHLY_SAMPLE_PATTERN.format(year=year, month=month)
 
 
-def dws_sample_id(survey_year: int) -> str:
-    """IPUMS sample ID carrying one survey year's Displaced Worker Supplement."""
+def dws_sample_id(survey_year: int, published_samples: set[str] | None = None) -> str:
+    """IPUMS sample ID carrying one survey year's Displaced Worker Supplement.
+
+    The supplement rides inside that year's January basic-monthly sample rather than a
+    separately named sample, so this shares `basic_monthly_sample_id`'s 'b'/'s' resolution
+    (pass `published_samples` to resolve it correctly).
+    """
+    if published_samples is not None:
+        return _resolve_month_sample_id(survey_year, ipums_variables.DWS_SAMPLE_MONTH, published_samples)
     return ipums_variables.DWS_SAMPLE_PATTERN.format(year=survey_year)
 
 
@@ -244,7 +280,7 @@ def fetch_basic_monthly_year(year: int, raw_dir: str = RAW_DIR, client=None) -> 
         return extract_dir
     client = client or make_client()
     published_samples = available_sample_ids(client)
-    samples = [basic_monthly_sample_id(year, month) for month in range(1, 13)]
+    samples = [basic_monthly_sample_id(year, month, published_samples) for month in range(1, 13)]
     samples = [sample_id for sample_id in samples if sample_id in published_samples]
     if not samples:
         return None
@@ -263,8 +299,9 @@ def fetch_dws_survey(survey_year: int, raw_dir: str = RAW_DIR, client=None) -> s
     if extract_is_downloaded(extract_dir):
         return extract_dir
     client = client or make_client()
-    sample_id = dws_sample_id(survey_year)
-    if sample_id not in available_sample_ids(client):
+    published_samples = available_sample_ids(client)
+    sample_id = dws_sample_id(survey_year, published_samples)
+    if sample_id not in published_samples:
         return None
     return _submit_and_download(
         client,

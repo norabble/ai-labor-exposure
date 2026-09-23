@@ -807,3 +807,132 @@ explanations (ten-group aggregation, genuinely different pre-1999 cyclical
 behaviour, and instrument differences). Full numbers, the two internal
 comparability breaks the CPS series carries, and the composition-stability
 sensitivity check are in `docs/charts/composition_model_signal_over_time_cps.md`.
+
+### Detailed occupations (deep history, Phase 2)
+
+The CPS instrument above runs at ten occupation groups. Phase 2 raises the
+cross-sectional n by tabulating IPUMS CPS microdata directly, rather than the
+published ten-series route above, onto two finer grains — **~330 `occ1990dd`
+occupations** (Autor and Dorn's time-consistent spine, chosen because Phase 1
+already pinned it and because a detailed 1983–2002 Census→SOC crosswalk does
+not exist published) and a **22-SOC-major rollup**, both 1983–2026 — plus a
+Displaced Worker Supplement validation at the coarser **Dorn partition,
+~25 occupation groups per survey**, the finest resolution DWS cell sizes can
+support. Neither grain replaces the ten-group CPS instrument above; each level
+writes its own files (`cps_detailed_*`, `occ1990dd_*`, `cps_major_*`,
+`dws_detailed_*`), and none carries a `level` column. CI never tabulates this
+level; `cps_detailed_panel.py` and `dws_detailed_panel.py` run only locally,
+against IPUMS microdata, and write committed aggregate seeds — see the
+README's IPUMS section for the rebuild procedure.
+
+**The label bridge is a published crosswalk chain, with its own error
+measured.** Demand-type labels live on SOC 2018 codes; the panel lives on
+`occ1990dd`. `occ1990dd_soc_bridge.py` chains each `occ1990dd` code through
+Dorn's own occ2010 crosswalk to a 2010 Census code, then through the
+Census/BLS code list to SOC 2010, then through `seeds/soc_crosswalks` to SOC
+2018 — anchored on 2010 because that is the newest vintage Dorn's crosswalks
+reach. Where one `occ1990dd` code splits across several SOC codes, 2022 OEWS
+employment sets the split weights, the same anchor the harmonized SOC units
+already use. A unit's score is the weighted mean over its *labeled* SOC
+constituents only (`labeled_share` records how much weight those carry), and
+`dominant_demand` is re-derived after aggregation rather than carried, per the
+Chief Executives failure mode documented in `CLAUDE.md`. Gate **G4** checks
+this chain's fitness for 2003–2026 by scoring each `occ1990dd` code a second,
+direct way — straight from the raw CPS `OCC` code for that year's vintage to
+SOC, bypassing the chain entirely — and requiring the two score vectors to
+correlate at r ≥ 0.8 in every coding block (2003–10, 2011–19, 2020–26). Below
+that, the bridge is unfit: no detailed-level or rollup result file is written,
+and the design returns for review. **This measured error is a lower bound for
+1983–2002 only** — no direct route exists from the 1980 or 1990 Census
+occupation vintages to SOC, so the compounded error in exactly the stretch
+Phase 2 buys (the pre-1994 span, spanning the 1990–91 downturn) cannot itself
+be measured and is not claimed to be bounded by the 2003+ figure.
+
+**Year-over-year noise at this grain is accepted by decision, not corrected.**
+A median-size `occ1990dd` occupation (~90k workers) carries a level relative
+standard error near 15%, so its year-over-year growth carries a standard error
+of roughly 15–20% against genuine cross-occupation growth differences of only
+a few percent — estimated reliability **~0.1–0.2**, measured per period in
+`cps_detailed_reliability.csv`. Multi-year growth windows would fix this by
+letting real change accumulate while endpoint noise stays fixed, and were
+considered; they were declined because they would cut the detailed test from
+37 usable periods to roughly 9–12, and the decision was to run year-over-year
+and see how it turns out. The only noise handling is therefore a bracket:
+`reliability = 1 − mean(sampling variance of growth) / variance(observed
+growth)`, and `r_corrected = r_raw / sqrt(reliability)` where reliability is
+positive. Raw r is biased toward zero; the household-cluster bootstrap behind
+the sampling-variance estimate treats adjacent years as independent when half
+the sample actually carries over, which overstates growth noise and biases
+corrected r away from zero. The two bracket the true value rather than pinning
+it — and where measured reliability is near the low end of the estimated
+range, the two can diverge widely. If a result later motivates a move to
+multi-year windows, that move is recorded as a named deviation, not a quiet
+change.
+
+**Eligibility is chosen per period, and the fixed alternative is a
+sensitivity only.** A code enters a given year-over-year period's test if its
+employment relative standard error is ≤ 20% in *both* endpoint years — not a
+single set of codes held fixed across the whole span. A fixed set would drop
+every occupation that was small at either end of 1983–2026: typists, word
+processors, and telephone operators on the way down; computer occupations on
+the way up. Those are exactly the occupations that changed most, so a fixed
+set selects on the outcome and hides the strongest cases. Per-period
+eligibility keeps a code until it is genuinely unmeasurable, at the cost that
+eras compare somewhat different occupation mixes — bounded by reporting each
+period's eligible count and employment share, and by the fixed-set and
+10%/20%/30%/no-cutoff sweep in `cps_detailed_eligibility_sweep.csv`. Four
+known seam periods (1991→92, 1993→94, 2002→03, 2010→11 — coding-vintage and
+survey-design breaks, not method artifacts) are excluded from the headline the
+same way Phase 1 excludes COVID periods, and measured, not patched, in
+`cps_detailed_seam_breaks.csv`.
+
+**The asymmetric reading rule applies here more strongly than at any other
+grain.** A positive result at detailed occupation level is strong evidence,
+because 2025 O\*NET demand-type labels applied to 1990-vintage occupation
+categories across 1983–2026 is the hardest test this project runs — if the
+taxonomy still shows through that much anachronism and that much sampling
+noise, it is not an artifact of convenient aggregation. A null result proves
+nothing: task content drifts more for an individual occupation than for a
+sector aggregate, `occ1990dd` forces modern occupations into categories built
+for 1990, and estimated reliability of ~0.1–0.2 means most of a null's
+variance could be sampling noise rather than absence of signal. The
+composition-stability proxy from the ten-group CPS instrument
+(`sector_composition_stability.csv`) is recomputed at this grain, so the
+least-stable occupations can be named directly rather than inferred from
+sector shares.
+
+**Pre-written readings, in the spec's own terms, before any result was
+seen:**
+
+- Expected magnitude: the harmonized-SOC occupation-level composition r
+  averages +0.123 pre-AI; CPS sampling noise attenuates further, so per-period
+  raw r in roughly **+0.05 to +0.15**, possibly lower, is an expectation, not
+  a threshold.
+- A positive, significant intercept in the detailed cycle decomposition across
+  1983–2026 (three downturns) means the general mechanism holds at occupation
+  grain, not only at sector aggregation.
+- A detailed-level null alongside a positive 22-major rollup result, from the
+  *same* microdata, would mean the signal is between-sector composition
+  rather than within-sector occupational sorting — informative despite the
+  reliability caveats, because anachronism alone cannot explain a gap between
+  two grains built from identical source data.
+- An era difference whose sign flips between raw and corrected r is
+  attributed to noise, not reported as an era effect.
+- The AI era contributes only 4 periods at this grain (2022→23 through
+  2025→26); no AI-specific claim is made from it, whatever the result.
+- At the Dorn partition (n≈25), a per-survey displacement correlation above
+  roughly r = 0.40 is individually significant. As with the ten-group DWS
+  panel, a uniform sign across surveys is noted but never pooled into a
+  significance claim — the predicted vector is identical across surveys, so a
+  sign test or averaged r would be bogus.
+
+One resolution choice narrowed after the original design: the 1990 Census
+occupational subheadings sensitivity for the DWS validation is not run,
+because no such code list exists in the Census documentation directory the
+plan checked — the Dorn ~25-group partition is the DWS headline with no
+finer-grained sensitivity available.
+
+#### Results
+
+Results await the first local IPUMS build (see the README's IPUMS section);
+this section is filled in once one exists.

@@ -42,15 +42,19 @@ import pandas as pd
 from scipy import stats
 
 import composition_era_validation as era_validation
+from analyze_bls import attach_growth_columns
+from composition_displacement_validation import soc_major_to_dws_group
 from cps_detailed_measurement import (
     HEADLINE_EXCLUDED_SEAM_PERIODS,
     HEADLINE_UNIVERSE,
+    SEAM_PERIODS,
     eligible_for_period,
     fixed_set_units,
     relative_standard_errors,
     reliability_for_units,
 )
 from cps_detailed_panel import CODING_BLOCKS
+from cps_historical_panel import compare_with_oews
 
 RSE_CUTOFF = 0.20
 SWEEP_CUTOFFS = (0.10, 0.20, 0.30, None)
@@ -257,4 +261,145 @@ def run_detailed_level(
 
     _write(eligibility_sweep(unit_scores_df, trends_df, panel_df, score_columns, labeled, fixed_period_df), SWEEP_OUTPUT_PATH)
     era_validation.plot_signal_over_time(views["headline"], output_dir, level="cps_detailed")
+    return era_df
+
+
+ROLLUP_TRENDS_OUTPUT_PATH = "data/output/cps_major_rollup_trends.csv"
+MAJOR_ERA_OUTPUT_PATH = "data/output/composition_model_era_comparison_cps_major.csv"
+MAJOR_CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition_cps_major.csv"
+MAJOR_OEWS_AGREEMENT_OUTPUT_PATH = "data/output/cps_major_oews_agreement.csv"
+PUBLISHED_AGREEMENT_OUTPUT_PATH = "data/output/cps_detailed_published_agreement.csv"
+PUBLISHED_TEN_GROUP_PANEL_PATH = "seeds/cps_occupation_panel.csv"
+SECTOR_TRENDS_PATH = "data/output/bls_sector_trends.csv"
+# The ten-group level's 8-of-10 convention, at 22.
+MINIMUM_ROLLUP_MAJORS = 20
+
+
+def rollup_to_majors(panel_df: pd.DataFrame, bridge_weights_df: pd.DataFrame, universe: str = HEADLINE_UNIVERSE) -> pd.DataFrame:
+    """Allocate each occ1990dd unit's employment to SOC major groups by its bridge weights.
+
+    Uses every SOC constituent, labeled or not — employment allocation needs no
+    demand-type label. Units the chain does not reach drop out; run_major_level
+    prints how much employment that costs.
+    """
+    major_weights_df = (
+        bridge_weights_df.assign(soc_major=bridge_weights_df["soc_2018_code"].str[:2])
+        .groupby(["occ1990dd", "soc_major"], as_index=False)["weight"]
+        .sum()
+    )
+    universe_df = panel_df.loc[panel_df["universe"] == universe, ["year", "occ1990dd", "employed_thousands"]]
+    allocated_df = universe_df.merge(major_weights_df, on="occ1990dd", how="inner")
+    allocated_df["employed_thousands"] = allocated_df["employed_thousands"] * allocated_df["weight"]
+    return allocated_df.groupby(["year", "soc_major"], as_index=False)["employed_thousands"].sum()
+
+
+def build_rollup_trends(rollup_df: pd.DataFrame) -> pd.DataFrame:
+    """The rollup in bls_sector_trends.csv's layout, keyed by soc_major."""
+    wide_df = rollup_df.pivot(index="soc_major", columns="year", values="employed_thousands")
+    available_years = [str(int(year)) for year in sorted(wide_df.columns)]
+    wide_df = wide_df[sorted(wide_df.columns)]
+    wide_df.columns = [f"TOT_EMP_{year}" for year in available_years]
+    return attach_growth_columns(wide_df.reset_index(), available_years)
+
+
+def major_scores(scored_df: pd.DataFrame, employment_column: str, score_columns: list[str]) -> pd.DataFrame:
+    """Employment-weighted mean score per SOC major, as cps_group_correlation aggregates to the ten groups."""
+    base_df = scored_df.dropna(subset=[employment_column]).assign(soc_major=scored_df["OCC_CODE"].astype(str).str[:2])
+    score_frames = []
+    for score_column in score_columns:
+        scored_rows_df = base_df.dropna(subset=[score_column])
+        weighted = (scored_rows_df[score_column] * scored_rows_df[employment_column]).groupby(scored_rows_df["soc_major"]).sum()
+        score_frames.append((weighted / scored_rows_df.groupby("soc_major")[employment_column].sum()).rename(score_column))
+    return pd.concat(score_frames, axis=1).reset_index()
+
+
+def major_period_correlations(major_scores_df: pd.DataFrame, rollup_trends_df: pd.DataFrame, score_columns: list[str]) -> pd.DataFrame:
+    """Pearson r per (period, score) across SOC majors — the sector specification, seams flagged but kept."""
+    correlation_rows = []
+    for growth_column in era_validation.discover_period_columns(rollup_trends_df):
+        period = era_validation.period_key(growth_column)
+        for score_column in score_columns:
+            paired_df = (
+                major_scores_df[["soc_major", score_column]].merge(rollup_trends_df[["soc_major", growth_column]], on="soc_major").dropna()
+            )
+            if len(paired_df) < MINIMUM_ROLLUP_MAJORS or paired_df[score_column].nunique() < 2 or paired_df[growth_column].nunique() < 2:
+                continue
+            correlation, p_value = stats.pearsonr(paired_df[score_column], paired_df[growth_column])
+            correlation_rows.append(
+                {
+                    "period": period,
+                    "score": score_column,
+                    "fit_r": float(correlation),
+                    "fit_p": float(p_value),
+                    "n_units": len(paired_df),
+                    "era": "ai" if era_validation.is_ai_era(growth_column) else "pre_ai",
+                    "is_covid": period in era_validation.COVID_PERIODS,
+                    "is_seam": period in SEAM_PERIODS,
+                }
+            )
+    return pd.DataFrame(correlation_rows, columns=["period", "score", "fit_r", "fit_p", "n_units", "era", "is_covid", "is_seam"])
+
+
+def oews_major_agreement(wage_salary_trends_df: pd.DataFrame, sector_trends_df: pd.DataFrame) -> pd.DataFrame:
+    """Rollup (wage and salary) against OEWS sector growth, 1999–2025. Reported, never reconciled (Phase 1 D3)."""
+    renamed_df = wage_salary_trends_df.rename(columns={"soc_major": "cps_group"})
+    identity_lookup = {major: major for major in renamed_df["cps_group"]}
+    return compare_with_oews(renamed_df, sector_trends_df, identity_lookup).rename(columns={"cps_group": "soc_major"})
+
+
+def published_ten_group_agreement(rollup_df: pd.DataFrame, published_panel_df: pd.DataFrame) -> pd.DataFrame:
+    """Rollup summed to the ten Phase 1 groups against the published series, every year. Reported only."""
+    group_lookup = soc_major_to_dws_group()
+    grouped_df = (
+        rollup_df.assign(cps_group=rollup_df["soc_major"].map(group_lookup))
+        .dropna(subset=["cps_group"])
+        .groupby(["year", "cps_group"], as_index=False)["employed_thousands"]
+        .sum()
+        .rename(columns={"employed_thousands": "rollup_thousands"})
+    )
+    published_df = published_panel_df.rename(columns={"employed_thousands": "published_thousands"})[
+        ["year", "cps_group", "published_thousands"]
+    ]
+    agreement_df = grouped_df.merge(published_df, on=["year", "cps_group"], how="inner")
+    agreement_df["relative_difference"] = agreement_df["rollup_thousands"] / agreement_df["published_thousands"] - 1
+    agreement_df["segment"] = np.select(
+        [agreement_df["year"] <= 1999, agreement_df["year"] <= 2002], ["reconstruction_1983_1999", "bridge_2000_2002"], "published_2003_on"
+    )
+    return agreement_df
+
+
+def run_major_level(panel_df: pd.DataFrame, bridge_weights_df: pd.DataFrame, output_dir: str) -> pd.DataFrame | None:
+    """The 22-major rollup: trends, era and cycle tests, chart, and both agreement reports."""
+    print("\n── Demand composition model, CPS 22-SOC-major rollup (1983–2026) ──")
+    rollup_df = rollup_to_majors(panel_df, bridge_weights_df)
+    universe_totals = panel_df[panel_df["universe"] == HEADLINE_UNIVERSE].groupby("year")["employed_thousands"].sum()
+    coverage = rollup_df.groupby("year")["employed_thousands"].sum() / universe_totals
+    print(f"  Employment the chain reaches: {coverage.min():.4f}-{coverage.max():.4f} of the panel, by year")
+    rollup_trends_df = build_rollup_trends(rollup_df)
+    _write(rollup_trends_df, ROLLUP_TRENDS_OUTPUT_PATH)
+
+    scored_df, employment_column, _, score_columns = era_validation.load_scored_occupations()
+    period_df = major_period_correlations(major_scores(scored_df, employment_column, score_columns), rollup_trends_df, score_columns)
+    if period_df.empty:
+        print("  ⚠ No 22-major period correlations could be computed.")
+        return None
+    era_df = era_validation.summarise_eras(period_df)
+    _write(era_df, MAJOR_ERA_OUTPUT_PATH)
+    era_validation.print_era_summary(era_df)
+    unemployment_change = era_validation.unemployment_change_by_period(sorted(period_df["period"].unique()))
+    if unemployment_change is not None:
+        cycle_df = era_validation.decompose_fit_strength(period_df, unemployment_change)
+        _write(cycle_df, MAJOR_CYCLE_OUTPUT_PATH)
+        era_validation.print_cycle_decomposition(cycle_df)
+    era_validation.plot_signal_over_time(period_df, output_dir, level="cps_major")
+
+    if os.path.exists(SECTOR_TRENDS_PATH):
+        wage_salary_trends_df = build_rollup_trends(rollup_to_majors(panel_df, bridge_weights_df, "wage_salary"))
+        agreement_df = oews_major_agreement(wage_salary_trends_df, pd.read_csv(SECTOR_TRENDS_PATH, dtype={"soc_major": str}))
+        _write(agreement_df, MAJOR_OEWS_AGREEMENT_OUTPUT_PATH)
+        if len(agreement_df) > 2:
+            agreement_r = stats.pearsonr(agreement_df["cps_growth"], agreement_df["oews_growth"])[0]
+            print(f"  Rollup vs OEWS sector growth (wage and salary): r = {agreement_r:+.3f}, n = {len(agreement_df)}")
+            print("  Reported, never reconciled (Phase 1 D3).")
+    _write(published_ten_group_agreement(rollup_df, pd.read_csv(PUBLISHED_TEN_GROUP_PANEL_PATH)), PUBLISHED_AGREEMENT_OUTPUT_PATH)
     return era_df

@@ -9,9 +9,16 @@ import pytest
 import composition_era_validation
 from cps_detailed_measurement import build_detailed_trends
 from cps_detailed_validation import (
+    MINIMUM_ROLLUP_MAJORS,
+    build_rollup_trends,
     corrected_correlation,
     detailed_period_correlations,
     labeled_units,
+    major_period_correlations,
+    major_scores,
+    oews_major_agreement,
+    published_ten_group_agreement,
+    rollup_to_majors,
     run_views,
 )
 
@@ -127,3 +134,72 @@ class TestChartLevels:
         )
         composition_era_validation.plot_signal_over_time(period_df, str(tmp_path), level=level)
         assert os.path.exists(tmp_path / chart_name)
+
+
+class TestRollupToMajors:
+    def test_detailed_employment_is_split_by_bridge_weight(self):
+        panel_df = panel_rows([(2010, 4, 100.0, 1.0)])
+        bridge_weights_df = pd.DataFrame(
+            {"occ1990dd": [4, 4, 4], "soc_2018_code": ["11-1011", "11-1021", "13-1011"], "weight": [0.5, 0.25, 0.25]}
+        )
+        rollup_df = rollup_to_majors(panel_df, bridge_weights_df).set_index("soc_major")
+        assert rollup_df.loc["11", "employed_thousands"] == pytest.approx(75.0)
+        assert rollup_df.loc["13", "employed_thousands"] == pytest.approx(25.0)
+
+    def test_the_trend_table_carries_the_shared_growth_columns(self):
+        rollup_df = pd.DataFrame({"year": [2021, 2022, 2023], "soc_major": ["11"] * 3, "employed_thousands": [100.0, 110.0, 121.0]})
+        trends_df = build_rollup_trends(rollup_df)
+        assert trends_df.loc[0, "emp_growth_2022_2023"] == pytest.approx(0.10)
+
+
+def _major_inputs(slope):
+    majors = [f"{code:02d}" for code in range(11, 55, 2)]  # 22 two-digit majors
+    scored_df = pd.DataFrame(
+        {"OCC_CODE": [f"{major}-1011" for major in majors], "composition_net_change": np.linspace(0, 1, 22), "TOT_EMP_2025": 1000.0}
+    )
+    rollup_df = pd.DataFrame(
+        [
+            {"year": year, "soc_major": major, "employed_thousands": 100.0 * (1 + slope * score + 0.003 * (index % 3)) ** (year - 2021)}
+            for index, (major, score) in enumerate(zip(majors, np.linspace(0, 1, 22)))
+            for year in (2021, 2022, 2023)
+        ]
+    )
+    return scored_df, build_rollup_trends(rollup_df)
+
+
+class TestMajorPeriodCorrelations:
+    def test_positive_fit_at_n_22(self):
+        scored_df, trends_df = _major_inputs(slope=0.05)
+        period_df = major_period_correlations(
+            major_scores(scored_df, "TOT_EMP_2025", ["composition_net_change"]), trends_df, ["composition_net_change"]
+        )
+        assert (period_df["n_units"] == 22).all()
+        assert (period_df["fit_r"] > 0.5).all()
+
+    def test_fewer_than_twenty_majors_gives_no_row(self):
+        scored_df, trends_df = _major_inputs(slope=0.05)
+        thin_scores_df = major_scores(scored_df.head(MINIMUM_ROLLUP_MAJORS - 1), "TOT_EMP_2025", ["composition_net_change"])
+        assert major_period_correlations(thin_scores_df, trends_df, ["composition_net_change"]).empty
+
+
+class TestAgreementReports:
+    def test_oews_agreement_pairs_each_major_with_itself(self):
+        wage_salary_trends_df = build_rollup_trends(
+            pd.DataFrame({"year": [2021, 2022], "soc_major": ["11", "11"], "employed_thousands": [100.0, 110.0]})
+        )
+        sector_trends_df = pd.DataFrame({"soc_major": ["11"], "TOT_EMP_2021": [200.0], "TOT_EMP_2022": [210.0]})
+        agreement_df = oews_major_agreement(wage_salary_trends_df, sector_trends_df)
+        assert agreement_df.loc[0, "soc_major"] == "11"
+        assert agreement_df.loc[0, "oews_growth"] == pytest.approx(0.05)
+        assert agreement_df.loc[0, "cps_growth"] == pytest.approx(0.10)
+
+    def test_published_agreement_labels_the_reconstruction_segments(self):
+        rollup_df = pd.DataFrame({"year": [1990, 2001, 2010], "soc_major": ["41"] * 3, "employed_thousands": [110.0, 100.0, 99.0]})
+        published_df = pd.DataFrame(
+            {"year": [1990, 2001, 2010], "cps_group": ["sales and related occupations"] * 3, "employed_thousands": [100.0, 100.0, 100.0]}
+        )
+        agreement_df = published_ten_group_agreement(rollup_df, published_df).set_index("year")
+        assert agreement_df.loc[1990, "segment"] == "reconstruction_1983_1999"
+        assert agreement_df.loc[2001, "segment"] == "bridge_2000_2002"
+        assert agreement_df.loc[2010, "segment"] == "published_2003_on"
+        assert agreement_df.loc[1990, "relative_difference"] == pytest.approx(0.10)

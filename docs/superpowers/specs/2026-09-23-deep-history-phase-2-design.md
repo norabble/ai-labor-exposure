@@ -1,6 +1,6 @@
 # Deep History Extension, Phase 2 — Detailed Occupations — Design
 
-**Status: approved design, not yet planned or implemented.**
+**Status: implemented** — see docs/superpowers/plans/2026-09-23-deep-history-phase-2.md.
 
 **Goal:** raise the deep-history validation from ten CPS occupation groups to
 **~380 detailed `occ1990dd` occupations, 1983–2026**, and raise the Displaced

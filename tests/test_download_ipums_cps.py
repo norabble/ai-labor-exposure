@@ -113,8 +113,11 @@ class FakeResponse:
         self.status_code = status_code
 
     def raise_for_status(self):
+        # Matches real `requests.Response.raise_for_status()`, which passes `response=self` — code
+        # that inspects `error.response` (e.g. `download_ipums_cps._is_missing_variable_response`)
+        # needs that to behave the same way here as it does against a real IPUMS response.
         if self.status_code >= 400:
-            raise requests.HTTPError(f"status {self.status_code}")
+            raise requests.HTTPError(f"status {self.status_code}", response=self)
 
     def json(self):
         return self._json_data
@@ -405,3 +408,127 @@ class TestFetchDwsSurvey:
         download_ipums_cps.fetch_dws_survey(2024, raw_dir=str(tmp_path), client=FakeClient({"cps2024_01b"}))
         assert requested["samples"] == ["cps2024_01b"]
         assert set(ipums_variables.DWS_VARIABLES) <= set(requested["variables"])
+
+    def test_a_sample_that_exists_but_carries_no_supplement_warns_and_returns_none(self, tmp_path, monkeypatch):
+        """Confirmed live 2026-09-24: DWS survey year 2026's January sample (cps2026_01s) is
+        published, but the supplement has not been conducted/published for it yet — IPUMS answers
+        400 SemanticValidationError for every DWS variable requested, not an empty extract."""
+
+        def fake_submit(client, samples, variables, description, extract_dir):
+            raise requests.HTTPError(
+                "400",
+                response=FakeResponse(
+                    json_data={"detail": ["DWREAS: This variable is not available in any of the samples currently selected."]},
+                    status_code=400,
+                ),
+            )
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", fake_submit)
+        with pytest.warns(UserWarning, match="does not carry the DWS supplement"):
+            result = download_ipums_cps.fetch_dws_survey(2026, raw_dir=str(tmp_path), client=FakeClient({"cps2026_01s"}))
+        assert result is None
+
+    def test_a_real_failure_during_submission_still_raises(self, tmp_path, monkeypatch):
+        """A lapsed registration (401), a rate limit, or a server error must never be misread as
+        'no supplement in this sample' — only the one specific 400 validation case is swallowed."""
+
+        def fake_submit(client, samples, variables, description, extract_dir):
+            raise requests.HTTPError("401", response=FakeResponse(json_data={"detail": "not registered"}, status_code=401))
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", fake_submit)
+        with pytest.raises(requests.HTTPError):
+            download_ipums_cps.fetch_dws_survey(2026, raw_dir=str(tmp_path), client=FakeClient({"cps2026_01s"}))
+
+
+class TestIsMissingVariableResponse:
+    """`_is_missing_variable_response` gates `submit_and_download_or_none`'s only safe-to-swallow
+    case: IPUMS's specific 400 naming a variable absent from every resolved sample. Everything
+    else — no `.response` at all, a non-400 status, or a 400 for an unrelated reason — must not
+    match, or a real failure (a lapsed registration, a rate limit, a server error) would be
+    silently read as "no supplement here"."""
+
+    def test_matches_the_missing_variable_400(self):
+        error = requests.HTTPError(
+            "400",
+            response=FakeResponse(
+                json_data={"detail": ["DWREAS: This variable is not available in any of the samples currently selected."]},
+                status_code=400,
+            ),
+        )
+        assert download_ipums_cps._is_missing_variable_response(error) is True
+
+    def test_does_not_match_a_401(self):
+        error = requests.HTTPError("401", response=FakeResponse(json_data={"detail": "not registered"}, status_code=401))
+        assert download_ipums_cps._is_missing_variable_response(error) is False
+
+    def test_does_not_match_a_500(self):
+        error = requests.HTTPError("500", response=FakeResponse(json_data=None, status_code=500))
+        assert download_ipums_cps._is_missing_variable_response(error) is False
+
+    def test_does_not_match_a_400_with_an_unrelated_body(self):
+        error = requests.HTTPError(
+            "400", response=FakeResponse(json_data={"detail": ["samples: at least one sample is required"]}, status_code=400)
+        )
+        assert download_ipums_cps._is_missing_variable_response(error) is False
+
+    def test_does_not_match_when_the_error_carries_no_response(self):
+        error = requests.HTTPError("boom")
+        assert error.response is None
+        assert download_ipums_cps._is_missing_variable_response(error) is False
+
+
+class TestSubmitAndDownloadOrNone:
+    def test_returns_the_extract_dir_on_success(self, monkeypatch):
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", lambda *args: args[-1])
+        result = download_ipums_cps.submit_and_download_or_none(
+            client=None, samples=["cps1984_01s"], variables=["DWREAS"], description="probe", extract_dir="a_dir"
+        )
+        assert result == "a_dir"
+
+    def test_returns_none_for_the_400_missing_variable_validation_error(self, monkeypatch):
+        def _raise_missing_variable(client, samples, variables, description, extract_dir):
+            raise requests.HTTPError(
+                "400",
+                response=FakeResponse(
+                    json_data={"detail": ["DWREAS: This variable is not available in any of the samples currently selected."]},
+                    status_code=400,
+                ),
+            )
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", _raise_missing_variable)
+        result = download_ipums_cps.submit_and_download_or_none(
+            client=None, samples=["cps2026_01s"], variables=["DWREAS"], description="probe", extract_dir="unused"
+        )
+        assert result is None
+
+    def test_reraises_a_401(self, monkeypatch):
+        def _raise_unauthorized(client, samples, variables, description, extract_dir):
+            raise requests.HTTPError("401", response=FakeResponse(json_data={"detail": "not registered"}, status_code=401))
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", _raise_unauthorized)
+        with pytest.raises(requests.HTTPError):
+            download_ipums_cps.submit_and_download_or_none(
+                client=None, samples=["x"], variables=["Y"], description="probe", extract_dir="unused"
+            )
+
+    def test_reraises_a_500(self, monkeypatch):
+        def _raise_server_error(client, samples, variables, description, extract_dir):
+            raise requests.HTTPError("500", response=FakeResponse(json_data=None, status_code=500))
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", _raise_server_error)
+        with pytest.raises(requests.HTTPError):
+            download_ipums_cps.submit_and_download_or_none(
+                client=None, samples=["x"], variables=["Y"], description="probe", extract_dir="unused"
+            )
+
+    def test_reraises_a_400_with_an_unrelated_body(self, monkeypatch):
+        def _raise_unrelated_validation_error(client, samples, variables, description, extract_dir):
+            raise requests.HTTPError(
+                "400", response=FakeResponse(json_data={"detail": ["samples: at least one sample is required"]}, status_code=400)
+            )
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", _raise_unrelated_validation_error)
+        with pytest.raises(requests.HTTPError):
+            download_ipums_cps.submit_and_download_or_none(
+                client=None, samples=["x"], variables=["Y"], description="probe", extract_dir="unused"
+            )

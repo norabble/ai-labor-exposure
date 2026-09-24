@@ -2,9 +2,8 @@
 
 import pandas as pd
 import pytest
-import requests
 
-from verify_ipums_cps import displaced_reason_codes, household_cluster_decision, submit_and_download_or_none, summarise_basic_probe
+from verify_ipums_cps import displaced_reason_codes, household_cluster_decision, summarise_basic_probe
 
 
 def _person_rows(year, month, count, occ1990=100, cpsid=1, compwt=1000.0, empstat=10, age=30, classwkr=21):
@@ -49,32 +48,6 @@ class TestHouseholdClusterDecision:
     def test_household_month_when_any_probe_month_does_not(self):
         summary_df = pd.DataFrame({"cpsid_linked_share": [0.0, 1.0]})
         assert household_cluster_decision(summary_df) == "household_month"
-
-
-class TestSubmitAndDownloadOrNone:
-    def test_returns_none_instead_of_raising_when_ipums_rejects_the_extract(self, monkeypatch):
-        """A resolved sample can exist yet lack the requested supplement entirely (confirmed live
-        2026-09-24 for the 2026 DWS survey, not yet conducted/published) — IPUMS answers with a
-        400 for every requested variable, not an empty extract."""
-        import verify_ipums_cps
-
-        def _raise_bad_request(client, samples, variables, description, extract_dir):
-            raise requests.exceptions.HTTPError("400 Client Error: Bad Request for url: ...")
-
-        monkeypatch.setattr(verify_ipums_cps.download_ipums_cps, "_submit_and_download", _raise_bad_request)
-        result = submit_and_download_or_none(
-            client=None, samples=["cps2026_01s"], variables=["DWREAS"], description="probe", extract_dir="unused"
-        )
-        assert result is None
-
-    def test_returns_the_extract_dir_on_success(self, monkeypatch):
-        import verify_ipums_cps
-
-        monkeypatch.setattr(verify_ipums_cps.download_ipums_cps, "_submit_and_download", lambda *args: args[-1])
-        result = submit_and_download_or_none(
-            client=None, samples=["cps1984_01s"], variables=["DWREAS"], description="probe", extract_dir="a_dir"
-        )
-        assert result == "a_dir"
 
 
 class TestDisplacedReasonCodes:

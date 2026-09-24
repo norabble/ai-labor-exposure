@@ -38,6 +38,7 @@ import hashlib
 import os
 import sys
 import time
+import warnings
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -273,6 +274,52 @@ def _submit_and_download(client, samples: list[str], variables: list[str], descr
     return extract_dir
 
 
+# The exact substring IPUMS's extract-submission API uses for one, and only one, semantic
+# validation failure: a requested variable that does not exist in any of the resolved samples.
+# Confirmed live 2026-09-24: DWS survey year 2026's January sample (`cps2026_01s`) is published,
+# but carries no DWS supplement variables at all (the survey has not been conducted/published for
+# that year yet) — IPUMS answers `400 SemanticValidationError` with this fragment in `detail`, once
+# per requested variable, rather than returning an empty extract.
+MISSING_VARIABLE_ERROR_FRAGMENT = "not available in any of the samples currently selected"
+
+
+def _is_missing_variable_response(error: requests.exceptions.HTTPError) -> bool:
+    """True only for the specific 400 naming a variable missing from every resolved sample.
+
+    Deliberately narrow: `submit_extract`, `wait_for_extract` and `download_extract` all call
+    `raise_for_status()`, so a bare `except HTTPError` here would just as easily swallow a 401 (the
+    account's IPUMS CPS registration lapsing), a 429, a 500 during polling, or a 400 for an
+    unrelated reason — every one of those must propagate rather than be misread as "no supplement
+    here". Only a 400 whose JSON body's `detail` actually names
+    `MISSING_VARIABLE_ERROR_FRAGMENT` is treated as that one specific, harmless case.
+    """
+    response = error.response
+    if response is None or response.status_code != 400:
+        return False
+    try:
+        response_body = response.json()
+    except ValueError:
+        return False
+    detail = response_body.get("detail")
+    detail_text = " ".join(detail) if isinstance(detail, list) else str(detail or "")
+    return MISSING_VARIABLE_ERROR_FRAGMENT in detail_text
+
+
+def submit_and_download_or_none(client, samples: list[str], variables: list[str], description: str, extract_dir: str) -> str | None:
+    """Like `_submit_and_download`, but None instead of raising for the one specific, harmless
+    failure `_is_missing_variable_response` recognizes — a resolved sample that exists but does not
+    carry a requested variable at all. Every other error (a lapsed registration, a rate limit, a
+    server error, an unrelated validation failure) propagates unchanged; callers must not treat
+    this function's None as covering any case beyond that one.
+    """
+    try:
+        return _submit_and_download(client, samples, variables, description, extract_dir)
+    except requests.exceptions.HTTPError as submission_error:
+        if not _is_missing_variable_response(submission_error):
+            raise
+        return None
+
+
 def fetch_basic_monthly_year(year: int, raw_dir: str = RAW_DIR, client=None) -> str | None:
     """Download every published basic-monthly sample for one year as a single extract.
 
@@ -297,7 +344,15 @@ def fetch_basic_monthly_year(year: int, raw_dir: str = RAW_DIR, client=None) -> 
 
 
 def fetch_dws_survey(survey_year: int, raw_dir: str = RAW_DIR, client=None) -> str | None:
-    """Download one survey year's January sample with the Displaced Worker Supplement variables."""
+    """Download one survey year's January sample with the Displaced Worker Supplement variables.
+
+    Returns None both when IPUMS publishes no sample for the resolved month at all, and when it
+    publishes the sample but that sample carries none of the requested DWS variables — confirmed
+    live 2026-09-24 for survey year 2026, whose January basic-monthly sample exists but has no DWS
+    supplement fielded yet. The second case is narrowly detected (see
+    `_is_missing_variable_response`) so a real failure — a lapsed registration, a rate limit, a
+    server error — still raises rather than being silently read as "no supplement".
+    """
     extract_dir = os.path.join(raw_dir, "dws", str(survey_year))
     if extract_is_downloaded(extract_dir):
         return extract_dir
@@ -306,13 +361,20 @@ def fetch_dws_survey(survey_year: int, raw_dir: str = RAW_DIR, client=None) -> s
     sample_id = dws_sample_id(survey_year, published_samples)
     if sample_id not in published_samples:
         return None
-    return _submit_and_download(
+    downloaded_dir = submit_and_download_or_none(
         client,
         [sample_id],
         ipums_variables.DWS_VARIABLES,
         f"ai-exposure deep history phase 2: displaced worker supplement {survey_year}",
         extract_dir,
     )
+    if downloaded_dir is None:
+        warnings.warn(
+            f"no supplement in this sample: IPUMS sample {sample_id} (DWS survey year {survey_year}) "
+            "does not carry the DWS supplement variables",
+            stacklevel=2,
+        )
+    return downloaded_dir
 
 
 def _ddi_path(extract_dir: str) -> str:

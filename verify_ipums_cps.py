@@ -30,7 +30,6 @@ import os
 import sys
 
 import pandas as pd
-import requests
 
 import download_ipums_cps
 import ipums_cps_variables as ipums_variables
@@ -188,25 +187,6 @@ def run_legacy_variable_probe() -> None:
     print(f"  Row count: {len(person_df)}")
 
 
-def submit_and_download_or_none(client, samples: list[str], variables: list[str], description: str, extract_dir: str) -> str | None:
-    """Like `download_ipums_cps._submit_and_download`, but None instead of raising when IPUMS
-    rejects the extract outright.
-
-    Confirmed live 2026-09-24: a resolved sample that exists (is in `available_sample_ids`) can
-    still lack a requested supplement entirely — survey year 2026's January sample carries no DWS
-    variables at all (no survey conducted/published for it yet), and IPUMS answers with
-    `400 SemanticValidationError: "<VAR>: This variable is not available in any of the samples
-    currently selected."` for every requested DWS variable, not an empty result. Membership in
-    `available_sample_ids` cannot catch this, since the sample itself is real; only submitting and
-    reading the error can.
-    """
-    try:
-        return download_ipums_cps._submit_and_download(client, samples, variables, description, extract_dir)
-    except requests.exceptions.HTTPError as submission_error:
-        print(f"    extract rejected by IPUMS for {samples}: {submission_error}")
-        return None
-
-
 def run_dws_probe() -> None:
     """Submit ONE single-sample extract per DWS probe survey year and print each year's own coverage.
 
@@ -231,7 +211,7 @@ def run_dws_probe() -> None:
             continue
         year_probe_dir = os.path.join(PROBE_DIR, "dws", str(year))
         if not download_ipums_cps.extract_is_downloaded(year_probe_dir):
-            downloaded_dir = submit_and_download_or_none(
+            downloaded_dir = download_ipums_cps.submit_and_download_or_none(
                 client, [sample_id], ipums_variables.DWS_VARIABLES, f"ai-exposure phase 2 DWS probe {year}", year_probe_dir
             )
             if downloaded_dir is None:

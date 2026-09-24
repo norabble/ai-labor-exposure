@@ -33,6 +33,8 @@ def displaced_records(rows):
         ipums_variables.DWS_TENURE_VARIABLE: 5.0,
         ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 4700,
         ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE: 2,  # wage/salary, private for-profit — not self-employed
+        ipums_variables.DWS_RECALL_VARIABLE: 1,  # No — recall not expected
+        ipums_variables.DWS_LOST_WORK_VARIABLE: 1,  # last year — inside every survey's reference window
     }
     return pd.DataFrame([{**defaults, **row} for row in rows])
 
@@ -57,7 +59,7 @@ class TestSelection:
         person_df = displaced_records(
             [{}, {"AGE": 19}, {ipums_variables.DWS_REASON_VARIABLE: 5}, {ipums_variables.DWS_WEIGHT_VARIABLE: 0.0}]
         )
-        assert len(select_displaced(person_df)) == 1
+        assert len(select_displaced(person_df, 2024)) == 1
 
     def test_long_tenure_is_three_or_more_valid_years(self):
         tenure = ipums_variables.DWS_TENURE_VARIABLE
@@ -72,19 +74,73 @@ class TestSelection:
                 {class_variable: 2},  # wage/salary, private for-profit
             ]
         )
-        result_df = select_displaced(person_df)
+        result_df = select_displaced(person_df, 2024)
         assert len(result_df) == 1
         assert result_df[class_variable].iloc[0] == 2
 
     def test_keeps_missing_or_niu_lost_job_class_rather_than_guessing(self):
         class_variable = ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE
         person_df = displaced_records([{class_variable: code} for code in ipums_variables.DWS_MISSING_CLASS_CODES])
-        assert len(select_displaced(person_df)) == len(ipums_variables.DWS_MISSING_CLASS_CODES)
+        assert len(select_displaced(person_df, 2024)) == len(ipums_variables.DWS_MISSING_CLASS_CODES)
 
     def test_missing_lost_job_class_count_counts_niu_and_nonresponse_codes(self):
         class_variable = ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE
         displaced_df = displaced_records([{class_variable: 2}, {class_variable: 99}, {class_variable: 97}])
         assert dws_detailed_panel.missing_lost_job_class_count(displaced_df) == 2
+
+
+class TestRecallAndWindowSelection:
+    """g3-diagnosis2-report.md: BLS's published Table 5/8 population excludes layoffs expecting
+    recall within six months and lost jobs outside the survey's reference window."""
+
+    def test_recall_expected_is_excluded(self):
+        recall_variable = ipums_variables.DWS_RECALL_VARIABLE
+        person_df = displaced_records([{recall_variable: 1}, {recall_variable: 2}])
+        result_df = select_displaced(person_df, 2024)
+        assert len(result_df) == 1
+        assert result_df[recall_variable].iloc[0] == 1
+
+    @pytest.mark.parametrize("recall_code", [96, 97, 98, 99])
+    def test_niu_and_nonresponse_recall_codes_are_kept(self, recall_code):
+        recall_variable = ipums_variables.DWS_RECALL_VARIABLE
+        person_df = displaced_records([{recall_variable: recall_code}])
+        assert len(select_displaced(person_df, 2024)) == 1
+
+    def test_out_of_window_lost_work_year_is_excluded(self):
+        lost_work_variable = ipums_variables.DWS_LOST_WORK_VARIABLE
+        # 2024 is a 1994+ survey: window is codes 1-3. 0 ("this year"), 4, 5, and 99 (NIU) all fall
+        # outside it.
+        person_df = displaced_records([{lost_work_variable: code} for code in (0, 1, 2, 3, 4, 5, 99)])
+        result_df = select_displaced(person_df, 2024)
+        assert sorted(result_df[lost_work_variable].tolist()) == [1, 2, 3]
+
+    def test_pre_1994_window_is_five_years(self):
+        lost_work_variable = ipums_variables.DWS_LOST_WORK_VARIABLE
+        person_df = displaced_records([{lost_work_variable: code} for code in (0, 1, 2, 3, 4, 5, 99)])
+        result_df = select_displaced(person_df, 1990)
+        assert sorted(result_df[lost_work_variable].tolist()) == [1, 2, 3, 4, 5]
+
+    def test_pre_1994_survey_with_no_dwrecall_column_applies_no_recall_filter_and_does_not_crash(self):
+        person_df = displaced_records([{}]).drop(columns=[ipums_variables.DWS_RECALL_VARIABLE])
+        result_df = select_displaced(person_df, 1990)
+        assert len(result_df) == 1
+
+
+class TestRecallRuleImpact:
+    def test_measures_the_share_the_recall_rule_removes(self):
+        recall_variable = ipums_variables.DWS_RECALL_VARIABLE
+        person_df = displaced_records(
+            [
+                {recall_variable: 1, ipums_variables.DWS_WEIGHT_VARIABLE: 3000.0},
+                {recall_variable: 2, ipums_variables.DWS_WEIGHT_VARIABLE: 1000.0},
+            ]
+        )
+        # Recall-included total 4000, recall-excluded total 3000 -> 25% removed.
+        assert dws_detailed_panel.measure_recall_rule_impact(person_df, 1994) == pytest.approx(0.25)
+
+    def test_nan_when_the_recall_included_total_is_zero(self):
+        person_df = displaced_records([{"AGE": 10}])  # excluded on age, so nothing in the denominator
+        assert pd.isna(dws_detailed_panel.measure_recall_rule_impact(person_df, 1994))
 
 
 class TestMapping:

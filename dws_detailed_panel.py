@@ -24,6 +24,14 @@ how the nonresponse share rides the gate record forward to `dws_detailed_validat
 uses it only to inflate its secondary rate measure (missing-at-random allocation); the headline
 share measure and gate G3 stay unallocated.
 
+`select_displaced` definition corrected 2026-09-24 (plan Deviations log; see g3-diagnosis2-report.md):
+it now excludes layoffs where the respondent expected recall to the same job within six months
+(`DWRECALL == 2`) and lost jobs outside the survey's own reference window (`DWLASTWRK`, 1-3 years
+for 1994+, 1-5 years for 1984-1992) — both of which BLS's published Table 5/8 exclude and the prior
+selection did not, which is what made G3 fail 40/90 before the fix. DWRECALL does not exist before
+the 1994 survey, so the recall exclusion is an unmeasured (disclosed, not patched) break at the
+1992->1994 boundary — see `measure_recall_rule_impact`, sized for 1994 and 1996 in the build log.
+
 Never runs in CI. Seeds hold aggregates only.
 
 Inputs:
@@ -129,7 +137,24 @@ def _harmonized_edges() -> pd.DataFrame:
     return pd.DataFrame({"raw_code": list(spine), "occ1990dd": list(spine.values()), "share": 1.0})
 
 
-def select_displaced(person_df: pd.DataFrame) -> pd.DataFrame:
+def _recall_expected_mask(person_df: pd.DataFrame) -> pd.Series:
+    """True where the respondent expected recall to the lost job within six months.
+
+    `DWRECALL` is not published before the 1994 survey (`ipums_variables.DWS_RECALL_FIRST_SURVEY_YEAR`),
+    so a 1984-1992 extract carries no such column at all — this returns all-False rather than
+    raising, matching the brief's requirement that pre-1994 surveys apply no recall filter and never
+    crash. When the column is present, only a positive match to `DWS_RECALL_EXPECTED_CODE` (2, "Yes")
+    excludes a record; NIU (plant closings, which DWRECALL is never asked about), refused,
+    don't-know and no-response are all kept, the same missing-is-kept convention already used for
+    lost-job class of worker.
+    """
+    recall_variable = ipums_variables.DWS_RECALL_VARIABLE
+    if recall_variable not in person_df.columns:
+        return pd.Series(False, index=person_df.index)
+    return person_df[recall_variable].astype(int) == ipums_variables.DWS_RECALL_EXPECTED_CODE
+
+
+def select_displaced(person_df: pd.DataFrame, survey_year: int) -> pd.DataFrame:
     """Supplement respondents aged 20+ displaced for one of BLS's three reasons, wage-and-salary lost jobs only.
 
     BLS's published Table 5 population excludes all self-employed lost-job workers, incorporated
@@ -138,18 +163,57 @@ def select_displaced(person_df: pd.DataFrame) -> pd.DataFrame:
     missing, NIU, refused, or don't-know (`ipums_variables.DWS_MISSING_CLASS_CODES`) is kept rather
     than guessed at — see `missing_lost_job_class_count` for how many such records survive per
     survey.
+
+    Two further exclusions match BLS's published Table 5/8 population (g3-diagnosis2-report.md):
+    a layoff where the respondent expects recall to the same job within six months (`DWRECALL == 2`,
+    see `_recall_expected_mask`) is dropped, and a lost job outside the survey's own reference window
+    (`DWLASTWRK`, see `ipums_variables.dws_lastwrk_window`) is dropped. Both are needed together to
+    reproduce BLS Table 8 to within 0.5k in every 2008-2024 survey; the recall exclusion cannot be
+    applied before 1994 (DWRECALL does not exist then), so pre-1994 comparability against the
+    recall-adjusted 1994+ series carries an unmeasured break on that dimension alone — see
+    `measure_recall_rule_impact`, which sizes it for 1994 and 1996, the two years closest to the
+    boundary where DWRECALL does exist.
     """
     weights = person_df[ipums_variables.DWS_WEIGHT_VARIABLE].astype(float)
     self_employed_mask = (
         person_df[ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE].astype(int).isin(ipums_variables.DWS_SELF_EMPLOYED_CLASS_CODES)
     )
+    within_window_mask = person_df[ipums_variables.DWS_LOST_WORK_VARIABLE].astype(int).isin(ipums_variables.dws_lastwrk_window(survey_year))
     displaced_mask = (
         (weights > 0)
         & (person_df["AGE"] >= ipums_variables.DWS_MINIMUM_AGE)
         & person_df[ipums_variables.DWS_REASON_VARIABLE].isin(ipums_variables.DWS_DISPLACED_REASON_CODES)
         & ~self_employed_mask
+        & ~_recall_expected_mask(person_df)
+        & within_window_mask
     )
     return person_df[displaced_mask].copy()
+
+
+def measure_recall_rule_impact(person_df: pd.DataFrame, survey_year: int) -> float:
+    """The share of all-tenures weight the DWRECALL==2 exclusion removes, holding every other
+    `select_displaced` filter (age, reason, self-employment, window) fixed.
+
+    Reporting-only (plan brief step 3, "measure and disclose, never patch"): this is the size of the
+    1992->1994 definitional break — DWRECALL is not published before 1994, so the recall exclusion
+    cannot be applied to 1984-1992, and this function shows how much of a 1994+ survey's total it
+    would be silently absorbing were the rule dropped there too. NaN if the recall-included total is
+    zero (nothing to compare against).
+    """
+    weight_column = ipums_variables.DWS_WEIGHT_VARIABLE
+    with_recall_exclusion_df = select_displaced(person_df, survey_year)
+    without_recall_exclusion_mask = (
+        (person_df[weight_column].astype(float) > 0)
+        & (person_df["AGE"] >= ipums_variables.DWS_MINIMUM_AGE)
+        & person_df[ipums_variables.DWS_REASON_VARIABLE].isin(ipums_variables.DWS_DISPLACED_REASON_CODES)
+        & ~person_df[ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE].astype(int).isin(ipums_variables.DWS_SELF_EMPLOYED_CLASS_CODES)
+        & person_df[ipums_variables.DWS_LOST_WORK_VARIABLE].astype(int).isin(ipums_variables.dws_lastwrk_window(survey_year))
+    )
+    without_recall_exclusion_total = float(person_df.loc[without_recall_exclusion_mask, weight_column].astype(float).sum())
+    with_recall_exclusion_total = float(with_recall_exclusion_df[weight_column].astype(float).sum())
+    if without_recall_exclusion_total <= 0:
+        return float("nan")
+    return float(1 - with_recall_exclusion_total / without_recall_exclusion_total)
 
 
 def missing_lost_job_class_count(displaced_df: pd.DataFrame) -> int:
@@ -317,12 +381,32 @@ def nonresponse_share_by_survey(gates_df: pd.DataFrame) -> pd.Series:
     return nonresponse_rows.set_index(nonresponse_rows["scope"].astype(int))["observed"].astype(float)
 
 
+def read_survey_raw_persons(survey_year: int, raw_dir: str = download_ipums_cps.RAW_DIR) -> pd.DataFrame | None:
+    """A downloaded survey's raw, unfiltered supplement records, or None if not downloaded.
+
+    Reporting-only counterpart to `read_survey_persons`: `measure_recall_rule_impact` needs the raw
+    records (both the recall-excluded and recall-included totals), which `read_survey_persons`
+    already discards by applying `select_displaced` per chunk.
+    """
+    extract_dir = os.path.join(raw_dir, "dws", str(survey_year))
+    if not download_ipums_cps.extract_is_downloaded(extract_dir):
+        return None
+    return pd.concat(list(download_ipums_cps.read_extract(extract_dir)), ignore_index=True)
+
+
 def read_survey_persons(survey_year: int, raw_dir: str = download_ipums_cps.RAW_DIR) -> pd.DataFrame | None:
     """A downloaded survey's displaced records, or None if not downloaded."""
     extract_dir = os.path.join(raw_dir, "dws", str(survey_year))
     if not download_ipums_cps.extract_is_downloaded(extract_dir):
         return None
-    return pd.concat([select_displaced(chunk_df) for chunk_df in download_ipums_cps.read_extract(extract_dir)], ignore_index=True)
+    return pd.concat(
+        [select_displaced(chunk_df, survey_year) for chunk_df in download_ipums_cps.read_extract(extract_dir)], ignore_index=True
+    )
+
+
+# The two survey years the plan brief asks the recall-rule break to be sized against — the closest
+# 1994+ surveys to the 1992->1994 boundary where DWRECALL starts existing.
+RECALL_RULE_DISCLOSURE_SURVEY_YEARS = (1994, 1996)
 
 
 def build_rebuilt_panel(
@@ -351,6 +435,13 @@ def build_rebuilt_panel(
             f"  {survey_year}: {len(displaced_df)} displaced records, unmapped share {unmapped_by_survey[survey_year]:.4f}, "
             f"occupation nonresponse share {nonresponse_by_survey[survey_year]:.4f}, missing/NIU lost-job class {missing_class_count}"
         )
+        if survey_year in RECALL_RULE_DISCLOSURE_SURVEY_YEARS:
+            raw_df = read_survey_raw_persons(survey_year, raw_dir)
+            recall_rule_share = measure_recall_rule_impact(raw_df, survey_year)
+            print(
+                f"    {survey_year}: recall rule removes {recall_rule_share:.4f} of the recall-included all-tenures "
+                "weight (1992->1994 definitional break disclosure — DWRECALL does not exist before 1994)"
+            )
 
     if not survey_frames:
         raise RuntimeError(

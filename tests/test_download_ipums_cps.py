@@ -409,6 +409,21 @@ class TestFetchDwsSurvey:
         assert requested["samples"] == ["cps2024_01b"]
         assert set(ipums_variables.DWS_VARIABLES) <= set(requested["variables"])
 
+    def test_a_pre_1994_survey_does_not_request_dwrecall(self, tmp_path, monkeypatch):
+        """DWRECALL is not published before the 1994 survey (confirmed live against its own IPUMS
+        availability grid); requesting it for an earlier survey year risks IPUMS rejecting the
+        whole extract the way COMPWT would for a pre-1998 basic-monthly year."""
+        requested = {}
+
+        def fake_submit(client, samples, variables, description, extract_dir):
+            requested["variables"] = variables
+            return extract_dir
+
+        monkeypatch.setattr(download_ipums_cps, "_submit_and_download", fake_submit)
+        download_ipums_cps.fetch_dws_survey(1990, raw_dir=str(tmp_path), client=FakeClient({"cps1990_01b"}))
+        assert ipums_variables.DWS_RECALL_VARIABLE not in requested["variables"]
+        assert ipums_variables.DWS_LOST_WORK_VARIABLE in requested["variables"]
+
     def test_a_sample_that_exists_but_carries_no_supplement_warns_and_returns_none(self, tmp_path, monkeypatch):
         """Confirmed live 2026-09-24: DWS survey year 2026's January sample (cps2026_01s) is
         published, but the supplement has not been conducted/published for it yet — IPUMS answers

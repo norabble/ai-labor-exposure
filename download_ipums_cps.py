@@ -364,7 +364,7 @@ def fetch_dws_survey(survey_year: int, raw_dir: str = RAW_DIR, client=None) -> s
     downloaded_dir = submit_and_download_or_none(
         client,
         [sample_id],
-        ipums_variables.DWS_VARIABLES,
+        ipums_variables.dws_variables_for_year(survey_year),
         f"ai-exposure deep history phase 2: displaced worker supplement {survey_year}",
         extract_dir,
     )

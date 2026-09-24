@@ -197,6 +197,50 @@ DWS_SELF_EMPLOYED_CLASS_CODES: tuple[int, ...] = (4,)
 # them separately per survey so their share stays visible rather than silently absorbed.
 DWS_MISSING_CLASS_CODES: tuple[int, ...] = (96, 97, 98, 99)
 
+# Recall expectation and reference-window variables (g3-diagnosis2-report.md): BLS's published
+# Table 5/8 population excludes two further groups that IPUMS's raw DWSTAT-adjacent selection does
+# not, on its own, filter out — a layoff where the respondent expects recall to the same job within
+# six months, and a lost job outside the survey's own reference window. Both are needed together to
+# reproduce Table 8 to within 0.5k in every 2008-2024 survey (verified in the diagnosis: recall
+# alone leaves three G3 cells failing; recall + window gives 90/90).
+#
+# DWRECALL: universe is "persons who lost a job in the last year because of a shift elimination or
+# insufficient work" (plant-closing layoffs are NIU, never coded 2, so this exclusion cannot touch
+# them). Confirmed live 2026-09-24 from the variable page's embedded `categories` JSON:
+# 01 No, 02 Yes, 96 Refused, 97 Don't Know, 98 No response, 99 NIU. Confirmed live 2026-09-24 against
+# DWRECALL's own IPUMS availability grid: published from the 1994 survey on (February 1994-2000,
+# January 2002-2024); absent entirely for 1984-1992, so no recall exclusion is possible for those
+# three surveys and the rule cannot be applied there (see the 1992->1994 break note below).
+DWS_RECALL_VARIABLE = "DWRECALL"
+DWS_RECALL_FIRST_SURVEY_YEAR = 1994
+DWS_RECALL_EXPECTED_CODE = 2
+# Codes that say nothing about whether recall was expected (NIU, refused, don't know, no
+# response) — a record carrying one of these is never excluded, matching how
+# DWS_MISSING_CLASS_CODES is treated above.
+DWS_RECALL_MISSING_CODES: tuple[int, ...] = (96, 97, 98, 99)
+
+# DWLASTWRK: "years ago last worked at lost job", published for every DWS survey year 1984-2024
+# (confirmed live 2026-09-24 against its own availability grid, same January/February pattern as
+# every other DWS variable). Confirmed live 2026-09-24 from the variable page's embedded
+# `categories` JSON: 00 This year, 01 Last year, 02 Two years ago, 03 Three years ago,
+# 04 Four years ago, 05 Five years ago, 95 Other, 96 Refused, 97 Don't Know, 98 No response,
+# 99 NIU. BLS's technical note describes the reference period as "the last 3 calendar years" from
+# 1994 on and "the last 5 calendar years" for 1984-1992 (IPUMS's own DWLASTWRK universe note
+# repeats the same two periods verbatim); the diagnosis's exact match to Table 8 uses codes 1-3
+# only (2008-2024) — code 00 ("this year") is excluded on both windows, since the survey's own
+# resolved sample month falls inside the still-in-progress current calendar year, outside "the
+# last N calendar years" the technical note describes.
+DWS_LOST_WORK_VARIABLE = "DWLASTWRK"
+DWS_LOST_WORK_WINDOW_CODES: tuple[int, ...] = (1, 2, 3)
+DWS_LOST_WORK_WINDOW_CODES_PRE_1994: tuple[int, ...] = (1, 2, 3, 4, 5)
+
+
+def dws_lastwrk_window(survey_year: int) -> tuple[int, ...]:
+    """The DWLASTWRK codes inside a survey's own reference window: 1-3 years for 1994 on (the
+    3-calendar-year window), 1-5 years for 1984-1992 (the 5-calendar-year window)."""
+    return DWS_LOST_WORK_WINDOW_CODES if survey_year >= DWS_RECALL_FIRST_SURVEY_YEAR else DWS_LOST_WORK_WINDOW_CODES_PRE_1994
+
+
 DWS_VARIABLES = [
     "YEAR",
     "MONTH",
@@ -209,4 +253,19 @@ DWS_VARIABLES = [
     DWS_TENURE_VARIABLE,
     DWS_LOST_JOB_OCC_VARIABLE,
     DWS_LOST_JOB_CLASS_VARIABLE,
+    DWS_RECALL_VARIABLE,
+    DWS_LOST_WORK_VARIABLE,
 ] + ([DWS_LOST_JOB_OCC1990_VARIABLE] if DWS_LOST_JOB_OCC1990_VARIABLE else [])
+
+# Per-variable first survey year, the DWS analogue of `VARIABLE_FIRST_YEAR` above: DWRECALL is not
+# published before the 1994 survey, so requesting it for 1984-1992 risks IPUMS rejecting the whole
+# extract the same way COMPWT would for a pre-1998 basic-monthly year (see `_is_missing_variable_response`
+# in download_ipums_cps.py, which already treats "variable missing from every resolved sample" as a
+# submission error rather than a green light to silently drop the variable).
+DWS_VARIABLE_FIRST_YEAR: dict[str, int] = {DWS_RECALL_VARIABLE: DWS_RECALL_FIRST_SURVEY_YEAR}
+
+
+def dws_variables_for_year(survey_year: int) -> list[str]:
+    """The subset of DWS_VARIABLES IPUMS actually publishes for one survey year (mirrors
+    `variables_for_year` above for the basic-monthly list)."""
+    return [name for name in DWS_VARIABLES if survey_year >= DWS_VARIABLE_FIRST_YEAR.get(name, 0)]

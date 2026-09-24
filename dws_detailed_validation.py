@@ -15,6 +15,14 @@ consistent sign across surveys is not independent evidence and is never turned
 into a sign test or an averaged r. At n≈25 a single survey needs r ≈ 0.40 to be
 individually significant.
 
+**Read the rate measure first.** The share measure is mostly a group-size
+effect: a "size" pseudo-model (`model == "employment_size_benchmark"`) reports
+how well each group's plain employment share alone predicts its observed
+displacement share — no model score enters it at all — and it tracks the real
+models' share r closely. The rate measure divides that size effect out, so it
+is the informative test and is printed, and should be read, before the share
+line.
+
 The rate form divides each group's displaced count by its CPS employment in the
 year before the survey. The recall window covers three to five years, so this is
 an approximation, which is why the rate is a sensitivity and not the headline.
@@ -68,6 +76,7 @@ MODEL_RATE_COLUMNS = {"composition": "composition_gross_displacement", "dynamic"
 HEADLINE_TENURE_CLASS = "all_tenures"
 HEADLINE_MEASURE = "share"
 COMPLETE_YEAR_MONTHS = 12
+SIZE_BENCHMARK_MODEL = "employment_size_benchmark"
 
 
 def latest_complete_employment(panel_df: pd.DataFrame) -> pd.Series:
@@ -104,6 +113,21 @@ def _share_correlation(observed_df: pd.DataFrame, predicted_df: pd.DataFrame) ->
     merged_df["observed_share"] = merged_df["displaced_thousands"] / merged_df["displaced_thousands"].sum()
     merged_df["predicted_share"] = merged_df["predicted_displaced"] / merged_df["predicted_displaced"].sum()
     return correlate_with_leave_one_out(merged_df.rename(columns={"dorn_group": "dws_group"}), "predicted_share")
+
+
+def _employment_size_benchmark_correlation(observed_df: pd.DataFrame, employment_by_group: pd.Series) -> dict[str, float] | None:
+    """A size-only pseudo-model: does a group's plain employment share alone predict its observed
+    displacement share? No model score enters this at all — it uses the same employment
+    (`group_employment`, CPS employment in the survey's prior year) the rate measure already
+    computes, so it costs nothing extra to derive here."""
+    merged_df = observed_df.copy()
+    merged_df["employment"] = merged_df["dorn_group"].map(employment_by_group)
+    merged_df = merged_df.dropna(subset=["employment"])
+    if merged_df["employment"].nunique() < 2:
+        return None
+    merged_df["observed_share"] = merged_df["displaced_thousands"] / merged_df["displaced_thousands"].sum()
+    merged_df["employment_share"] = merged_df["employment"] / merged_df["employment"].sum()
+    return correlate_with_leave_one_out(merged_df.rename(columns={"dorn_group": "dws_group"}), "employment_share")
 
 
 def allocate_nonresponse_for_rate(displaced_thousands: pd.Series, employment: pd.Series, nonresponse_share: float) -> pd.Series:
@@ -185,6 +209,23 @@ def build_detailed_displacement_comparison(
                         )
                     }
                 )
+        size_benchmark_correlations = _employment_size_benchmark_correlation(observed_df, employment_by_group)
+        if size_benchmark_correlations is not None:
+            comparison_rows.append(
+                {"survey_year": int(survey_year), "model": SIZE_BENCHMARK_MODEL, "tenure_class": tenure_class, "measure": "share"}
+                | {
+                    column: size_benchmark_correlations.get(column, float("nan"))
+                    for column in (
+                        "pearson_r",
+                        "pearson_p",
+                        "spearman_r",
+                        "spearman_p",
+                        "leave_one_out_min",
+                        "leave_one_out_max",
+                        "n_groups",
+                    )
+                }
+            )
     return pd.DataFrame(comparison_rows, columns=OUTPUT_COLUMNS)
 
 
@@ -247,12 +288,24 @@ def run(
     comparison_df.to_csv(OUTPUT_PATH, index=False)
 
     print("\n── Predicted vs measured displacement, Dorn occupation groups, every DWS survey ──")
-    headline_df = comparison_df[(comparison_df["tenure_class"] == HEADLINE_TENURE_CLASS) & (comparison_df["measure"] == HEADLINE_MEASURE)]
-    for model, model_df in headline_df.groupby("model"):
+    print("  Rate measure first — it is size-free and the informative test; the share measure below is mostly group size.")
+    rate_df = comparison_df[(comparison_df["tenure_class"] == HEADLINE_TENURE_CLASS) & (comparison_df["measure"] == "rate")]
+    for model, model_df in rate_df.groupby("model"):
         print(
-            f"  {model:<12} Pearson r {model_df['pearson_r'].min():+.3f} to {model_df['pearson_r'].max():+.3f} "
+            f"  rate   {model:<12} Pearson r {model_df['pearson_r'].min():+.3f} to {model_df['pearson_r'].max():+.3f} "
             f"(median {model_df['pearson_r'].median():+.3f}) across {len(model_df)} surveys; "
             f"{int((model_df['pearson_p'] < 0.05).sum())} individually significant; n≈{int(model_df['n_groups'].median())} needs r≈0.40"
+        )
+
+    headline_df = comparison_df[(comparison_df["tenure_class"] == HEADLINE_TENURE_CLASS) & (comparison_df["measure"] == HEADLINE_MEASURE)]
+    benchmark_df = headline_df[headline_df["model"] == SIZE_BENCHMARK_MODEL]
+    benchmark_median_r = benchmark_df["pearson_r"].median() if not benchmark_df.empty else float("nan")
+    for model, model_df in headline_df[headline_df["model"] != SIZE_BENCHMARK_MODEL].groupby("model"):
+        print(
+            f"  share  {model:<12} Pearson r {model_df['pearson_r'].min():+.3f} to {model_df['pearson_r'].max():+.3f} "
+            f"(median {model_df['pearson_r'].median():+.3f}) across {len(model_df)} surveys; "
+            f"{int((model_df['pearson_p'] < 0.05).sum())} individually significant; n≈{int(model_df['n_groups'].median())} needs r≈0.40; "
+            f"size-only benchmark median r {benchmark_median_r:+.3f} across {len(benchmark_df)} surveys"
         )
     print("  Surveys share one predicted vector, so a consistent sign is not independent evidence and is not pooled.")
     print(f"  ✓ {OUTPUT_PATH}")

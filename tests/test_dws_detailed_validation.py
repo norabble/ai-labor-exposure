@@ -75,6 +75,78 @@ def test_a_constant_prediction_gives_no_correlation_row():
     assert comparison_df[comparison_df["model"] == "dynamic"].empty
 
 
+def _inputs_with_group_employment(observed_multiplier, employment_by_index):
+    """Like `_inputs`, but each group's CPS employment (in every year) is set from
+    `employment_by_index`, rather than a uniform 1000.0 — needed to test the size-only benchmark,
+    which is driven entirely by that employment, not by any model score."""
+    groups_df = pd.DataFrame({"occ1990dd": range(1, 7), "dorn_group": GROUPS})
+    unit_scores_df = pd.DataFrame(
+        {
+            "occ1990dd": range(1, 7),
+            "composition_gross_displacement": [0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
+            "dynamic_gross_displacement": 0.02,
+        }
+    )
+    panel_df = pd.DataFrame(
+        [
+            {
+                "year": year,
+                "occ1990dd": code,
+                "universe": "all_employed",
+                "employed_thousands": employment_by_index[code - 1],
+                "months_observed": months,
+            }
+            for year, months in ((2022, 12), (2023, 12), (2024, 12), (2025, 12), (2026, 8))
+            for code in range(1, 7)
+        ]
+    )
+    dws_panel_df = pd.DataFrame(
+        [
+            {"survey_year": 2024, "dorn_group": group, "tenure_class": "all_tenures", "displaced_thousands": observed_multiplier(index)}
+            for index, group in enumerate(GROUPS)
+        ]
+    )
+    return dws_panel_df, unit_scores_df, panel_df, groups_df
+
+
+class TestEmploymentSizeBenchmark:
+    """The size-only pseudo-model: does a group's plain CPS employment share alone predict its
+    observed displacement share, with no model score involved at all?"""
+
+    def test_perfect_employment_proportionality_gives_a_benchmark_r_of_one(self):
+        employment_by_index = [100.0, 200.0, 300.0, 400.0, 500.0, 600.0]
+        dws_panel_df, unit_scores_df, panel_df, groups_df = _inputs_with_group_employment(
+            lambda index: 0.05 * employment_by_index[index], employment_by_index
+        )
+        comparison_df = build_detailed_displacement_comparison(dws_panel_df, unit_scores_df, panel_df, groups_df)
+
+        benchmark_rows = comparison_df[(comparison_df["model"] == "employment_size_benchmark") & (comparison_df["measure"] == "share")]
+        assert len(benchmark_rows) == 1
+        benchmark_row = benchmark_rows.iloc[0]
+        assert benchmark_row["pearson_r"] == pytest.approx(1.0)
+        assert benchmark_row["n_groups"] == 6
+
+    def test_benchmark_rows_do_not_duplicate_per_real_model(self):
+        """One employment_size_benchmark row per (survey_year, tenure_class) — not one per
+        composition/dynamic, since the benchmark carries no model score."""
+        employment_by_index = [100.0, 150.0, 225.0, 300.0, 450.0, 600.0]
+        dws_panel_df, unit_scores_df, panel_df, groups_df = _inputs_with_group_employment(
+            lambda index: 5.0 * (index + 1), employment_by_index
+        )
+        comparison_df = build_detailed_displacement_comparison(dws_panel_df, unit_scores_df, panel_df, groups_df)
+
+        benchmark_rows = comparison_df[comparison_df["model"] == "employment_size_benchmark"]
+        assert len(benchmark_rows) == comparison_df[["survey_year", "tenure_class"]].drop_duplicates().shape[0]
+
+    def test_benchmark_rows_keep_the_full_output_schema(self):
+        employment_by_index = [100.0, 200.0, 300.0, 400.0, 500.0, 600.0]
+        dws_panel_df, unit_scores_df, panel_df, groups_df = _inputs_with_group_employment(
+            lambda index: 0.05 * employment_by_index[index], employment_by_index
+        )
+        comparison_df = build_detailed_displacement_comparison(dws_panel_df, unit_scores_df, panel_df, groups_df)
+        assert list(comparison_df.columns) == dws_detailed_validation.OUTPUT_COLUMNS
+
+
 class TestNonresponseAllocation:
     """The rate measure's proportional, missing-at-random nonresponse allocation."""
 

@@ -24,6 +24,7 @@ Inputs:
 Outputs:
   • data/output/composition_model_displacement_validation.csv
   • data/output/composition_model_displacement_validation_panel.csv
+  • data/output/composition_model_displacement_size_benchmark.csv
   • data/output/visualizations/dws_observed_vs_predicted_displacement.png
 
 Why shares rather than rates
@@ -79,6 +80,18 @@ only the observed side varies, and consecutive biennial DWS releases also share
 overlapping three-year recall windows. A sign test or an averaged r would
 therefore be bogus. The consistent sign is noted as suggestive, not pooled into
 a claim of significance.
+
+**Read the rate measure first.** A group's share of measured displacement turns
+out to be predicted about as well by its share of employment alone as by either
+model's predicted share (newest survey: employment share r = +0.656 versus the
+composition model's +0.220). `build_displacement_size_benchmark_panel` reports
+that size-only benchmark, per survey, beside the composition and dynamic share r
+already written to `composition_model_displacement_validation_panel.csv` — it
+joins those columns in rather than recomputing them, so the pinned panel
+computation is untouched. Because the share result is mostly a group-size
+effect, the rate measure (`observed_rate`/`composition_predicted_rate` above,
+which divides employment back out) is the informative test and should be read
+before the share headline, not merely alongside it.
 """
 
 import os
@@ -95,6 +108,7 @@ DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
 
 OUTPUT_PATH = "data/output/composition_model_displacement_validation.csv"
 PANEL_OUTPUT_PATH = "data/output/composition_model_displacement_validation_panel.csv"
+SIZE_BENCHMARK_OUTPUT_PATH = "data/output/composition_model_displacement_size_benchmark.csv"
 CHART_NAME = "dws_observed_vs_predicted_displacement.png"
 
 OCCUPATION_TABLE = "table_5_occupation"
@@ -339,6 +353,82 @@ def build_displacement_comparison_panel(displacement_panel_df: pd.DataFrame) -> 
     return pd.DataFrame(panel_rows, columns=PANEL_OUTPUT_COLUMNS)
 
 
+SIZE_BENCHMARK_OUTPUT_COLUMNS = [
+    "survey_year",
+    "employment_size_benchmark_pearson_r",
+    "employment_size_benchmark_pearson_p",
+    "employment_size_benchmark_spearman_r",
+    "employment_size_benchmark_spearman_p",
+    "n_groups",
+    "composition_pearson_r",
+    "dynamic_pearson_r",
+]
+
+
+def build_displacement_size_benchmark_panel(displacement_panel_df: pd.DataFrame, panel_df: pd.DataFrame) -> pd.DataFrame | None:
+    """Per survey, correlate observed displacement share against group employment share alone —
+    no model score enters this at all — and join the composition/dynamic share r already computed
+    into `panel_df` (`build_displacement_comparison_panel`'s output) rather than recomputing them,
+    so the pinned panel output is read, never rederived differently.
+
+    Group employment is the same `group_employment` column `predicted_displacement_by_group`
+    already computes for the composition model (survey-independent, from the composition report's
+    latest employment column), reused here rather than recomputed a second way.
+    """
+    if not os.path.exists(COMPOSITION_REPORT_PATH):
+        return None
+
+    composition_df = pd.read_csv(COMPOSITION_REPORT_PATH)
+    employment_col = sorted(column for column in composition_df.columns if column.startswith("TOT_EMP_"))[-1]
+    composition_predicted_df = predicted_displacement_by_group(composition_df, "gross_displacement", employment_col)
+    employment_by_group = composition_predicted_df.set_index("dws_group")["group_employment"]
+
+    displacement_panel_df = _count_measured_rows(displacement_panel_df)
+    occupation_rows_df = displacement_panel_df[displacement_panel_df["source_table"] == OCCUPATION_TABLE]
+    if occupation_rows_df.empty:
+        return None
+
+    benchmark_rows = []
+    for survey_year in sorted(occupation_rows_df["survey_year"].dropna().unique()):
+        survey_year = int(survey_year)
+        observed_df = observed_displacement_by_group(displacement_panel_df, survey_year=survey_year)
+        if len(observed_df) < MINIMUM_GROUPS:
+            continue
+        merged_df = observed_df.copy()
+        merged_df["employment"] = merged_df["dws_group"].map(employment_by_group)
+        merged_df = merged_df.dropna(subset=["employment"])
+        if merged_df["employment"].nunique() < 2:
+            continue
+        merged_df["observed_share"] = merged_df["observed_displaced_thousands"] / merged_df["observed_displaced_thousands"].sum()
+        merged_df["employment_share"] = merged_df["employment"] / merged_df["employment"].sum()
+
+        correlations = correlate_with_leave_one_out(merged_df, "employment_share")
+        if correlations is None:
+            continue
+        benchmark_rows.append(
+            {
+                "survey_year": survey_year,
+                "employment_size_benchmark_pearson_r": correlations["pearson_r"],
+                "employment_size_benchmark_pearson_p": correlations["pearson_p"],
+                "employment_size_benchmark_spearman_r": correlations["spearman_r"],
+                "employment_size_benchmark_spearman_p": correlations["spearman_p"],
+                "n_groups": correlations["n_groups"],
+            }
+        )
+
+    if not benchmark_rows:
+        return None
+
+    benchmark_df = pd.DataFrame(benchmark_rows)
+    composition_r_df = panel_df[panel_df["model"] == "composition"][["survey_year", "pearson_r"]].rename(
+        columns={"pearson_r": "composition_pearson_r"}
+    )
+    dynamic_r_df = panel_df[panel_df["model"] == "dynamic"][["survey_year", "pearson_r"]].rename(columns={"pearson_r": "dynamic_pearson_r"})
+    benchmark_df = benchmark_df.merge(composition_r_df, on="survey_year", how="left").merge(dynamic_r_df, on="survey_year", how="left")
+
+    return benchmark_df[SIZE_BENCHMARK_OUTPUT_COLUMNS]
+
+
 def plot_observed_vs_predicted(comparison_df: pd.DataFrame, output_dir: str) -> None:
     """Scatter each group's predicted displacement share against its measured share."""
     plottable_df = comparison_df.dropna(subset=["composition_predicted_share", "observed_share"])
@@ -458,6 +548,16 @@ def run(output_dir: str = "data/output/visualizations") -> pd.DataFrame | None:
                 f"{significant_count}/{len(model_panel_df)} surveys significant at p<0.05"
             )
         print(f"  ✓ {PANEL_OUTPUT_PATH}")
+
+        size_benchmark_df = build_displacement_size_benchmark_panel(displacement_panel_df, panel_df)
+        if size_benchmark_df is not None:
+            size_benchmark_df.to_csv(SIZE_BENCHMARK_OUTPUT_PATH, index=False)
+            print(
+                "  employment_size_benchmark (no model score, plain employment share) median Pearson r "
+                f"{size_benchmark_df['employment_size_benchmark_pearson_r'].median():+.3f} across {len(size_benchmark_df)} surveys "
+                "— read this alongside the share r above; the rate measure reported earlier remains the informative test."
+            )
+            print(f"  ✓ {SIZE_BENCHMARK_OUTPUT_PATH}")
 
     return comparison_df
 

@@ -1039,7 +1039,7 @@ year-over-year growth variance at `occ1990dd` grain is sampling noise, not
 signal. Because `r_corrected = r_raw / sqrt(reliability)` is undefined for
 reliability ≤ 0, 89 of the 172 period/score rows in the full (`seams_included`)
 view have no corrected r at all — the raw/corrected bracket the spec named as
-the only noise handling is available for just over half of this grain's
+the only noise handling is available for just under half (83 of 172 rows) of this grain's
 results. This was accepted by decision before any data existed (see the
 "Year-over-year noise at this grain is accepted by decision" paragraph
 above), not discovered as a problem now.

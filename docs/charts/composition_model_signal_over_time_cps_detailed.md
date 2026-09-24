@@ -72,7 +72,7 @@ estimator. This has a direct consequence for the noise-correction bracket
 that is the project's only handling for it: `r_corrected = r_raw /
 sqrt(reliability)` is undefined whenever reliability ≤ 0, which happens for
 89 of the 172 period/score rows in the full (seam-inclusive) view — the
-bracket is available for just over half this grain's results. Read every
+bracket is available for just under half (83 of 172 rows) of this grain's results. Read every
 raw r on this chart as attenuated toward zero by unmeasured amounts, per
 period, rather than as a clean effect size.
 

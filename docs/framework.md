@@ -1105,12 +1105,15 @@ ten-group instrument's `sector_composition_stability.csv`, naming the
 defensible directly, rather than inferring it from sector shares. 41 of the
 328 mapped codes carry a `stable_share` of exactly zero — none of their 2022
 OEWS-anchored SOC weight sits in a detailed occupation OEWS already
-published in 1999. These concentrate in occupations created or redefined
-well after 1999: computer occupations (`occ1990dd` 64 — database
-administrators, computer systems analysts, web developers, and the other
-titles the ~3% SOC-2018 computer-code renumbering survivorship figure above
-already documents independently), physicians and surgeons (84), registered
-nurses and nurse practitioners (95), and dentists (85) among them — the same
+published in 1999. The measure joins SOC 2018 codes against the 1999 file,
+so a zero means the code did not survive the SOC revisions, not necessarily
+that the work is new — it flags both genuinely new occupations and
+long-standing ones that were renumbered or split. Examples include computer
+occupations (`occ1990dd` 64 — database administrators, computer systems
+analysts, web developers, and the other titles the ~3% SOC-2018
+computer-code renumbering survivorship figure above already documents
+independently), physicians and surgeons (84), registered nurses and nurse
+practitioners (95), and dentists (85) — the same
 occupations flagged as least stable at sector grain (SOC 15 Computer and
 Mathematical, SOC 29 Healthcare Practitioners and Technical), now named
 individually rather than only bounded by sector share.

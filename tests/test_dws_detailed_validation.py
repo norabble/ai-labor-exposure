@@ -4,7 +4,12 @@ import pandas as pd
 import pytest
 
 import dws_detailed_validation
-from dws_detailed_validation import build_detailed_displacement_comparison, latest_complete_employment, predicted_by_group
+from dws_detailed_validation import (
+    allocate_nonresponse_for_rate,
+    build_detailed_displacement_comparison,
+    latest_complete_employment,
+    predicted_by_group,
+)
 
 GROUPS = ["exec", "prof", "cleric", "retsales", "product", "operator"]
 
@@ -68,6 +73,50 @@ def test_share_rows_carry_the_leave_one_out_range_and_rate_rows_do_not():
 def test_a_constant_prediction_gives_no_correlation_row():
     comparison_df = build_detailed_displacement_comparison(*_inputs(lambda index: 5.0 * (index + 1)))
     assert comparison_df[comparison_df["model"] == "dynamic"].empty
+
+
+class TestNonresponseAllocation:
+    """The rate measure's proportional, missing-at-random nonresponse allocation."""
+
+    def test_scales_the_count_up_before_dividing_by_employment(self):
+        displaced_thousands = pd.Series([10.0, 20.0])
+        employment = pd.Series([100.0, 200.0])
+        result = allocate_nonresponse_for_rate(displaced_thousands, employment, nonresponse_share=0.5)
+        # 1 / (1 - 0.5) = 2x inflation, then divided by employment.
+        assert result.tolist() == pytest.approx([0.2, 0.2])
+
+    def test_a_missing_share_leaves_the_rate_unscaled(self):
+        displaced_thousands = pd.Series([10.0])
+        employment = pd.Series([100.0])
+        result = allocate_nonresponse_for_rate(displaced_thousands, employment, nonresponse_share=float("nan"))
+        assert result.tolist() == pytest.approx([0.1])
+
+    def test_an_out_of_range_share_leaves_the_rate_unscaled_rather_than_dividing_oddly(self):
+        displaced_thousands = pd.Series([10.0])
+        employment = pd.Series([100.0])
+        result = allocate_nonresponse_for_rate(displaced_thousands, employment, nonresponse_share=1.0)
+        assert result.tolist() == pytest.approx([0.1])
+
+    def test_zero_share_is_a_no_op(self):
+        displaced_thousands = pd.Series([10.0])
+        employment = pd.Series([100.0])
+        result = allocate_nonresponse_for_rate(displaced_thousands, employment, nonresponse_share=0.0)
+        assert result.tolist() == pytest.approx([0.1])
+
+    def test_build_detailed_displacement_comparison_passes_the_survey_specific_share_through(self):
+        """The rate measure's magnitude changes with the allocation, but the share measure does not."""
+        dws_panel_df, unit_scores_df, panel_df, groups_df = _inputs(lambda index: 5.0 * (index + 1))
+        unallocated_df = build_detailed_displacement_comparison(dws_panel_df, unit_scores_df, panel_df, groups_df)
+        allocated_df = build_detailed_displacement_comparison(dws_panel_df, unit_scores_df, panel_df, groups_df, pd.Series({2024: 0.5}))
+        # Pearson/Spearman r are invariant to a uniform rescaling, so the correlation columns should
+        # be unchanged even though the underlying observed rate was scaled — the allocation must not
+        # silently corrupt the correlation, only the (untested-here) intermediate rate values.
+        share_columns = ["pearson_r", "spearman_r", "n_groups"]
+        unallocated_rate_row = unallocated_df[(unallocated_df["model"] == "composition") & (unallocated_df["measure"] == "rate")]
+        allocated_rate_row = allocated_df[(allocated_df["model"] == "composition") & (allocated_df["measure"] == "rate")]
+        pd.testing.assert_frame_equal(
+            unallocated_rate_row[share_columns].reset_index(drop=True), allocated_rate_row[share_columns].reset_index(drop=True)
+        )
 
 
 class TestRunWithdrawsOnAStaleG4Verdict:

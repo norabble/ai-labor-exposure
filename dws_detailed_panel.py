@@ -14,6 +14,16 @@ occupation. It maps to occ1990dd through the harmonized IPUMS variable when one
 exists, otherwise through the survey year's coding vintage (see the plan's
 route table); a raw code reaching k occ1990dd codes gives each 1/k of its weight.
 
+G6D redefined 2026-09-24 (plan Deviations log): it gates crosswalk loss only, among lost-job
+occupations that were REPORTED (raw code not coded "not in universe"/nonresponse, 999 on both the
+harmonized DWOCC1990 route and the raw DWOCC fallback — see `LOST_JOB_OCC_NONRESPONSE_CODE`).
+Occupation nonresponse itself is reported per survey alongside as gate "G6D-nonresponse", ungated,
+so a high-nonresponse survey no longer trips a gate meant to catch a broken crosswalk. See
+`attach_lost_job_occ1990dd`, `gate_g6d`, and `nonresponse_share_by_survey` — the last of which is
+how the nonresponse share rides the gate record forward to `dws_detailed_validation.py`, which
+uses it only to inflate its secondary rate measure (missing-at-random allocation); the headline
+share measure and gate G3 stay unallocated.
+
 Never runs in CI. Seeds hold aggregates only.
 
 Inputs:
@@ -69,6 +79,14 @@ G3_TOLERANCE = 0.03
 G3_ROUNDING_THOUSANDS = 0.5
 G6D_MAXIMUM_UNMAPPED_SHARE = 0.01
 REQUIRED_GATES = ("G3", "G6D")
+# IPUMS's not-in-universe sentinel for occupation-coded variables — the same value already relied
+# on for current-job OCC1990 (`ipums_variables.OCC1990_NOT_IN_UNIVERSE`) and for occ1990dd itself
+# (`occ1990dd_reference.UNCLASSIFIED_OCC1990DD`). Used here on the harmonized route's DWOCC1990 and
+# on the raw fallback route's vintage-coded DWOCC: neither of Dorn's five source crosswalks ever
+# assigns a real occupation to code 999 (verified against seeds/occ1990dd_crosswalks/*.csv), so
+# treating 999 as "lost-job occupation not reported" cannot collide with a genuine occupation code
+# on either route.
+LOST_JOB_OCC_NONRESPONSE_CODE = ipums_variables.OCC1990_NOT_IN_UNIVERSE
 
 
 def lost_job_raw_vintage(survey_year: int) -> str:
@@ -150,22 +168,37 @@ def is_long_tenured(frame: pd.DataFrame) -> pd.Series:
     return (tenure >= LONG_TENURE_MINIMUM_YEARS) & (tenure <= ipums_variables.DWS_TENURE_VALID_MAXIMUM)
 
 
-def attach_lost_job_occ1990dd(displaced_df: pd.DataFrame, survey_year: int) -> tuple[pd.DataFrame, float]:
-    """One row per (record, occ1990dd) with the weight allocated to it, and the unmapped weighted share (G6D)."""
+def attach_lost_job_occ1990dd(displaced_df: pd.DataFrame, survey_year: int) -> tuple[pd.DataFrame, float, float]:
+    """One row per (record, occ1990dd) with its allocated weight, the crosswalk-loss share (G6D), and nonresponse.
+
+    G6D redefined 2026-09-24 (plan Deviations log): the unmapped share it gates is crosswalk loss
+    among records whose lost-job occupation was REPORTED — records coded
+    `LOST_JOB_OCC_NONRESPONSE_CODE` (999, "not in universe"/nonresponse) are excluded from both the
+    numerator and denominator, so a high-nonresponse survey no longer trips a gate meant to catch a
+    broken crosswalk. The nonresponse share itself (weight coded 999 over all displaced weight) is
+    returned separately for `gate_g6d` to report ungated, alongside rather than folded into G6D.
+    """
     if ipums_variables.DWS_LOST_JOB_OCC1990_VARIABLE:
         edges_df, code_column = _harmonized_edges(), ipums_variables.DWS_LOST_JOB_OCC1990_VARIABLE
     else:
         edges_df, code_column = lost_job_edges(survey_year), ipums_variables.DWS_LOST_JOB_OCC_VARIABLE
     weight_column = ipums_variables.DWS_WEIGHT_VARIABLE
     coded_df = displaced_df.assign(raw_code=displaced_df[code_column].astype(int))
-    mapped_df = coded_df.merge(edges_df, on="raw_code", how="inner")
+    weight = coded_df[weight_column].astype(float)
+    total_weight = float(weight.sum())
+    # A survey with no displaced weight at all has nothing to characterize as reported or not.
+    nonresponse_share = (
+        float("nan") if total_weight <= 0 else float(weight[coded_df["raw_code"] == LOST_JOB_OCC_NONRESPONSE_CODE].sum() / total_weight)
+    )
+    reported_df = coded_df[coded_df["raw_code"] != LOST_JOB_OCC_NONRESPONSE_CODE]
+    reported_weight_total = float(reported_df[weight_column].astype(float).sum())
+    mapped_df = reported_df.merge(edges_df, on="raw_code", how="inner")
     mapped_df["allocated_weight"] = mapped_df[weight_column].astype(float) * mapped_df["share"]
-    total_weight = coded_df[weight_column].astype(float).sum()
-    # A survey with no displaced weight at all (e.g. an empty extract, or a resolved sample month
+    # A survey with no reported weight at all (e.g. an empty extract, or a resolved sample month
     # that carries no supplement) must fail G6D rather than report a vacuous 0.0 unmapped share —
     # there is nothing here to have mapped successfully.
-    unmapped_share = float(1 - mapped_df["allocated_weight"].sum() / total_weight) if total_weight > 0 else 1.0
-    return mapped_df, unmapped_share
+    unmapped_share = float(1 - mapped_df["allocated_weight"].sum() / reported_weight_total) if reported_weight_total > 0 else 1.0
+    return mapped_df, unmapped_share, nonresponse_share
 
 
 def tabulate_survey(mapped_df: pd.DataFrame, survey_year: int, groups_df: pd.DataFrame) -> pd.DataFrame:
@@ -238,10 +271,16 @@ def gate_g3(direct_df: pd.DataFrame, published_panel_df: pd.DataFrame) -> pd.Dat
     return gate_df[GATE_COLUMNS]
 
 
-def gate_g6d(unmapped_by_survey: pd.Series) -> pd.DataFrame:
-    """G6D (pinned by this plan): lost-job weight reaching no occ1990dd is at most 1% in every survey."""
+def gate_g6d(unmapped_by_survey: pd.Series, nonresponse_by_survey: pd.Series) -> pd.DataFrame:
+    """G6D: crosswalk loss among REPORTED lost-job occupations is at most 1% in every survey.
+
+    Redefined 2026-09-24 (plan Deviations log) to stop mixing survey nonresponse into a gate meant
+    to catch crosswalk coverage. Nonresponse is reported alongside as gate "G6D-nonresponse" —
+    ungated (`gated=False`, `passed=NA`) so it can never fail `all_gates_pass` — purely as visible
+    information about how much of each survey did not answer the lost-job occupation question.
+    """
     unmapped_shares = unmapped_by_survey.to_numpy(dtype=float)
-    return pd.DataFrame(
+    crosswalk_gate_df = pd.DataFrame(
         {
             "gate": "G6D",
             "scope": unmapped_by_survey.index.astype(str),
@@ -250,7 +289,32 @@ def gate_g6d(unmapped_by_survey: pd.Series) -> pd.DataFrame:
             "gated": True,
             "passed": unmapped_shares <= G6D_MAXIMUM_UNMAPPED_SHARE,
         }
-    )[GATE_COLUMNS]
+    )
+    nonresponse_gate_df = pd.DataFrame(
+        {
+            "gate": "G6D-nonresponse",
+            "scope": nonresponse_by_survey.index.astype(str),
+            "observed": nonresponse_by_survey.to_numpy(dtype=float),
+            "threshold": np.nan,
+            "gated": False,
+            "passed": np.nan,
+        }
+    )
+    return pd.concat([crosswalk_gate_df, nonresponse_gate_df], ignore_index=True)[GATE_COLUMNS]
+
+
+def nonresponse_share_by_survey(gates_df: pd.DataFrame) -> pd.Series:
+    """Per-survey occupation nonresponse share, read back from `gate_g6d`'s "G6D-nonresponse" rows.
+
+    This is how the DWS panel build carries nonresponse forward for the pipeline to read (plan
+    Deviations log): rather than a new panel column, it rides the gate record `gate_g6d` already
+    writes one row per survey to. `dws_detailed_validation.py` reads it back through this function
+    to scale its secondary rate measure's observed counts by 1/(1 - nonresponse share) — a
+    proportional, missing-at-random allocation applied only there; the headline share measure and
+    gate G3 stay unallocated, the same way BLS's own published counts are never allocated.
+    """
+    nonresponse_rows = gates_df[gates_df["gate"] == "G6D-nonresponse"]
+    return nonresponse_rows.set_index(nonresponse_rows["scope"].astype(int))["observed"].astype(float)
 
 
 def read_survey_persons(survey_year: int, raw_dir: str = download_ipums_cps.RAW_DIR) -> pd.DataFrame | None:
@@ -271,19 +335,21 @@ def build_rebuilt_panel(
     if ipums_variables.VERIFICATION_STATUS != "verified":
         raise RuntimeError("ipums_cps_variables is unverified — complete plan Task 2 before tabulating real data")
     groups_df = load_occ1990dd_groups()
-    survey_frames, direct_frames, unmapped_by_survey = [], [], {}
+    survey_frames, direct_frames, unmapped_by_survey, nonresponse_by_survey = [], [], {}, {}
     for survey_year in survey_years or list(ipums_variables.DWS_SURVEY_YEARS):
         displaced_df = read_survey_persons(survey_year, raw_dir)
         if displaced_df is None:
             print(f"  {survey_year}: not downloaded; skipped")
             continue
-        mapped_df, unmapped_by_survey[survey_year] = attach_lost_job_occ1990dd(displaced_df, survey_year)
+        mapped_df, unmapped_by_survey[survey_year], nonresponse_by_survey[survey_year] = attach_lost_job_occ1990dd(
+            displaced_df, survey_year
+        )
         survey_frames.append(tabulate_survey(mapped_df, survey_year, groups_df))
         direct_frames.append(ten_group_long_tenured_direct(displaced_df, survey_year))
         missing_class_count = missing_lost_job_class_count(displaced_df)
         print(
             f"  {survey_year}: {len(displaced_df)} displaced records, unmapped share {unmapped_by_survey[survey_year]:.4f}, "
-            f"missing/NIU lost-job class {missing_class_count}"
+            f"occupation nonresponse share {nonresponse_by_survey[survey_year]:.4f}, missing/NIU lost-job class {missing_class_count}"
         )
 
     if not survey_frames:
@@ -295,7 +361,7 @@ def build_rebuilt_panel(
     gates_df = pd.concat(
         [
             gate_g3(pd.concat(direct_frames, ignore_index=True), pd.read_csv(PUBLISHED_DWS_PANEL_PATH)),
-            gate_g6d(pd.Series(unmapped_by_survey)),
+            gate_g6d(pd.Series(unmapped_by_survey), pd.Series(nonresponse_by_survey)),
         ],
         ignore_index=True,
     )

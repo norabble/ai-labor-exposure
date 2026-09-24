@@ -94,15 +94,16 @@ class TestMapping:
             "lost_job_edges",
             lambda survey_year: pd.DataFrame({"raw_code": [4700, 4700], "occ1990dd": [243, 274], "share": [0.5, 0.5]}),
         )
-        mapped_df, unmapped_share = attach_lost_job_occ1990dd(displaced_records([{}]), 2024)
+        mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(displaced_records([{}]), 2024)
         assert mapped_df["allocated_weight"].tolist() == [1000.0, 1000.0]
         assert unmapped_share == pytest.approx(0.0)
+        assert nonresponse_share == pytest.approx(0.0)
 
     def test_an_unmapped_raw_code_is_reported_for_g6d(self, monkeypatch):
         monkeypatch.setattr(
             dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
         )
-        _, unmapped_share = attach_lost_job_occ1990dd(displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 1}]), 2024)
+        _, unmapped_share, _ = attach_lost_job_occ1990dd(displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 1}]), 2024)
         assert unmapped_share == pytest.approx(0.5)
 
     def test_zero_total_weight_is_a_failure_not_a_vacuous_pass(self, monkeypatch):
@@ -111,8 +112,21 @@ class TestMapping:
             dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
         )
         empty_df = displaced_records([{}]).iloc[0:0]
-        _, unmapped_share = attach_lost_job_occ1990dd(empty_df, 2024)
+        _, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(empty_df, 2024)
         assert unmapped_share == pytest.approx(1.0)
+        assert pd.isna(nonresponse_share)
+
+    def test_nonresponse_weight_is_excluded_from_the_crosswalk_share_and_reported_separately(self, monkeypatch):
+        """G6D redefinition: a record whose raw lost-job code is nonresponse (999) must not count
+        as crosswalk loss, and its weight share must come back as `nonresponse_share` instead."""
+        monkeypatch.setattr(
+            dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
+        )
+        records = displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: dws_detailed_panel.LOST_JOB_OCC_NONRESPONSE_CODE}])
+        mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(records, 2024)
+        assert len(mapped_df) == 1
+        assert unmapped_share == pytest.approx(0.0)
+        assert nonresponse_share == pytest.approx(0.5)
 
 
 class TestTabulateSurvey:
@@ -167,8 +181,28 @@ class TestGates:
         )
         assert gate_g3(direct_df, published_df)["passed"].tolist() == [False]
 
-    def test_g6d_gates_every_survey_at_one_percent(self):
-        assert gate_g6d(pd.Series({2022: 0.002, 2024: 0.05}))["passed"].tolist() == [True, False]
+    def test_g6d_gates_crosswalk_loss_at_one_percent_and_reports_nonresponse_ungated(self):
+        gates_df = gate_g6d(pd.Series({2022: 0.002, 2024: 0.05}), pd.Series({2022: 0.03, 2024: 0.04}))
+        crosswalk_df = gates_df[gates_df["gate"] == "G6D"]
+        assert crosswalk_df["passed"].tolist() == [True, False]
+        assert crosswalk_df["gated"].tolist() == [True, True]
+        nonresponse_df = gates_df[gates_df["gate"] == "G6D-nonresponse"]
+        assert nonresponse_df["observed"].tolist() == [0.03, 0.04]
+        assert not nonresponse_df["gated"].any()
+        assert nonresponse_df["passed"].isna().all()
+
+    def test_all_gates_pass_ignores_the_ungated_nonresponse_rows(self):
+        """A nonresponse share far above the 1% G6D threshold must never fail all_gates_pass —
+        it is reported information, not a gated check."""
+        gates_df = gate_g6d(pd.Series({2024: 0.002}), pd.Series({2024: 0.30}))
+        assert dws_detailed_panel.all_gates_pass(gates_df, ("G6D",))
+
+
+def test_nonresponse_share_by_survey_reads_back_the_gate_record():
+    gates_df = gate_g6d(pd.Series({2022: 0.002, 2024: 0.05}), pd.Series({2022: 0.03, 2024: 0.04}))
+    result = dws_detailed_panel.nonresponse_share_by_survey(gates_df)
+    assert result.loc[2022] == pytest.approx(0.03)
+    assert result.loc[2024] == pytest.approx(0.04)
 
 
 def test_the_build_refuses_until_task_2_has_verified_ipums(monkeypatch):
@@ -232,23 +266,24 @@ class TestHarmonizedRoute:
     def test_known_dwocc1990_code_maps_through_spine_with_full_weight(self, harmonized_fixture):
         """A record with a known 1990-basis code maps to its spine target with share 1 and unmapped share 0."""
         # Code 4 maps to occ1990dd 4 in the spine
-        mapped_df, unmapped_share = attach_lost_job_occ1990dd(self.harmonized_records([{}]), 2024)
+        mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(self.harmonized_records([{}]), 2024)
         assert len(mapped_df) == 1
         assert mapped_df["occ1990dd"].iloc[0] == 4
         assert mapped_df["allocated_weight"].iloc[0] == 2000.0  # Full weight, no splitting
         assert unmapped_share == pytest.approx(0.0)
+        assert nonresponse_share == pytest.approx(0.0)
 
     def test_unknown_dwocc1990_code_is_reported_unmapped(self, harmonized_fixture):
         """A DWOCC1990 value absent from the spine is reported in unmapped share."""
         # Code 99999 is not in the spine
-        mapped_df, unmapped_share = attach_lost_job_occ1990dd(self.harmonized_records([{"DWOCC1990": 99999}]), 2024)
+        mapped_df, unmapped_share, _ = attach_lost_job_occ1990dd(self.harmonized_records([{"DWOCC1990": 99999}]), 2024)
         assert len(mapped_df) == 0
         assert unmapped_share == pytest.approx(1.0)
 
     def test_raw_dwocc_column_is_ignored_in_harmonized_route(self, harmonized_fixture):
         """The raw DWOCC column value is ignored when DWOCC1990 is present."""
         # DWOCC1990=4 (valid), DWOCC=9999 (invalid if used)
-        mapped_df, unmapped_share = attach_lost_job_occ1990dd(self.harmonized_records([{}]), 2024)
+        mapped_df, unmapped_share, _ = attach_lost_job_occ1990dd(self.harmonized_records([{}]), 2024)
         assert len(mapped_df) == 1
         assert mapped_df["occ1990dd"].iloc[0] == 4  # Proves it used DWOCC1990, not DWOCC
         assert unmapped_share == pytest.approx(0.0)
@@ -256,6 +291,14 @@ class TestHarmonizedRoute:
     def test_mixed_known_and_unknown_dwocc1990_codes_split_unmapped(self, harmonized_fixture):
         """Multiple records with a mix of known and unknown codes report split unmapped share."""
         records = self.harmonized_records([{"DWOCC1990": 4}, {"DWOCC1990": 99999}])  # 50% known, 50% unknown
-        mapped_df, unmapped_share = attach_lost_job_occ1990dd(records, 2024)
+        mapped_df, unmapped_share, _ = attach_lost_job_occ1990dd(records, 2024)
         assert len(mapped_df) == 1  # Only the known code is mapped
         assert unmapped_share == pytest.approx(0.5)  # Half the weight is unmapped
+
+    def test_dwocc1990_nonresponse_is_excluded_from_unmapped_and_reported_separately(self, harmonized_fixture):
+        """G6D redefinition on the harmonized route: DWOCC1990 == 999 is nonresponse, not crosswalk loss."""
+        records = self.harmonized_records([{"DWOCC1990": 4}, {"DWOCC1990": 999}])
+        mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(records, 2024)
+        assert len(mapped_df) == 1
+        assert unmapped_share == pytest.approx(0.0)
+        assert nonresponse_share == pytest.approx(0.5)

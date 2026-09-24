@@ -32,6 +32,9 @@ for 1994+, 1-5 years for 1984-1992) — both of which BLS's published Table 5/8 
 selection did not, which is what made G3 fail 40/90 before the fix. DWRECALL does not exist before
 the 1994 survey, so the recall exclusion is an unmeasured (disclosed, not patched) break at the
 1992->1994 boundary — see `measure_recall_rule_impact`, sized for 1994 and 1996 in the build log.
+Measured 2026-09-24: the recall rule removes 4.24% of the recall-included all-tenures weight in
+1994 and 4.66% in 1996 — the bound on how much of a pre-1994 survey's total this rule would be
+silently absorbing were it (impossibly, for lack of DWRECALL) applied there too.
 
 Never runs in CI. Seeds hold aggregates only.
 

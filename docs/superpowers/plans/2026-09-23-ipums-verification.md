@@ -519,3 +519,106 @@ real rebuild.
 This addendum does not change `VERIFICATION_STATUS` (already `"verified"`) —
 it documents one additional variable added to an already-verified extract
 definition for a separate, user-approved bug fix.
+
+## Addendum 2026-09-24 — DWRECALL, DWLASTWRK (expected-recall and reference-window exclusions, G3 fix round 2)
+
+**Root cause being fixed:** `g3-diagnosis2-report.md` (same directory as the
+brief) found that, even after the DWCLASS fix above, `select_displaced` still
+counts two further populations BLS's published Table 5/8 excludes: layoffs
+where the respondent expected recall to the same job within six months, and
+lost jobs outside the survey's own reference window. User approved adding
+`DWRECALL` and `DWLASTWRK` and excluding both.
+
+**Both variables confirmed live** by fetching
+`https://cps.ipums.org/cps-action/variables/DWRECALL` and
+`https://cps.ipums.org/cps-action/variables/DWLASTWRK` directly (`curl`,
+`allowed_domains: ["cps.ipums.org"]`, saved to local HTML and grepped for the
+embedded `categories` JSON) — the same method the DWCLASS addendum above used,
+since WebFetch's summarizer again could not see the codes table (confirmed:
+a WebFetch call on each URL returned only the universe prose and a
+placeholder availability grid, not the codes).
+
+1. **DWRECALL** embedded `categories` JSON (`https://cps.ipums.org/cps-action/variables/DWRECALL`,
+   fetched 2026-09-24):
+
+   | Code | Label |
+   |---|---|
+   | 01 | No |
+   | 02 | Yes |
+   | 96 | Refused |
+   | 97 | Don't Know |
+   | 98 | No response |
+   | 99 | NIU |
+
+   Universe (page prose): "Persons who lost a job in the last year because of
+   a shift elimination or insufficient work" — plant-closing layoffs are
+   therefore NIU (99) on this variable, never coded 2, so the recall exclusion
+   cannot touch them. `DWS_RECALL_EXPECTED_CODE = 2` ("Yes") is the whole
+   exclusion; 96/97/98/99 are kept, the same missing-is-kept convention as
+   `DWS_MISSING_CLASS_CODES`.
+
+   **Availability**, from the same page's year x month grid: `X` (published)
+   only from the 1994 survey on — February for 1994/1996/1998/2000, January
+   for 2002-2024 (even years) — and no mark at all for 1984-1992.
+   `DWS_RECALL_FIRST_SURVEY_YEAR = 1994` records this; it is the first survey
+   year IPUMS publishes DWRECALL for, and it is absent from every earlier
+   survey's extract (no column, not a null value in a present column).
+
+2. **DWLASTWRK** embedded `categories` JSON (`https://cps.ipums.org/cps-action/variables/DWLASTWRK`,
+   fetched 2026-09-24):
+
+   | Code | Label |
+   |---|---|
+   | 00 | This year |
+   | 01 | Last year |
+   | 02 | Two years ago |
+   | 03 | Three years ago |
+   | 04 | Four years ago |
+   | 05 | Five years ago |
+   | 95 | Other |
+   | 96 | Refused |
+   | 97 | Don't Know |
+   | 98 | No response |
+   | 99 | NIU |
+
+   Universe (page prose, two periods): "1984-1992: Civilians age 20 or older
+   who lost or left a job in the past five years because the company closed
+   down, eliminated the shift or position, or had insufficient work" and
+   "1994+: ... in the past three years ...". `dws_lastwrk_window` encodes this
+   as codes `(1, 2, 3)` for 1994+ and `(1, 2, 3, 4, 5)` for 1984-1992. Code 00
+   ("this year") is excluded on both windows — the diagnosis's exact match to
+   BLS Table 8 (within 0.5k in every 2008-2024 survey) uses codes 1-3 only,
+   never 0, and the survey's own resolved sample month (January or February)
+   falls inside the still-in-progress current calendar year, which is outside
+   "the last N calendar years" both universe statements describe.
+
+   **Availability**, from the same page's year x month grid: published in
+   every DWS survey year 1984-2024, on the same January/February pattern as
+   every other DWS variable (`DWS_SAMPLE_MONTH_BY_SURVEY_YEAR`) — so `DWLASTWRK`
+   needs no `DWS_VARIABLE_FIRST_YEAR` entry, unlike `DWRECALL`.
+
+**Evidence behind `dws_variables_for_year`:** `DWS_VARIABLES` is a single flat
+list shared by every survey year's extract request
+(`download_ipums_cps.fetch_dws_survey`), but `DWRECALL`'s availability grid
+above shows it genuinely absent for 1984-1992 — not merely null. Requesting a
+variable IPUMS does not publish for any resolved sample raises a `400
+SemanticValidationError` naming that variable
+(`download_ipums_cps.MISSING_VARIABLE_ERROR_FRAGMENT`, confirmed live
+2026-09-24 for the unrelated 2026-survey-has-no-supplement case, same
+mechanism); `submit_and_download_or_none` narrowly treats that one error as
+"no supplement this sample" and returns `None`. Without
+`dws_variables_for_year`, requesting `DWRECALL` for e.g. survey year 1990
+would trigger that same 400, be caught by
+`submit_and_download_or_none`, and silently skip an otherwise-valid pre-1994
+survey as if it had no DWS supplement at all — a false negative, not merely a
+missing column. `dws_variables_for_year(survey_year)` (mirroring
+`ipums_cps_variables.variables_for_year`, the existing basic-monthly
+mechanism that already does the equivalent thing for `COMPWT` before 1998)
+filters `DWS_VARIABLES` against a new `DWS_VARIABLE_FIRST_YEAR` dict
+(`{"DWRECALL": 1994}`) before every DWS extract request, so a pre-1994
+extract never asks IPUMS for `DWRECALL` at all. Regression test:
+`tests/test_download_ipums_cps.py::TestFetchDwsSurvey::test_a_pre_1994_survey_does_not_request_dwrecall`.
+
+This addendum does not change `VERIFICATION_STATUS` (already `"verified"`) —
+it documents two additional variables added to an already-verified extract
+definition for a separate, user-approved bug fix.

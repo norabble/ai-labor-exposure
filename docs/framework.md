@@ -851,7 +851,7 @@ that, the bridge is unfit: no detailed-level or rollup result file is written,
 and the design returns for review. **This measured error is a lower bound for
 1983–2002 only** — no direct route exists from the 1980 or 1990 Census
 occupation vintages to SOC, so the compounded error in exactly the stretch
-Phase 2 buys (the pre-1994 span, spanning the 1990–91 downturn) cannot itself
+Phase 2 buys (the 1983–2002 span, spanning the 1990–91 downturn) cannot itself
 be measured and is not claimed to be bounded by the 2003+ figure.
 
 **Every build-time and pipeline-time gate, and what promotes a seed.** A
@@ -979,7 +979,7 @@ r = 0.997 (2020–2026, n=293) — all comfortably above the 0.8 threshold, so
 every detailed-level and rollup file below was written. **This is a lower
 bound on the chain's error for 1983–2002 only**: no direct CPS-to-SOC route
 exists for the 1980/1990 Census occupation vintages, so the bridge's fitness
-for the pre-1994 span — which is exactly the stretch this phase exists to
+for the 1983–2002 span — which is exactly the stretch this phase exists to
 reach, including the 1990–91 downturn — is unmeasured, not merely
 unfavorable.
 
@@ -1039,7 +1039,7 @@ year-over-year growth variance at `occ1990dd` grain is sampling noise, not
 signal. Because `r_corrected = r_raw / sqrt(reliability)` is undefined for
 reliability ≤ 0, 89 of the 172 period/score rows in the full (`seams_included`)
 view have no corrected r at all — the raw/corrected bracket the spec named as
-the only noise handling is available for well under half of this grain's
+the only noise handling is available for just over half of this grain's
 results. This was accepted by decision before any data existed (see the
 "Year-over-year noise at this grain is accepted by decision" paragraph
 above), not discovered as a problem now.
@@ -1047,14 +1047,17 @@ above), not discovered as a problem now.
 The eligibility-cutoff sweep (`cps_detailed_eligibility_sweep.csv`,
 `composition_net_change`, pre-AI mean r) ranges from **+0.053** (no cutoff)
 to **+0.112** (10% RSE cutoff), with the headline 20% cutoff at +0.073 and
-the fixed-set sensitivity at +0.077 — all inside or just below the spec's
-expected +0.05 to +0.15 band, and none reversing sign.
+the fixed-set sensitivity at +0.077 — all inside the spec's expected +0.05
+to +0.15 band, and none reversing sign.
 
-**Seams.** The four excluded seam periods measure as expected
+**Seams.** Only one of the four excluded seam periods actually stands out
 (`cps_detailed_seam_breaks.csv`): the 2002→2003 classification-change seam
 carries a median |growth| of 0.169 against an ordinary-period median of
-0.067 — a real, disclosed break, excluded from the headline rather than
-patched, the same treatment Phase 1 gives COVID periods.
+0.067 — a real, disclosed break. The other three measure indistinguishably
+from an ordinary period — 1991→92 at 0.065, 1993→94 at 0.065, and 2010→11 at
+0.070 — but all four stay excluded per the pre-pinned choice rather than
+being reinstated on the strength of this measurement, the same treatment
+Phase 1 gives COVID periods.
 
 **Displaced Worker Supplement at the Dorn partition (~25 groups, 21 surveys,
 1984–2024).** Per the user's decision, interpretation leads with the
@@ -1076,25 +1079,41 @@ indistinguishable from the benchmark of a group's plain employment share
 alone predicting its displacement share (median r = +0.905) — **the share
 test at this partition mostly measures group size, not the demand-type
 model.** The same comparison at the coarser ten-group DWS partition
-(`composition_model_displacement_size_benchmark.csv`) shows more daylight
-between the two — composition median +0.387 against a benchmark of +0.752 —
-but the benchmark still leads, which is why the rate measure, where the
-benchmark does not apply, is the informative test here rather than the share
-result.
+(`composition_model_displacement_size_benchmark.csv`) shows the model
+trailing the size benchmark by more here (composition 0.387 vs 0.752) than
+at the Dorn partition above (0.899 vs 0.905), which is why the rate measure,
+where the benchmark does not apply, is the informative test here rather than
+the share result.
 
 One definitional break is disclosed rather than patched: the DWRECALL
 recall-expectation exclusion (added to fix gate G3) does not exist before the
-1994 survey, so the 1992→1994 boundary carries an unmeasured method change.
-`measure_recall_rule_impact` sizes it directly: the recall rule removes 4.24%
-of recall-included all-tenures weight in the 1994 survey and 4.66% in 1996 —
-both small relative to survey sampling variance, but real and undisclosed
-nowhere else.
+1994 survey, so the 1992→1994 boundary carries a method change that cannot be
+applied before 1994. It is sized for the first two surveys with DWRECALL:
+`measure_recall_rule_impact` shows the rule removes 4.24% of recall-included
+all-tenures weight in 1994 and 4.66% in 1996, about 2.5x the all-tenures
+total's sampling RSE (~1.7–1.8%, computed from `seeds/dws_detailed_panel.csv`).
+The removal concentrates in construction, farming and production (see the
+Deviations log in `docs/superpowers/plans/2026-09-23-deep-history-phase-2.md`),
+so pre-1994 surveys' group mix is not strictly comparable. Per-survey
+correlations are never pooled, which limits the effect but does not remove
+it.
 
 **Composition-stability proxy at this grain** is in
 `occ1990dd_composition_stability.csv`, following the same method as the
 ten-group instrument's `sector_composition_stability.csv`, naming the
 `occ1990dd` codes where carrying 2025 O\*NET labels back to 1983 is least
-defensible directly, rather than inferring it from sector shares.
+defensible directly, rather than inferring it from sector shares. 41 of the
+328 mapped codes carry a `stable_share` of exactly zero — none of their 2022
+OEWS-anchored SOC weight sits in a detailed occupation OEWS already
+published in 1999. These concentrate in occupations created or redefined
+well after 1999: computer occupations (`occ1990dd` 64 — database
+administrators, computer systems analysts, web developers, and the other
+titles the ~3% SOC-2018 computer-code renumbering survivorship figure above
+already documents independently), physicians and surgeons (84), registered
+nurses and nurse practitioners (95), and dentists (85) among them — the same
+occupations flagged as least stable at sector grain (SOC 15 Computer and
+Mathematical, SOC 29 Healthcare Practitioners and Technical), now named
+individually rather than only bounded by sector share.
 
 **Bottom line, read against the asymmetric rule strengthened for this grain:**
 the detailed-occupation cycle decomposition returns a significant, positive,
@@ -1111,4 +1130,8 @@ non-significant composition signal (median +0.319 across 21 surveys) against
 a materially weaker dynamic-model signal (median −0.036) — the clearest
 directional separation between the two models in this phase — while the
 share measure at the same partition is shown to mostly recover group size
-rather than the model.
+rather than the model. Because the predicted vector is the same model score
+applied to every survey year, the 21 surveys are one comparison repeated
+against 21 independent measurements, not 21 independent tests of the model —
+the uniform sign is corroborating, but it cannot be pooled into a stronger
+significance claim than any single survey already carries.

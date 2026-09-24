@@ -49,10 +49,13 @@ candidate replacement for the headline.
 1991→92, 1993→94, 2002→03, and 2010→11 are coding-vintage and survey-design
 breaks (CPS occupation coding revisions and classification changes), not
 artifacts of this project's method. `cps_detailed_seam_breaks.csv` measures
-rather than assumes their size: the 2002→2003 break carries a median
-`|growth|` of **0.169** against an ordinary period's median of **0.067** —
-more than double, and large enough at that one seam to swamp genuine signal.
-All four seams are excluded from every headline number here, the same way
+rather than assumes their size, and only one of the four actually stands
+out: the 2002→2003 break carries a median `|growth|` of **0.169** against an
+ordinary period's median of **0.067** — more than double, and large enough
+at that one seam to swamp genuine signal. The other three measure
+indistinguishably from an ordinary period — 1991→92 at 0.065, 1993→94 at
+0.065, and 2010→11 at 0.070. All four seams stay excluded from every
+headline number here per the pre-pinned choice regardless, the same way
 Phase 1 excludes COVID periods (2019→20 and 2020→21, still present in the
 underlying data and marked with the usual red bands, but excluded from the
 era-comparison and cycle-decomposition means).
@@ -69,7 +72,7 @@ estimator. This has a direct consequence for the noise-correction bracket
 that is the project's only handling for it: `r_corrected = r_raw /
 sqrt(reliability)` is undefined whenever reliability ≤ 0, which happens for
 89 of the 172 period/score rows in the full (seam-inclusive) view — the
-bracket is available for well under half this grain's results. Read every
+bracket is available for just over half this grain's results. Read every
 raw r on this chart as attenuated toward zero by unmeasured amounts, per
 period, rather than as a clean effect size.
 

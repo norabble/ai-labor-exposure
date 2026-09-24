@@ -48,12 +48,14 @@ raises r without adding information. Read the two intercepts as the same
 signal measured at two resolutions, one noisier than the other, not as two
 different results.
 
-**The era comparison is null, the same direction as the detailed chart.**
-Pre-AI mean r = +0.271 (n=37 periods, 11 individually significant), AI-era
-mean r = +0.142 (n=4 periods, 0 significant), difference −0.129, Welch
-p = 0.35 — not distinguishable from zero. As at every other grain in this
-phase, the AI era contributes only 4 periods, so no AI-specific claim is
-made from this result regardless of sign.
+**The era comparison is null.** Pre-AI mean r = +0.271 (n=37 periods, 11
+individually significant), AI-era mean r = +0.142 (n=4 periods, 0
+significant), difference −0.129, Welch p = 0.35 — not distinguishable from
+zero. Both era differences are null (Welch p = 0.81 detailed, 0.35 rollup),
+and they are opposite in sign (+0.009 detailed, −0.129 rollup), so neither
+grain shows an era effect. As at every other grain in this phase, the AI era
+contributes only 4 periods, so no AI-specific claim is made from this result
+regardless of sign.
 
 **Neither grain returned the null the spec's "detailed null, rollup
 positive" contingency describes.** Both the detailed chart and this one show

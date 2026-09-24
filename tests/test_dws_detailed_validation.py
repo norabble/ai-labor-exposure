@@ -119,6 +119,73 @@ class TestNonresponseAllocation:
         )
 
 
+class TestRunReadsThePopulatedGatesSeed:
+    """Important 2: run()'s nonresponse-share wiring (reading dws_gates_path,
+    nonresponse_share_by_survey, passing it to build_detailed_displacement_comparison) must be
+    exercised with an actual populated gates CSV, not just mocked away."""
+
+    def test_run_reads_a_populated_gates_csv_and_passes_its_nonresponse_shares_through(self, monkeypatch, tmp_path):
+        dws_seed_path = tmp_path / "dws_panel.csv"
+        pd.DataFrame({"survey_year": [2024], "dorn_group": ["exec"], "tenure_class": ["all_tenures"], "displaced_thousands": [1.0]}).to_csv(
+            dws_seed_path, index=False
+        )
+        monkeypatch.setattr(dws_detailed_validation, "load_detailed_panel", lambda: pd.DataFrame({"placeholder": [1]}))
+        unit_scores_path = tmp_path / "occ1990dd_scores.csv"
+        pd.DataFrame({"occ1990dd": [1], "composition_gross_displacement": [0.01]}).to_csv(unit_scores_path, index=False)
+        monkeypatch.setattr(dws_detailed_validation, "UNIT_SCORES_OUTPUT_PATH", str(unit_scores_path))
+        monkeypatch.setattr(dws_detailed_validation, "BRIDGE_CHECK_OUTPUT_PATH", str(tmp_path / "absent_bridge_check.csv"))
+        monkeypatch.setattr(dws_detailed_validation, "OUTPUT_PATH", str(tmp_path / "output.csv"))
+
+        # A real, populated gates CSV — the on-disk shape gate_g6d actually writes, with a G6D row
+        # (ignored by run()) alongside the G6D-nonresponse row run() must read.
+        gates_path = tmp_path / "gates.csv"
+        pd.DataFrame(
+            {
+                "gate": ["G6D", "G6D-nonresponse"],
+                "scope": ["2024", "2024"],
+                "observed": [0.002, 0.25],
+                "threshold": [0.01, float("nan")],
+                "gated": [True, False],
+                "passed": [True, float("nan")],
+            }
+        ).to_csv(gates_path, index=False)
+
+        captured_arguments = {}
+
+        def _capturing_comparison(*arguments):
+            captured_arguments["nonresponse_share_by_survey_year"] = arguments[4]
+            return pd.DataFrame(
+                {
+                    "survey_year": [2024],
+                    "model": ["composition"],
+                    "tenure_class": ["all_tenures"],
+                    "measure": ["rate"],
+                    "pearson_r": [0.5],
+                    "pearson_p": [0.1],
+                    "spearman_r": [0.5],
+                    "spearman_p": [0.1],
+                    "n_groups": [6],
+                }
+            )
+
+        monkeypatch.setattr(dws_detailed_validation, "build_detailed_displacement_comparison", _capturing_comparison)
+
+        result_df = dws_detailed_validation.run(str(dws_seed_path), g4_passed_this_run=True, dws_gates_path=str(gates_path))
+
+        assert result_df is not None
+        nonresponse_share_by_survey_year = captured_arguments["nonresponse_share_by_survey_year"]
+        assert nonresponse_share_by_survey_year.loc[2024] == pytest.approx(0.25)
+
+    def test_the_allocation_the_populated_share_drives_matches_allocate_nonresponse_for_rate(self):
+        """Ties run()'s wiring test above to the actual allocation math: the 0.25 share read back
+        from a populated gates file, fed through the same function `_rate_correlation` calls,
+        produces the documented 1/(1 - share) inflation."""
+        displaced_thousands = pd.Series([8.0])
+        employment = pd.Series([100.0])
+        result = allocate_nonresponse_for_rate(displaced_thousands, employment, nonresponse_share=0.25)
+        assert result.iloc[0] == pytest.approx((8.0 * (1.0 / 0.75)) / 100.0)
+
+
 class TestRunWithdrawsOnAStaleG4Verdict:
     """dws_detailed_validation.run() must never act on a possibly-stale
     occ1990dd_bridge_check.csv left over from an earlier, different run."""

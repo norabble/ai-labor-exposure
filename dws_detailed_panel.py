@@ -15,8 +15,9 @@ exists, otherwise through the survey year's coding vintage (see the plan's
 route table); a raw code reaching k occ1990dd codes gives each 1/k of its weight.
 
 G6D redefined 2026-09-24 (plan Deviations log): it gates crosswalk loss only, among lost-job
-occupations that were REPORTED (raw code not coded "not in universe"/nonresponse, 999 on both the
-harmonized DWOCC1990 route and the raw DWOCC fallback — see `LOST_JOB_OCC_NONRESPONSE_CODE`).
+occupations that were REPORTED (raw code not coded that route's own nonresponse sentinel — 999 on
+the harmonized DWOCC1990 route, 0 on the raw DWOCC fallback route; see
+`HARMONIZED_LOST_JOB_OCC_NONRESPONSE_CODE` and `RAW_LOST_JOB_OCC_NONRESPONSE_CODE`).
 Occupation nonresponse itself is reported per survey alongside as gate "G6D-nonresponse", ungated,
 so a high-nonresponse survey no longer trips a gate meant to catch a broken crosswalk. See
 `attach_lost_job_occ1990dd`, `gate_g6d`, and `nonresponse_share_by_survey` — the last of which is
@@ -87,14 +88,25 @@ G3_TOLERANCE = 0.03
 G3_ROUNDING_THOUSANDS = 0.5
 G6D_MAXIMUM_UNMAPPED_SHARE = 0.01
 REQUIRED_GATES = ("G3", "G6D")
-# IPUMS's not-in-universe sentinel for occupation-coded variables — the same value already relied
-# on for current-job OCC1990 (`ipums_variables.OCC1990_NOT_IN_UNIVERSE`) and for occ1990dd itself
-# (`occ1990dd_reference.UNCLASSIFIED_OCC1990DD`). Used here on the harmonized route's DWOCC1990 and
-# on the raw fallback route's vintage-coded DWOCC: neither of Dorn's five source crosswalks ever
-# assigns a real occupation to code 999 (verified against seeds/occ1990dd_crosswalks/*.csv), so
-# treating 999 as "lost-job occupation not reported" cannot collide with a genuine occupation code
-# on either route.
-LOST_JOB_OCC_NONRESPONSE_CODE = ipums_variables.OCC1990_NOT_IN_UNIVERSE
+# The harmonized route's nonresponse sentinel: DWOCC1990's own "Unknown" code, verified live
+# 2026-09-24 against DWOCC1990's codebook (data/raw/ipums/dws/2024) — the same value IPUMS uses as
+# "not in universe" for current-job OCC1990 (`ipums_variables.OCC1990_NOT_IN_UNIVERSE`) and for
+# occ1990dd itself (`occ1990dd_reference.UNCLASSIFIED_OCC1990DD`).
+HARMONIZED_LOST_JOB_OCC_NONRESPONSE_CODE = ipums_variables.OCC1990_NOT_IN_UNIVERSE
+# The raw fallback route's nonresponse sentinel. DWOCC's own codebook carries no value labels at
+# all (verified live 2026-09-24 against the same 2024 extract: `get_variable_info("DWOCC").codes`
+# is empty, and the verification record separately observed DWOCC ranging 0-905 in 1984 — 999 is
+# outside DWOCC's own range and can never occur there, so reusing the harmonized route's 999 on
+# this route would silently never match anything). 0 is used instead: `dws-selfemp-report.md`
+# found DWOCC == 0 on every self-employed lost-job record it checked (a population the
+# questionnaire skips asking DWOCC/DWYEARS of at all), and two of Dorn's five source crosswalks
+# (`seeds/occ1990dd_crosswalks/occ2005_occ1990dd.csv`, `occ2010_occ1990dd.csv`) explicitly map
+# source_code 0 -> occ1990dd 999 (unclassified) themselves — the raw route's own crosswalk
+# convention for "no occupation". The remaining three vintages (1980, 1990, 2000) carry no row for
+# code 0 at all, so a raw DWOCC == 0 record on those vintages fails the edges merge regardless;
+# excluding it here as nonresponse (rather than letting it fall into crosswalk loss) is the
+# consistent choice across all five vintages.
+RAW_LOST_JOB_OCC_NONRESPONSE_CODE = 0
 
 
 def lost_job_raw_vintage(survey_year: int) -> str:
@@ -236,25 +248,28 @@ def attach_lost_job_occ1990dd(displaced_df: pd.DataFrame, survey_year: int) -> t
     """One row per (record, occ1990dd) with its allocated weight, the crosswalk-loss share (G6D), and nonresponse.
 
     G6D redefined 2026-09-24 (plan Deviations log): the unmapped share it gates is crosswalk loss
-    among records whose lost-job occupation was REPORTED — records coded
-    `LOST_JOB_OCC_NONRESPONSE_CODE` (999, "not in universe"/nonresponse) are excluded from both the
-    numerator and denominator, so a high-nonresponse survey no longer trips a gate meant to catch a
-    broken crosswalk. The nonresponse share itself (weight coded 999 over all displaced weight) is
+    among records whose lost-job occupation was REPORTED — records coded that route's nonresponse
+    sentinel (`HARMONIZED_LOST_JOB_OCC_NONRESPONSE_CODE` = 999 on the harmonized DWOCC1990 route,
+    `RAW_LOST_JOB_OCC_NONRESPONSE_CODE` = 0 on the raw DWOCC fallback route — the two routes' own
+    nonresponse conventions differ, so a single shared sentinel would misclassify one of them; see
+    the constants' definitions) are excluded from both the numerator and denominator, so a
+    high-nonresponse survey no longer trips a gate meant to catch a broken crosswalk. The
+    nonresponse share itself (weight coded that route's sentinel over all displaced weight) is
     returned separately for `gate_g6d` to report ungated, alongside rather than folded into G6D.
     """
     if ipums_variables.DWS_LOST_JOB_OCC1990_VARIABLE:
         edges_df, code_column = _harmonized_edges(), ipums_variables.DWS_LOST_JOB_OCC1990_VARIABLE
+        nonresponse_code = HARMONIZED_LOST_JOB_OCC_NONRESPONSE_CODE
     else:
         edges_df, code_column = lost_job_edges(survey_year), ipums_variables.DWS_LOST_JOB_OCC_VARIABLE
+        nonresponse_code = RAW_LOST_JOB_OCC_NONRESPONSE_CODE
     weight_column = ipums_variables.DWS_WEIGHT_VARIABLE
     coded_df = displaced_df.assign(raw_code=displaced_df[code_column].astype(int))
     weight = coded_df[weight_column].astype(float)
     total_weight = float(weight.sum())
     # A survey with no displaced weight at all has nothing to characterize as reported or not.
-    nonresponse_share = (
-        float("nan") if total_weight <= 0 else float(weight[coded_df["raw_code"] == LOST_JOB_OCC_NONRESPONSE_CODE].sum() / total_weight)
-    )
-    reported_df = coded_df[coded_df["raw_code"] != LOST_JOB_OCC_NONRESPONSE_CODE]
+    nonresponse_share = float("nan") if total_weight <= 0 else float(weight[coded_df["raw_code"] == nonresponse_code].sum() / total_weight)
+    reported_df = coded_df[coded_df["raw_code"] != nonresponse_code]
     reported_weight_total = float(reported_df[weight_column].astype(float).sum())
     mapped_df = reported_df.merge(edges_df, on="raw_code", how="inner")
     mapped_df["allocated_weight"] = mapped_df[weight_column].astype(float) * mapped_df["share"]

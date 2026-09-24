@@ -173,16 +173,41 @@ class TestMapping:
         assert pd.isna(nonresponse_share)
 
     def test_nonresponse_weight_is_excluded_from_the_crosswalk_share_and_reported_separately(self, monkeypatch):
-        """G6D redefinition: a record whose raw lost-job code is nonresponse (999) must not count
-        as crosswalk loss, and its weight share must come back as `nonresponse_share` instead."""
+        """G6D redefinition: a record whose raw lost-job code is the raw route's own nonresponse
+        sentinel (0, not 999 — see RAW_LOST_JOB_OCC_NONRESPONSE_CODE) must not count as crosswalk
+        loss, and its weight share must come back as `nonresponse_share` instead."""
         monkeypatch.setattr(
             dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
         )
-        records = displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: dws_detailed_panel.LOST_JOB_OCC_NONRESPONSE_CODE}])
+        records = displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: dws_detailed_panel.RAW_LOST_JOB_OCC_NONRESPONSE_CODE}])
         mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(records, 2024)
         assert len(mapped_df) == 1
         assert unmapped_share == pytest.approx(0.0)
         assert nonresponse_share == pytest.approx(0.5)
+
+    def test_raw_route_999_is_not_treated_as_nonresponse(self, monkeypatch):
+        """DWOCC's own range never reaches 999 (verified 0-905 in 1984), so unlike the harmonized
+        route, a raw code of 999 must be treated as an ordinary (unmapped) code, not nonresponse."""
+        monkeypatch.setattr(
+            dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
+        )
+        records = displaced_records([{}, {ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 999}])
+        mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(records, 2024)
+        assert len(mapped_df) == 1
+        assert nonresponse_share == pytest.approx(0.0)
+        assert unmapped_share == pytest.approx(0.5)  # the 999 record counts as crosswalk loss, not nonresponse
+
+    def test_all_reported_weight_zero_fails_g6d_closed(self, monkeypatch):
+        """Minor 1: every record nonresponding (nonzero total weight, zero reported weight) must
+        fail G6D closed rather than reporting a vacuous 0.0 unmapped share."""
+        monkeypatch.setattr(
+            dws_detailed_panel, "lost_job_edges", lambda survey_year: pd.DataFrame({"raw_code": [4700], "occ1990dd": [274], "share": [1.0]})
+        )
+        records = displaced_records([{ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: dws_detailed_panel.RAW_LOST_JOB_OCC_NONRESPONSE_CODE}])
+        mapped_df, unmapped_share, nonresponse_share = attach_lost_job_occ1990dd(records, 2024)
+        assert len(mapped_df) == 0
+        assert unmapped_share == pytest.approx(1.0)
+        assert nonresponse_share == pytest.approx(1.0)
 
 
 class TestTabulateSurvey:
@@ -259,6 +284,56 @@ def test_nonresponse_share_by_survey_reads_back_the_gate_record():
     result = dws_detailed_panel.nonresponse_share_by_survey(gates_df)
     assert result.loc[2022] == pytest.approx(0.03)
     assert result.loc[2024] == pytest.approx(0.04)
+
+
+class TestGateRecordRoundTrip:
+    """Minor 2: the ungated "G6D-nonresponse" rows (gated=False, passed=NaN) must survive a CSV
+    round trip without disturbing promote_rebuilt's own gated-row logic either way."""
+
+    def _write_and_reread(self, gates_df: pd.DataFrame, tmp_path) -> pd.DataFrame:
+        gates_path = tmp_path / "gates.csv"
+        gates_df.to_csv(gates_path, index=False)
+        return pd.read_csv(gates_path), str(gates_path)
+
+    def test_round_tripped_nonresponse_rows_still_let_all_gates_pass_and_promote_succeed(self, tmp_path):
+        gates_df = pd.concat(
+            [
+                gate_g3(
+                    pd.DataFrame({"survey_year": [2024], "cps_group": ["exec"], "displaced_thousands": [100.0]}),
+                    pd.DataFrame(
+                        {
+                            "survey_year": [2024],
+                            "source_table": ["table_5_occupation"],
+                            "measurement_basis": ["count_thousands"],
+                            "group_name": ["Exec"],
+                            "displaced_thousands": [100.0],
+                        }
+                    ),
+                ),
+                gate_g6d(pd.Series({2024: 0.002}), pd.Series({2024: 0.30})),
+            ],
+            ignore_index=True,
+        )
+        reread_df, gates_path = self._write_and_reread(gates_df, tmp_path)
+        assert dws_detailed_panel.all_gates_pass(reread_df, ("G3", "G6D"))
+
+        source_path = tmp_path / "source.csv"
+        destination_path = tmp_path / "destination.csv"
+        pd.DataFrame({"placeholder": [1]}).to_csv(source_path, index=False)
+        dws_detailed_panel.promote_rebuilt({str(source_path): str(destination_path)}, gates_path, ("G3", "G6D"))
+        assert destination_path.exists()
+
+    def test_a_failing_gated_row_still_blocks_after_the_round_trip(self, tmp_path):
+        gates_df = gate_g6d(pd.Series({2024: 0.05}), pd.Series({2024: 0.30}))
+        reread_df, gates_path = self._write_and_reread(gates_df, tmp_path)
+        assert not dws_detailed_panel.all_gates_pass(reread_df, ("G6D",))
+
+        source_path = tmp_path / "source.csv"
+        destination_path = tmp_path / "destination.csv"
+        pd.DataFrame({"placeholder": [1]}).to_csv(source_path, index=False)
+        with pytest.raises(Exception):
+            dws_detailed_panel.promote_rebuilt({str(source_path): str(destination_path)}, gates_path, ("G6D",))
+        assert not destination_path.exists()
 
 
 def test_the_build_refuses_until_task_2_has_verified_ipums(monkeypatch):

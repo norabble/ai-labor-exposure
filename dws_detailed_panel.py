@@ -112,14 +112,36 @@ def _harmonized_edges() -> pd.DataFrame:
 
 
 def select_displaced(person_df: pd.DataFrame) -> pd.DataFrame:
-    """Supplement respondents aged 20+ displaced for one of BLS's three reasons."""
+    """Supplement respondents aged 20+ displaced for one of BLS's three reasons, wage-and-salary lost jobs only.
+
+    BLS's published Table 5 population excludes all self-employed lost-job workers, incorporated
+    and unincorporated alike (`ipums_variables.DWS_SELF_EMPLOYED_CLASS_CODES`); a record must
+    positively match one of those codes to be dropped. A record whose lost-job class of worker is
+    missing, NIU, refused, or don't-know (`ipums_variables.DWS_MISSING_CLASS_CODES`) is kept rather
+    than guessed at — see `missing_lost_job_class_count` for how many such records survive per
+    survey.
+    """
     weights = person_df[ipums_variables.DWS_WEIGHT_VARIABLE].astype(float)
+    self_employed_mask = (
+        person_df[ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE].astype(int).isin(ipums_variables.DWS_SELF_EMPLOYED_CLASS_CODES)
+    )
     displaced_mask = (
         (weights > 0)
         & (person_df["AGE"] >= ipums_variables.DWS_MINIMUM_AGE)
         & person_df[ipums_variables.DWS_REASON_VARIABLE].isin(ipums_variables.DWS_DISPLACED_REASON_CODES)
+        & ~self_employed_mask
     )
     return person_df[displaced_mask].copy()
+
+
+def missing_lost_job_class_count(displaced_df: pd.DataFrame) -> int:
+    """How many already-selected displaced records carry a missing/NIU/refused/don't-know lost-job class.
+
+    `select_displaced` keeps these records rather than assuming they are (or are not)
+    self-employed, so this count is reported per survey rather than silently absorbed.
+    """
+    class_values = displaced_df[ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE].astype(int)
+    return int(class_values.isin(ipums_variables.DWS_MISSING_CLASS_CODES).sum())
 
 
 def is_long_tenured(frame: pd.DataFrame) -> pd.Series:
@@ -258,7 +280,11 @@ def build_rebuilt_panel(
         mapped_df, unmapped_by_survey[survey_year] = attach_lost_job_occ1990dd(displaced_df, survey_year)
         survey_frames.append(tabulate_survey(mapped_df, survey_year, groups_df))
         direct_frames.append(ten_group_long_tenured_direct(displaced_df, survey_year))
-        print(f"  {survey_year}: {len(displaced_df)} displaced records, unmapped share {unmapped_by_survey[survey_year]:.4f}")
+        missing_class_count = missing_lost_job_class_count(displaced_df)
+        print(
+            f"  {survey_year}: {len(displaced_df)} displaced records, unmapped share {unmapped_by_survey[survey_year]:.4f}, "
+            f"missing/NIU lost-job class {missing_class_count}"
+        )
 
     if not survey_frames:
         raise RuntimeError(

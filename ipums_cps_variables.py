@@ -170,6 +170,33 @@ DWS_DISPLACED_REASON_CODES: tuple[int, ...] = (1, 2, 3)
 DWS_TENURE_VALID_MAXIMUM = 60.0
 DWS_MINIMUM_AGE = 20
 
+# Class of worker for the *lost* job. Required so `select_displaced` can exclude self-employed
+# lost jobs the way BLS's published Table 5 does. Confirmed live 2026-09-24 by fetching
+# https://cps.ipums.org/cps-action/variables/DWCLASS directly (its embedded `categories` JSON and
+# its `/cps-action/frequencies/DWCLASS` endpoint, which shows code 04 with nonzero weighted counts
+# in real samples — e.g. 126 of ~102k records in one probe sample — so self-employed lost jobs
+# genuinely occur in the data despite the page's own "Universe" note claiming the variable's
+# universe already excludes them, an apparent documentation error rather than a coding fact) and
+# against its availability table: DWCLASS is published for every one of this project's DWS survey
+# years, 1984-2024, on the same January/February grid every other DWS variable uses (confirmed
+# against `DWS_SAMPLE_MONTH_BY_SURVEY_YEAR`), so no `VARIABLE_FIRST_YEAR` entry is needed for it.
+DWS_LOST_JOB_CLASS_VARIABLE = "DWCLASS"
+# DWCLASS's full coding scheme, confirmed live 2026-09-24 from the variable page's embedded
+# `categories` JSON: 01 Government, 02 Private, for-profit, 03 Private, non-profit,
+# 04 Self-employed, 05 Without pay/family business, 96 Refused, 97 Don't Know, 98 No response,
+# 99 NIU. BLS's technical note (bls.gov/news.release/disp.tn.htm) excludes "all self-employed
+# people, both those with incorporated businesses as well as those with unincorporated
+# businesses" from Table 5's displaced-worker population; IPUMS's DWCLASS does not split
+# incorporated from unincorporated self-employment into separate codes the way `CLASSWKR` above
+# does for current jobs (13/14) — this single merged code (04) is the whole exclusion.
+DWS_SELF_EMPLOYED_CLASS_CODES: tuple[int, ...] = (4,)
+# Codes that say nothing about whether the lost job was self-employed: NIU (not asked at all),
+# Refused, Don't Know, and No response. A record carrying one of these is never excluded as
+# self-employed — excluding requires a positive match against DWS_SELF_EMPLOYED_CLASS_CODES, not
+# the absence of a wage/salary code — but `dws_detailed_panel.missing_lost_job_class_count` counts
+# them separately per survey so their share stays visible rather than silently absorbed.
+DWS_MISSING_CLASS_CODES: tuple[int, ...] = (96, 97, 98, 99)
+
 DWS_VARIABLES = [
     "YEAR",
     "MONTH",
@@ -181,4 +208,5 @@ DWS_VARIABLES = [
     DWS_REASON_VARIABLE,
     DWS_TENURE_VARIABLE,
     DWS_LOST_JOB_OCC_VARIABLE,
+    DWS_LOST_JOB_CLASS_VARIABLE,
 ] + ([DWS_LOST_JOB_OCC1990_VARIABLE] if DWS_LOST_JOB_OCC1990_VARIABLE else [])

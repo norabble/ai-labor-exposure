@@ -443,3 +443,79 @@ extracted for Steps 5-6 above (`cps1983_01s` .. `cps2026_01s` and
 `cps1985_01b`). REST client: `requests==2.34.2`, Python 3.12.14, IPUMS extract
 API v2, `dataFormat: "csv"` (see the top of this file — unchanged from
 2026-09-23).
+
+## Addendum 2026-09-24 — DWCLASS (self-employed lost-job exclusion, G3 fix)
+
+**Root cause being fixed:** `dws-diagnosis-report.md` (same directory as the
+brief) found that `dws_detailed_panel.select_displaced` counts self-employed
+lost-job records that BLS's published Table 5 explicitly excludes, and traced
+G3's 40/90-pass rate to that population mismatch. User approved adding the
+class-of-worker-of-lost-job variable and excluding self-employed records.
+
+**Variable confirmed live** by fetching
+`https://cps.ipums.org/cps-action/variables/DWCLASS` directly (`curl -A
+"Mozilla/5.0"`, `allowed_domains: ["cps.ipums.org"]`) rather than relying on
+the WebFetch summarizer, which could not see the codes table (it loads via a
+separate endpoint). Two pieces of evidence:
+
+1. The variable page's embedded `categories` JSON gives the full coding
+   scheme directly (`<h1>DWCLASS</h1>`, `jsonPath:
+   "/cps-action/frequencies/DWCLASS"`, confirming the page is genuinely
+   DWCLASS's own, not a mixed/cached fetch):
+
+   | Code | Label |
+   |---|---|
+   | 01 | Government |
+   | 02 | Private, for-profit |
+   | 03 | Private, non-profit |
+   | 04 | Self-employed |
+   | 05 | Without pay/family business |
+   | 96 | Refused |
+   | 97 | Don't Know |
+   | 98 | No response |
+   | 99 | NIU |
+
+2. `https://cps.ipums.org/cps-action/frequencies/DWCLASS` (the JSON the page's
+   own `jsonPath` points at) returns real per-sample category counts, e.g. for
+   category id `8857833` (code 04, "Self-employed"): `126` in one sample and
+   `75` in another, both out of populations of ~100k-140k weighted-eligible
+   records. **Self-employed lost-job records are genuinely present in the
+   data** despite the page's own "Universe" prose (`<div
+   id="universe_section">`) reading "Civilians age 20 or older who lost or
+   left their job in the last five/three years **and were not
+   self-employed**" — that prose is an apparent documentation error (perhaps
+   copied from `DWSTAT`'s page, which the diagnosis report already found
+   really does implement that exclusion from 1998 on) rather than a coding
+   fact; the live codes and frequencies are authoritative, and they show one
+   merged "Self-employed" code carrying real weight in every checked sample.
+
+   IPUMS's own codebook does **not** split incorporated from unincorporated
+   self-employment for this variable the way `CLASSWKR` does for current jobs
+   (codes 13/14) — there is exactly one merged "Self-employed" code (04).
+   `ipums_cps_variables.DWS_SELF_EMPLOYED_CLASS_CODES = (4,)` is therefore the
+   whole exclusion BLS's technical note describes ("excludes all self-employed
+   people, both those with incorporated businesses as well as those with
+   unincorporated businesses" — bls.gov/news.release/disp.tn.htm).
+
+**Availability confirmed live** from the same page's availability table:
+DWCLASS is published for every one of this project's 21 DWS survey years,
+1984-2024, on exactly the same January/February grid every other DWS variable
+already uses (`DWS_SAMPLE_MONTH_BY_SURVEY_YEAR`) — January for every survey
+year except 1994/1996/1998/2000 (February). No gaps, so no
+`VARIABLE_FIRST_YEAR` entry was needed for `DWCLASS` in
+`ipums_cps_variables.variables_for_year`'s per-year mechanism (that mechanism
+is unused for the DWS extract path anyway, which requests one fixed variable
+list — `DWS_VARIABLES` — per survey year rather than varying it).
+
+**Missing/NIU handling:** codes 96 (Refused), 97 (Don't Know), 98 (No
+response) and 99 (NIU) say nothing about whether the lost job was
+self-employed, so `ipums_cps_variables.DWS_MISSING_CLASS_CODES = (96, 97, 98,
+99)` are never excluded by `dws_detailed_panel.select_displaced` — a record
+must positively match `DWS_SELF_EMPLOYED_CLASS_CODES` to be dropped.
+`dws_detailed_panel.missing_lost_job_class_count` counts these kept records
+per survey; see `dws-selfemp-report.md` for the per-survey counts from the
+real rebuild.
+
+This addendum does not change `VERIFICATION_STATUS` (already `"verified"`) —
+it documents one additional variable added to an already-verified extract
+definition for a separate, user-approved bug fix.

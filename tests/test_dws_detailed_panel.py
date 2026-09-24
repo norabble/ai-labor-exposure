@@ -32,6 +32,7 @@ def displaced_records(rows):
         ipums_variables.DWS_REASON_VARIABLE: 1,
         ipums_variables.DWS_TENURE_VARIABLE: 5.0,
         ipums_variables.DWS_LOST_JOB_OCC_VARIABLE: 4700,
+        ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE: 2,  # wage/salary, private for-profit — not self-employed
     }
     return pd.DataFrame([{**defaults, **row} for row in rows])
 
@@ -62,6 +63,28 @@ class TestSelection:
         tenure = ipums_variables.DWS_TENURE_VARIABLE
         person_df = displaced_records([{tenure: 2.9}, {tenure: 3.0}, {tenure: 99.0}])
         assert is_long_tenured(person_df).tolist() == [False, True, False]
+
+    def test_excludes_self_employed_lost_job(self):
+        class_variable = ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE
+        person_df = displaced_records(
+            [
+                {class_variable: ipums_variables.DWS_SELF_EMPLOYED_CLASS_CODES[0]},
+                {class_variable: 2},  # wage/salary, private for-profit
+            ]
+        )
+        result_df = select_displaced(person_df)
+        assert len(result_df) == 1
+        assert result_df[class_variable].iloc[0] == 2
+
+    def test_keeps_missing_or_niu_lost_job_class_rather_than_guessing(self):
+        class_variable = ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE
+        person_df = displaced_records([{class_variable: code} for code in ipums_variables.DWS_MISSING_CLASS_CODES])
+        assert len(select_displaced(person_df)) == len(ipums_variables.DWS_MISSING_CLASS_CODES)
+
+    def test_missing_lost_job_class_count_counts_niu_and_nonresponse_codes(self):
+        class_variable = ipums_variables.DWS_LOST_JOB_CLASS_VARIABLE
+        displaced_df = displaced_records([{class_variable: 2}, {class_variable: 99}, {class_variable: 97}])
+        assert dws_detailed_panel.missing_lost_job_class_count(displaced_df) == 2
 
 
 class TestMapping:

@@ -464,12 +464,14 @@ def run(
     LAST_RUN_G4_PASSED = None
     panel_df = load_detailed_panel(seed_path)
     if panel_df is None:
+        LAST_RUN_G4_PASSED = False
         warnings.warn(
             f"{seed_path} absent — it is built locally from IPUMS microdata (cps_detailed_panel.py); detailed CPS levels skipped",
             stacklevel=2,
         )
         return None
     if not os.path.exists(COMPOSITION_REPORT_PATH):
+        LAST_RUN_G4_PASSED = False
         warnings.warn(f"{COMPOSITION_REPORT_PATH} absent; run the composition stage first — detailed CPS levels skipped", stacklevel=2)
         return None
 
@@ -495,6 +497,7 @@ def run(
     _write(occ1990dd_composition_stability(bridge_weights_df, pd.read_csv(OCCUPATION_TRENDS_PATH)), STABILITY_OUTPUT_PATH)
 
     if not os.path.exists(crosstab_seed_path):
+        LAST_RUN_G4_PASSED = False
         warnings.warn(f"{crosstab_seed_path} absent, so gate G4 cannot run — detailed CPS levels withheld", stacklevel=2)
         return None
     direct_scores_df = direct_unit_scores(

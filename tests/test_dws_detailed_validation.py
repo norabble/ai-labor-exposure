@@ -123,3 +123,18 @@ class TestRunWithdrawsOnAStaleG4Verdict:
         monkeypatch.setattr(dws_detailed_validation, "BRIDGE_CHECK_OUTPUT_PATH", str(tmp_path / "absent_bridge_check.csv"))
         with pytest.warns(UserWarning, match="G4"):
             assert dws_detailed_validation.run(str(dws_seed_path)) is None
+
+    def test_explicit_false_verdict_overrides_a_stale_passing_file(self, monkeypatch, tmp_path):
+        """When cps_detailed_validation.run() returns early with LAST_RUN_G4_PASSED=False,
+        dws_detailed_validation should withhold even if an old bridge_check.csv says passed."""
+        dws_seed_path = self._stub_common_inputs(monkeypatch, tmp_path)
+        bridge_check_path = tmp_path / "bridge_check.csv"
+        # Stale bridge check from a previous run that had passed
+        pd.DataFrame({"coding_block": ["2003_2010"], "block_gate_passed": [True]}).to_csv(bridge_check_path, index=False)
+        monkeypatch.setattr(dws_detailed_validation, "BRIDGE_CHECK_OUTPUT_PATH", str(bridge_check_path))
+        monkeypatch.setattr(dws_detailed_validation, "g4_passed", lambda check_df: True)
+        monkeypatch.setattr(dws_detailed_validation, "OUTPUT_PATH", str(tmp_path / "output.csv"))
+        # Caller passes explicit False from cps_detailed_validation.LAST_RUN_G4_PASSED
+        with pytest.warns(UserWarning, match="G4 did not pass in this run"):
+            result = dws_detailed_validation.run(str(dws_seed_path), g4_passed_this_run=False)
+        assert result is None

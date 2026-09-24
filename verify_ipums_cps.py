@@ -22,6 +22,7 @@ Outputs:
 Usage:
   python verify_ipums_cps.py samples
   python verify_ipums_cps.py basic-probe
+  python verify_ipums_cps.py basic-legacy-probe
   python verify_ipums_cps.py dws-probe
 """
 
@@ -29,6 +30,7 @@ import os
 import sys
 
 import pandas as pd
+import requests
 
 import download_ipums_cps
 import ipums_cps_variables as ipums_variables
@@ -44,10 +46,15 @@ PROBE_DIR = "data/raw/ipums/probe"
 # alone, requesting only `ipums_variables.variables_for_year(year)`) is the direct confirmation
 # Task 2 Step 6 still owes.
 BASIC_PROBE_MONTHS = [(1983, 1), (1988, 1), (1989, 1), (1994, 1), (1998, 1), (2003, 1), (2011, 1), (2020, 1)]
-DWS_PROBE_YEARS = (1984, 1994, 2002, 2004, 2020)
+DWS_PROBE_YEARS = (1984, 1994, 2002, 2004, 2024, 2026)
 OCC1990_MINIMUM_VALID_SHARE = 0.99
 CPSID_MINIMUM_LINKED_SHARE = 0.99
 TOTAL_EMPLOYMENT_SERIES_ID = "LNU02000000"
+# Pre-1998, so COMPWT is outside its VARIABLE_FIRST_YEAR floor (Ruling 11) — the direct,
+# extract-level confirmation that requesting only `variables_for_year(year)` for a legacy year is
+# accepted by IPUMS and simply omits COMPWT, rather than rejecting the whole extract or returning
+# a bogus column. Distinct from every BASIC_PROBE_MONTHS year so it is independent evidence.
+LEGACY_PROBE_YEAR = 1985
 
 
 def summarise_basic_probe(person_df: pd.DataFrame) -> pd.DataFrame:
@@ -156,42 +163,122 @@ def run_basic_probe() -> None:
     print(f"  Full 1983-2026 basic monthly, extrapolated: ≈ {estimated_total_gigabytes:.1f} GB")
 
 
-def run_dws_probe() -> None:
-    """Submit the DWS variables for the probe survey years and print their availability and codes."""
+def run_legacy_variable_probe() -> None:
+    """Submit one pre-1998 basic-monthly month requesting only that year's eligible variables.
+
+    Confirms `ipums_variables.variables_for_year` is safe to hand IPUMS directly: the extract
+    must be accepted (not rejected for a variable outside its availability range) and the
+    resulting columns must simply omit COMPWT rather than returning it as a bogus/empty column.
+    """
     client = download_ipums_cps.make_client()
     published_samples = download_ipums_cps.available_sample_ids(client)
-    samples = [
-        download_ipums_cps.dws_sample_id(year, published_samples)
-        for year in DWS_PROBE_YEARS
-        if download_ipums_cps.dws_sample_id(year, published_samples) in published_samples
-    ]
-    probe_dir = os.path.join(PROBE_DIR, "dws")
+    sample_id = download_ipums_cps.basic_monthly_sample_id(LEGACY_PROBE_YEAR, 1, published_samples)
+    requested_variables = ipums_variables.variables_for_year(LEGACY_PROBE_YEAR)
+    probe_dir = os.path.join(PROBE_DIR, "basic_legacy")
     if not download_ipums_cps.extract_is_downloaded(probe_dir):
-        download_ipums_cps._submit_and_download(client, samples, ipums_variables.DWS_VARIABLES, "ai-exposure phase 2 DWS probe", probe_dir)
-
+        download_ipums_cps._submit_and_download(
+            client, [sample_id], requested_variables, f"ai-exposure phase 2 legacy-variable probe {LEGACY_PROBE_YEAR}", probe_dir
+        )
     person_df = pd.concat(download_ipums_cps.read_extract(probe_dir), ignore_index=True)
+    print(f"  Sample: {sample_id}")
+    print(f"  Requested variables ({len(requested_variables)}): {requested_variables}")
+    print(f"  Columns actually returned ({len(person_df.columns)}): {sorted(person_df.columns)}")
+    print(f"  COMPWT requested: {'COMPWT' in requested_variables}")
+    print(f"  COMPWT present in returned columns: {'COMPWT' in person_df.columns}")
+    print(f"  Row count: {len(person_df)}")
+
+
+def submit_and_download_or_none(client, samples: list[str], variables: list[str], description: str, extract_dir: str) -> str | None:
+    """Like `download_ipums_cps._submit_and_download`, but None instead of raising when IPUMS
+    rejects the extract outright.
+
+    Confirmed live 2026-09-24: a resolved sample that exists (is in `available_sample_ids`) can
+    still lack a requested supplement entirely — survey year 2026's January sample carries no DWS
+    variables at all (no survey conducted/published for it yet), and IPUMS answers with
+    `400 SemanticValidationError: "<VAR>: This variable is not available in any of the samples
+    currently selected."` for every requested DWS variable, not an empty result. Membership in
+    `available_sample_ids` cannot catch this, since the sample itself is real; only submitting and
+    reading the error can.
+    """
+    try:
+        return download_ipums_cps._submit_and_download(client, samples, variables, description, extract_dir)
+    except requests.exceptions.HTTPError as submission_error:
+        print(f"    extract rejected by IPUMS for {samples}: {submission_error}")
+        return None
+
+
+def run_dws_probe() -> None:
+    """Submit ONE single-sample extract per DWS probe survey year and print each year's own coverage.
+
+    Deliberately never combines survey years into one extract: a wrong resolved sample month for
+    one year (an empty supplement) would otherwise hide behind another year's real data in a
+    shared extract. Each year's own DWREAS/DWYEARS codebook is printed too, since a supplement's
+    category codes could in principle differ by vintage even though IPUMS harmonizes most
+    variables across years.
+    """
+    client = download_ipums_cps.make_client()
+    published_samples = download_ipums_cps.available_sample_ids(client)
     weight_column = ipums_variables.DWS_WEIGHT_VARIABLE
-    for year, year_df in person_df.groupby("YEAR"):
+    occ1990_column = ipums_variables.DWS_LOST_JOB_OCC1990_VARIABLE
+    reason_codes_by_year: dict[int, dict[str, int]] = {}
+    tenure_codes_by_year: dict[int, dict[str, int]] = {}
+
+    for year in DWS_PROBE_YEARS:
+        resolved_month = ipums_variables.dws_sample_month(year)
+        sample_id = download_ipums_cps.dws_sample_id(year, published_samples)
+        if sample_id not in published_samples:
+            print(f"\n  {year}: resolved sample {sample_id} (month {resolved_month}) not published — skipped")
+            continue
+        year_probe_dir = os.path.join(PROBE_DIR, "dws", str(year))
+        if not download_ipums_cps.extract_is_downloaded(year_probe_dir):
+            downloaded_dir = submit_and_download_or_none(
+                client, [sample_id], ipums_variables.DWS_VARIABLES, f"ai-exposure phase 2 DWS probe {year}", year_probe_dir
+            )
+            if downloaded_dir is None:
+                print(f"\n  {year}: sample {sample_id} (resolved month {resolved_month}) does not carry the DWS supplement — skipped")
+                continue
+        year_df = pd.concat(download_ipums_cps.read_extract(year_probe_dir), ignore_index=True)
         in_supplement = year_df[year_df[weight_column].astype(float) > 0]
-        print(f"\n  {year}: {len(in_supplement)} records with positive {weight_column}")
+        print(
+            f"\n  {year} (sample {sample_id}, resolved month {resolved_month}): "
+            f"{len(in_supplement)} of {len(year_df)} records with positive {weight_column}"
+        )
         for variable_name in ipums_variables.DWS_VARIABLES:
             if variable_name in year_df.columns:
                 variable_values = in_supplement[variable_name]
-                value_range = f"{variable_values.min()}-{variable_values.max()}"
+                value_range = f"{variable_values.min()}-{variable_values.max()}" if len(variable_values) else "n/a"
                 print(f"    {variable_name}: {variable_values.nunique()} distinct values, range {value_range}")
+        if occ1990_column and occ1990_column in year_df.columns and len(in_supplement):
+            occ1990_values = in_supplement[occ1990_column].astype(float)
+            nonzero_share = float((occ1990_values > 0).mean())
+            print(f"    {occ1990_column} nonzero share among supplement records: {nonzero_share:.3f}")
 
-    codebook = download_ipums_cps.read_codebook(probe_dir)
-    reason_labels = codebook.get_variable_info(ipums_variables.DWS_REASON_VARIABLE).codes
-    print(f"\n  {ipums_variables.DWS_REASON_VARIABLE} codes: {reason_labels}")
-    print(
-        f"  Displaced reason codes by label: {displaced_reason_codes(reason_labels, ipums_variables.DWS_DISPLACED_REASON_LABEL_FRAGMENTS)}"
-    )
-    print(f"  {ipums_variables.DWS_TENURE_VARIABLE} codes: {codebook.get_variable_info(ipums_variables.DWS_TENURE_VARIABLE).codes}")
+        year_codebook = download_ipums_cps.read_codebook(year_probe_dir)
+        year_reason_codes = year_codebook.get_variable_info(ipums_variables.DWS_REASON_VARIABLE).codes
+        year_tenure_codes = year_codebook.get_variable_info(ipums_variables.DWS_TENURE_VARIABLE).codes
+        reason_codes_by_year[year] = year_reason_codes
+        tenure_codes_by_year[year] = year_tenure_codes
+        print(f"    {ipums_variables.DWS_REASON_VARIABLE} codes ({year}): {year_reason_codes}")
+        print(
+            f"    Displaced reason codes by label ({year}): "
+            f"{displaced_reason_codes(year_reason_codes, ipums_variables.DWS_DISPLACED_REASON_LABEL_FRAGMENTS)}"
+        )
+        print(f"    {ipums_variables.DWS_TENURE_VARIABLE} codes ({year}): {year_tenure_codes}")
+
+    distinct_reason_codebooks = {tuple(sorted(codes.items())) for codes in reason_codes_by_year.values()}
+    distinct_tenure_codebooks = {tuple(sorted(codes.items())) for codes in tenure_codes_by_year.values()}
+    print(f"\n  Distinct {ipums_variables.DWS_REASON_VARIABLE} codebooks across probe years: {len(distinct_reason_codebooks)}")
+    print(f"  Distinct {ipums_variables.DWS_TENURE_VARIABLE} codebooks across probe years: {len(distinct_tenure_codebooks)}")
 
 
 def main(arguments: list[str]) -> None:
     """Command-line entry: `samples`, `basic-probe` or `dws-probe`."""
-    commands = {"samples": run_samples, "basic-probe": run_basic_probe, "dws-probe": run_dws_probe}
+    commands = {
+        "samples": run_samples,
+        "basic-probe": run_basic_probe,
+        "basic-legacy-probe": run_legacy_variable_probe,
+        "dws-probe": run_dws_probe,
+    }
     if not arguments or arguments[0] not in commands:
         raise SystemExit(f"usage: python verify_ipums_cps.py {{{'|'.join(commands)}}}")
     commands[arguments[0]]()

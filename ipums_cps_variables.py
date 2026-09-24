@@ -14,7 +14,7 @@ read real data until it is.
 Inputs: none. Outputs: none — constants only.
 """
 
-VERIFICATION_STATUS = "unverified"
+VERIFICATION_STATUS = "verified"
 
 COLLECTION = "cps"
 # Offline/formatting fallback only — confirmed live 2026-09-23 (Task 2, Step 4) that IPUMS does
@@ -42,12 +42,19 @@ BASIC_MONTHLY_VARIABLES = [
     "CLASSWKR",
 ]
 
-# EMPSTAT 10 = at work, 12 = has job, not at work last week. Armed forces (01) excluded.
+# EMPSTAT 10 = at work, 12 = has job, not at work last week. Armed forces (01) excluded. Confirmed
+# live 2026-09-24 (Task 2, Step 5, basic-probe): the extract's own EMPSTAT codebook labels exactly
+# 10 "At work" and 12 "Has job, not at work last week" — no correction needed.
 EMPLOYED_EMPSTAT_CODES = (10, 12)
 MINIMUM_AGE = 16
 
 # Wage and salary classes only: both self-employed classes (13, 14), unpaid family
-# workers (29) and armed forces (26) are excluded.
+# workers (29) and armed forces (26) are excluded. Confirmed live 2026-09-24 (Task 2, Step 5,
+# basic-probe): the extract's own CLASSWKR codebook labels the 20s as
+# {20: 'Works for wages or salary', 21: 'Wage/salary, private', 22: 'Private, for profit',
+# 23: 'Private, nonprofit', 24: 'Wage/salary, government', 25: 'Federal government employee',
+# 26: 'Armed forces', 27: 'State government employee', 28: 'Local government employee'} and 29 as
+# 'Unpaid family worker' — this tuple (all the 20s except 26 and 29) matches exactly.
 WAGE_SALARY_CLASSWKR_CODES = (20, 21, 22, 23, 24, 25, 27, 28)
 
 OCC1990_NOT_IN_UNIVERSE = 999
@@ -79,6 +86,9 @@ def variables_for_year(year: int, variables: list[str] | None = None) -> list[st
 # "CPSID" if households link across months in every year 1983-2026, otherwise
 # "household_month" (SERIAL within YEAR and MONTH) for the whole span — the
 # bootstrap design must be identical in every year (spec § Sampling variance).
+# Confirmed live 2026-09-24 (Task 2, Step 5, basic-probe): every probe month (1983, 1988, 1989,
+# 1994, 1998, 2003, 2011, 2020, 2026) shows cpsid_linked_share >= 0.99, so households link across
+# months throughout the whole 1983-2026 span — "CPSID" holds unchanged.
 HOUSEHOLD_CLUSTER = "CPSID"
 
 # ── Displaced Worker Supplement (Tasks 14-16). Confirmed in Task 2 Step 6. ──
@@ -139,18 +149,24 @@ DWS_TENURE_VARIABLE = "DWYEARS"
 # Raw, vintage-coded occupation of the lost job. Required: gate G3 reads it.
 DWS_LOST_JOB_OCC_VARIABLE = "DWOCC"
 # Harmonized 1990-basis occupation of the lost job, or None if IPUMS has none. Confirmed present
-# (named DWOCC1990) against the live IPUMS CPS variable browser 2026-09-23 — see the DWS
-# Displaced Worker Supplement group at https://cps.ipums.org/cps-action/variables/group?id=dw_dw.
-# Its presence in the extract itself (which years carry it, whether it is ever missing) is still
-# unconfirmed: the dws-probe extract needed for that is blocked (Task 2 Step 6; see the
-# verification record).
+# (named DWOCC1990) against the live IPUMS CPS variable browser 2026-09-23, and confirmed live
+# 2026-09-24 in the extract itself: a single-sample probe for each of 1984, 1994, 2002, 2004 and
+# 2024 shows DWOCC1990 carrying genuine non-999 (not-in-universe) values for 2.3%-5.8% of
+# DWSUPPWT-positive records in every year checked — the share that is genuinely a displaced
+# worker, consistent across the whole span.
 DWS_LOST_JOB_OCC1990_VARIABLE: str | None = "DWOCC1990"
 # Task 2 fills these from the DWREAS codebook: the codes whose labels name a
 # plant or company closing or move, insufficient work, or an abolished position
-# or shift — BLS's three displacement reasons.
+# or shift — BLS's three displacement reasons. Confirmed live 2026-09-24: single-sample probe
+# extracts for 1984, 1994, 2002, 2004 and 2024 all show the identical DWREAS codebook (1 distinct
+# codebook across all five), with codes 1/2/3 the only ones matching these label fragments in
+# every year.
 DWS_DISPLACED_REASON_LABEL_FRAGMENTS = ("closed", "insufficient work", "abolished")
-DWS_DISPLACED_REASON_CODES: tuple[int, ...] = ()
-# Tenure values above this are IPUMS not-in-universe / missing codes.
+DWS_DISPLACED_REASON_CODES: tuple[int, ...] = (1, 2, 3)
+# Tenure values above this are IPUMS not-in-universe / missing codes. Confirmed live 2026-09-24:
+# across the same five probe years, real DWYEARS values top out at 54.0 and the not-in-universe
+# sentinel codes start at 99.96 (99.96-99.99 across the five years) — a clean gap this ceiling
+# sits inside.
 DWS_TENURE_VALID_MAXIMUM = 60.0
 DWS_MINIMUM_AGE = 20
 

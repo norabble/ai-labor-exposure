@@ -9,14 +9,24 @@ IPUMS sample-ID range seen live: `cps1962_03s` (earliest, a pre-basic-monthly
 March CPS supplement) through `cps2026_08s` (latest basic-monthly month
 published as of this date), 671 CPS samples total.
 
-**Overall verdict: NOT verified.** `VERIFICATION_STATUS` remains `"unverified"`
-in `ipums_cps_variables.py`. Step 4 passed, with one client correction (below).
-Steps 5 and 6's extract-dependent checks are **blocked**: the IPUMS account
-behind `IPUMS_API_KEY` is not registered for the CPS collection, so every
-extract-submission call returns `401 UserAuthorizationError`. Only the account
-holder can resolve this (register at
-https://uma.pop.umn.edu/cps/registration/new); no workaround was attempted, in
-line with the run instructions' "report and stop" rule for this kind of block.
+**Overall verdict, as of 2026-09-24: VERIFIED.** `VERIFICATION_STATUS` is now
+`"verified"` in `ipums_cps_variables.py`. Steps 4, 5 and 6 all passed — see
+"Resumed after registration (2026-09-24)" below for the live basic-probe and
+per-year DWS-probe evidence that closed out Steps 5 and 6. The account
+registration blocker documented immediately below (2026-09-23) has been
+resolved by the user; it is kept here as the historical record of what was
+blocked and why, since the rest of this file's step-by-step evidence was
+gathered around it.
+
+**Original verdict, 2026-09-23: NOT verified.** `VERIFICATION_STATUS` remained
+`"unverified"` in `ipums_cps_variables.py`. Step 4 passed, with one client
+correction (below). Steps 5 and 6's extract-dependent checks were **blocked**:
+the IPUMS account behind `IPUMS_API_KEY` was not registered for the CPS
+collection, so every extract-submission call returned `401
+UserAuthorizationError`. Only the account holder could resolve this (register
+at https://uma.pop.umn.edu/cps/registration/new); no workaround was attempted,
+in line with the run instructions' "report and stop" rule for this kind of
+block.
 
 ## Step 4: sample coverage (`verify_ipums_cps.py samples`)
 
@@ -225,7 +235,7 @@ extract-level confirmation Task 2 Step 6 owes once the account is
 unblocked — this addendum's evidence is documentation-only, from each
 variable's own published page, not from a submitted extract.
 
-## Next step for the user
+## Next step for the user (historical — resolved 2026-09-24)
 
 Register (or renew registration) for the IPUMS CPS collection at
 https://uma.pop.umn.edu/cps/registration/new using the account associated
@@ -239,3 +249,197 @@ with the current `IPUMS_API_KEY` (the 401 response names it as
 
 and fill in the BLOCKED rows above before setting `VERIFICATION_STATUS =
 "verified"`.
+
+**This was done — see the section below.**
+
+## Resumed after registration (2026-09-24): Steps 5–7 completed live
+
+Registration was confirmed fixed with a direct `GET /extracts` call (200,
+`{"data":[],"totalCount":0,...}`, versus the 401 `UserAuthorizationError` of
+the day before). All three probes were then run live:
+`verify_ipums_cps.py basic-probe`, a new `verify_ipums_cps.py
+basic-legacy-probe` (added this session — see "Code correction" below), and a
+rewritten `verify_ipums_cps.py dws-probe` that now submits one single-sample
+extract **per DWS survey year** rather than one combined extract, so an empty
+or wrong-month year cannot hide behind another year's real data in a shared
+extract.
+
+### Step 5: basic-monthly probe — PASS, no corrections needed
+
+`.venv/bin/python verify_ipums_cps.py basic-probe` output (probe months 1983,
+1988, 1989, 1994, 1998, 2003, 2011, 2020, plus the latest published January,
+2026):
+
+```
+ year  month  employed_thousands  occ1990_valid_share  compwt_positive_share  cpsid_linked_share          classwkr_codes  published_thousands  relative_difference
+ 1983      1        97339.716970                  1.0                    0.0                 1.0    13,14,21,25,27,28,29              97262.0             0.000799
+ 1988      1       112118.491910                  1.0                    0.0                 1.0    13,14,21,25,27,28,29             112139.0            -0.000183
+ 1989      1       114972.872790                  1.0                    0.0                 1.0    13,14,21,25,27,28,29             114786.0             0.001628
+ 1994      1       119839.857659                  1.0                    0.0                 1.0 13,14,22,23,25,27,28,29             119901.0            -0.000510
+ 1998      1       129258.840438                  1.0                    1.0                 1.0 13,14,22,23,25,27,28,29             128882.0             0.002924
+ 2003      1       135906.819317                  1.0                    1.0                 1.0 13,14,22,23,25,27,28,29             135907.0            -0.000001
+ 2011      1       137985.844636                  1.0                    1.0                 1.0 13,14,22,23,25,27,28,29             137599.0             0.002811
+ 2020      1       157394.431215                  1.0                    1.0                 1.0 13,14,22,23,25,27,28,29             156994.0             0.002551
+ 2026      1       162239.726567                  1.0                    1.0                 1.0 13,14,22,23,25,27,28,29             161670.0             0.003524
+
+  Household cluster decision: CPSID
+
+  EMPSTAT codes: {'NIU': 0, 'Armed Forces': 1, 'At work': 10, 'Has job, not at work last week': 12, 'Unemployed': 20, 'Unemployed, experienced worker': 21, 'Unemployed, new worker': 22, 'Not in labor force': 30, 'NILF, housework': 31, 'NILF, unable to work': 32, 'NILF, school': 33, 'NILF, other': 34, 'NILF, unpaid, lt 15 hours': 35, 'NILF, retired': 36}
+
+  CLASSWKR codes: {'NIU': 0, 'Self-employed': 10, 'Self-employed, not incorporated': 13, 'Self-employed, incorporated': 14, 'Works for wages or salary': 20, 'Wage/salary, private': 21, 'Private, for profit': 22, 'Private, nonprofit': 23, 'Wage/salary, government': 24, 'Federal government employee': 25, 'Armed forces': 26, 'State government employee': 27, 'Local government employee': 28, 'Unpaid family worker': 29, 'Missing/Unknown': 99}
+
+  Probe data file: 22.9 MB for 9 months
+  Full 1983-2026 basic monthly, extrapolated: ≈ 1.3 GB
+```
+
+| Check | Criterion | Observed | Pass/fail | Constant |
+|---|---|---|---|---|
+| `occ1990_valid_share` (2020, latest January = 2026) | ≥ 0.99 | 1.0, 1.0 | **PASS** — not the design-breaking STOP | no change |
+| `relative_difference`, every row | within ±2% | max magnitude 0.35% (1989) | **PASS** | no change |
+| `compwt_positive_share`, 1998+ | ≥ 0.99 | 1.0 for 1998, 2003, 2011, 2020, 2026 | **PASS** | no change — pre-1998 rows show 0.0 because this combined probe requests `BASIC_MONTHLY_VARIABLES` (unfiltered) for every sample; IPUMS answers with 0 rather than rejecting the extract, consistent with `VARIABLE_FIRST_YEAR` |
+| Household cluster decision | printed | `CPSID` (every probe month's `cpsid_linked_share` = 1.0) | **PASS** | `HOUSEHOLD_CLUSTER = "CPSID"` — unchanged, now live-confirmed |
+| `EMPSTAT` codes | 10, 12 employed | `10: 'At work'`, `12: 'Has job, not at work last week'` | **PASS** | `EMPLOYED_EMPSTAT_CODES = (10, 12)` — unchanged, now live-confirmed |
+| `CLASSWKR` codes | wage/salary = the 20s except armed forces (26) / unpaid family (29) | 20-25, 27, 28 all labeled wage/salary variants; 26 "Armed forces"; 29 "Unpaid family worker" | **PASS** | `WAGE_SALARY_CLASSWKR_CODES = (20, 21, 22, 23, 24, 25, 27, 28)` — unchanged, now live-confirmed |
+| Estimated full extract size | printed | ≈ 1.3 GB for the full 1983-2026 basic-monthly span | **PASS** | no STOP — nowhere near a plausible IPUMS extract-size limit; the ASEC-fallback question does not arise |
+
+No STOP condition was triggered. All Step 5 constants were already correct;
+this run's only role was turning "documentation guess" into "live-confirmed."
+
+### Step 6: DWS probe — PASS, one constant set, one code defect found and fixed
+
+`ipums_cps_variables.DWS_PROBE_YEARS` was widened from `(1984, 1994, 2002,
+2004, 2020)` to `(1984, 1994, 2002, 2004, 2024, 2026)` per this session's
+instruction, to check the newest survey and the not-yet-published one.
+
+#### Code correction: per-year single-sample DWS extracts, and a new legacy-variable probe
+
+The pre-existing `run_dws_probe` submitted all probe years as **one combined
+extract**. Rewritten this session to submit **one extract per survey year**
+into its own `data/raw/ipums/probe/dws/<year>/` directory — a design
+correction requested for this resumption, not a bug found live, but worth
+recording: a combined extract cannot distinguish "this year's supplement is
+genuinely empty/wrong-month" from "this year has few displaced-worker
+records," because both look like a small subset of one merged table. Per-year
+extracts make an empty year unambiguous.
+
+Also added `run_legacy_variable_probe` (`basic-legacy-probe` command): submits
+a single pre-1998 basic-monthly month (January 1985) requesting only
+`ipums_variables.variables_for_year(1985)` — the exact per-year-filtered
+variable list `fetch_basic_monthly_year` uses in the real build — to confirm
+IPUMS accepts that filtered request and simply omits `COMPWT` rather than
+rejecting the extract or returning a bogus column. Output:
+
+```
+  Sample: cps1985_01b
+  Requested variables (12): ['YEAR', 'MONTH', 'SERIAL', 'CPSID', 'PERNUM', 'MISH', 'WTFINL', 'AGE', 'EMPSTAT', 'OCC', 'OCC1990', 'CLASSWKR']
+  Columns actually returned (14): ['AGE', 'CLASSWKR', 'CPSID', 'CPSIDP', 'CPSIDV', 'EMPSTAT', 'MISH', 'MONTH', 'OCC', 'OCC1990', 'PERNUM', 'SERIAL', 'WTFINL', 'YEAR']
+  COMPWT requested: False
+  COMPWT present in returned columns: False
+  Row count: 153325
+```
+
+Confirmed: `COMPWT` was not requested and is not present. IPUMS also returned
+two columns never requested (`CPSIDP`, `CPSIDV` — per-person/per-household
+CPSID variants IPUMS appears to always include). `cps_detailed_panel.
+read_year_persons` already reindexes to `BASIC_MONTHLY_VARIABLES` rather than
+selecting columns directly, so these extras are silently dropped there — no
+defect.
+
+#### Code defect found live and fixed: a resolved-but-unpublished-supplement sample crashes the probe
+
+Running the rewritten `dws-probe` against all six years, the first five
+(1984, 1994, 2002, 2004, 2024) succeeded, then 2026 crashed the whole probe:
+
+```
+requests.exceptions.HTTPError: 400 Client Error: Bad Request for url: https://api.ipums.org/extracts?collection=cps&version=2
+```
+
+Diagnosed with a direct API call: IPUMS's `cps2026_01s` sample **exists**
+(basic-monthly data is published for it) but carries **no DWS supplement
+variables at all**:
+
+```json
+{"type":"SemanticValidationError","status":{"code":400,"name":"Bad Request"},
+ "detail":["DWREAS: This variable is not available in any of the samples currently selected.",
+           "DWYEARS: This variable is not available in any of the samples currently selected.",
+           "DWOCC: This variable is not available in any of the samples currently selected.",
+           "DWOCC1990: This variable is not available in any of the samples currently selected.",
+           "DWSUPPWT: This variable is not available in any of the samples currently selected."]}
+```
+
+This is a real gap `download_ipums_cps.available_sample_ids` membership
+cannot catch (the sample itself is real and published), and one
+`run_dws_probe` had no handling for — a legitimate defect surfaced by this
+probe, exactly the kind of finding the resumption instructions asked to fix
+minimally with a test. **Fix**: added `submit_and_download_or_none` in
+`verify_ipums_cps.py`, which calls `download_ipums_cps._submit_and_download`
+and returns `None` instead of propagating a `requests.exceptions.HTTPError`;
+`run_dws_probe` now prints "does not carry the DWS supplement — skipped" and
+continues to the next year rather than crashing. Unit-tested in
+`tests/test_verify_ipums_cps.py::TestSubmitAndDownloadOrNone` (one case
+raising, one case succeeding), with a fake `_submit_and_download` via
+`monkeypatch` — no network. Re-running `dws-probe` after the fix completed
+cleanly, the five downloaded years read from cache (not resubmitted) and 2026
+skipped with a clear message. This confirms, live, the same 2026 gap the
+2026-09-23 addendum had already found from IPUMS's public DWSUPPWT
+availability page (documentation-only, at the time) — no survey has been
+conducted or published for 2026 yet.
+
+#### Per-year DWS evidence
+
+| Survey year | Resolved sample | Resolved month | Matches `DWS_SAMPLE_MONTH_BY_SURVEY_YEAR`? | Records w/ `DWSUPPWT` > 0 | `DWREAS` codebook | `DWOCC1990` non-999 share |
+|---|---|---|---|---|---|---|
+| 1984 | `cps1984_01s` | 1 (Jan) | yes | 154,300 / 154,300 (100%) | 10 codes, identical to every other year below | 5.8% |
+| 1994 | `cps1994_02s` | 2 (Feb) | yes | 140,491 / 141,051 (99.6%) | identical | 3.4% |
+| 2002 | `cps2002_01s` | 1 (Jan) | yes | 92,383 / 141,834 (65.1%) | identical | 5.0% |
+| 2004 | `cps2004_01s` | 1 (Jan) | yes | 90,160 / 139,398 (64.7%) | identical | 5.4% |
+| 2024 | `cps2024_01s` | 1 (Jan) | yes | 66,709 / 99,135 (67.3%) | identical | 2.3% |
+| 2026 | `cps2026_01s` | 1 (Jan, unconfirmed fallback) | n/a — sample carries no DWS variables at all | — | — | — |
+
+`Distinct DWREAS codebooks across probe years: 1` and `Distinct DWYEARS
+codebooks across probe years: 1` (both printed by the probe) confirm the five
+successful years share one identical codebook — no per-vintage drift.
+
+**Observation, not a correction:** `DWSUPPWT > 0` is a much weaker filter for
+"in the DWS-eligible universe" in 1984/1994 (100%/99.6% positive, including
+age-0 records) than in 2002/2004/2024 (~65-67% positive). Checked directly:
+`DWREAS`'s own NIU (99) share is stable across every year regardless (94.2%,
+93.9%, 94.8%, 94.8%, 96.5%) — the true "was this person asked" gate is
+`DWREAS != 99` combined with age, not `DWSUPPWT`'s positivity alone.
+`dws_detailed_panel.select_displaced` already filters on `weights > 0 & AGE
+>= DWS_MINIMUM_AGE & DWREAS.isin(DWS_DISPLACED_REASON_CODES)` together, so
+this quirk does not bias the production tabulation — flagged here for
+anyone extending the DWS panel who might otherwise use `DWSUPPWT > 0` alone
+as an eligibility filter.
+
+**`DWS_MINIMUM_AGE = 20`**: confirmed effectively correct. 1994 shows 3
+records with age < 20 (16, 18, 19) among 8,544 `DWREAS`-answered records —
+noise, not a rule change; every other year's minimum answering age is exactly
+20.
+
+| Check | Criterion | Observed | Pass/fail | Constant set |
+|---|---|---|---|---|
+| Positive supplement weights in 1984 | present | 154,300 of 154,300 records (100%) | **PASS** | none |
+| 2002 and 2004 | present or absent | both present, both resolve to January, both show normal displaced-worker populations | **PASS** (recorded) | none |
+| Displaced reason codes by label | exactly three codes | `(1, 2, 3)` in every one of the five successful years, identical codebook | **PASS** | `DWS_DISPLACED_REASON_CODES = (1, 2, 3)` (was `()`) |
+| Tenure not-in-universe/missing codes all above 60 | true | real `DWYEARS` values top out at 54.0 across all five years; sentinel codes range 99.96-99.99 — a clean gap | **PASS** | `DWS_TENURE_VALID_MAXIMUM = 60.0` — unchanged, now live-confirmed |
+| Raw lost-job occupation present in every probe year | true | `DWOCC` present with real, non-trivial value ranges in every year (e.g. 418 distinct values 0-905 in 1984, 382 distinct values 0-9998 in 2004 — range differs because IPUMS's own DWOCC vintage changes with each year's Census occupation coding) | **PASS** — gate G3 / Tasks 14-16 may proceed | none |
+| Harmonized lost-job `OCC1990` | present or absent | present, named `DWOCC1990`, carrying genuine non-999 values in every probe year (2.3%-5.8% of `DWSUPPWT`-positive records) | **PASS** (extract-confirmed, not just documentation) | `DWS_LOST_JOB_OCC1990_VARIABLE = "DWOCC1990"` — unchanged, now extract-confirmed |
+
+No STOP condition was triggered (a raw lost-job occupation was present in
+every probed year, so gate G3 is not blocked).
+
+### Step 7: verification record and status — done
+
+Every check in Steps 4, 5 and 6 passed, or was resolved exactly as the
+brief's tables direct (the one live code defect — the 2026 DWS
+sample-without-supplement crash — was fixed and unit-tested, not routed
+around silently). `ipums_cps_variables.VERIFICATION_STATUS` is set to
+`"verified"`.
+
+Final IPUMS sample-ID range seen across this whole verification effort:
+`cps1962_03s` through `cps2026_08s` (Step 4), plus every sample actually
+extracted for Steps 5-6 above (`cps1983_01s` .. `cps2026_01s` and
+`cps1985_01b`). REST client: `requests==2.34.2`, Python 3.12.14, IPUMS extract
+API v2, `dataFormat: "csv"` (see the top of this file — unchanged from
+2026-09-23).

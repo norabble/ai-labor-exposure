@@ -1,0 +1,330 @@
+gate,scope,observed,threshold,gated,passed
+G1,2003 construction and extraction occupations,1.3045139823142371e-05,0.01,True,True
+G1,"2003 farming, fishing, and forestry occupations",8.623289410980561e-06,0.01,True,True
+G1,"2003 installation, maintenance, and repair occupations",2.8024417297656257e-05,0.01,True,True
+G1,"2003 management, business, and financial operations occupations",4.117937140835082e-06,0.01,True,True
+G1,2003 office and administrative support occupations,2.034090608615813e-06,0.01,True,True
+G1,2003 production occupations,1.3065544911761151e-05,0.01,True,True
+G1,2003 professional and related occupations,1.0676690143096579e-07,0.01,True,True
+G1,2003 sales and related occupations,2.6728739930259593e-06,0.01,True,True
+G1,2003 service occupations,7.031041391325488e-06,0.01,True,True
+G1,2003 transportation and material moving occupations,9.614790665080086e-06,0.01,True,True
+G1,2004 construction and extraction occupations,2.158786767592069e-05,0.01,True,True
+G1,"2004 farming, fishing, and forestry occupations",6.073587953214776e-05,0.01,True,True
+G1,"2004 installation, maintenance, and repair occupations",1.4729081255326903e-05,0.01,True,True
+G1,"2004 management, business, and financial operations occupations",2.8981154684970534e-06,0.01,True,True
+G1,2004 office and administrative support occupations,1.020486628089401e-06,0.01,True,True
+G1,2004 production occupations,1.3573625018636903e-05,0.01,True,True
+G1,2004 professional and related occupations,1.6010642989172652e-07,0.01,True,True
+G1,2004 sales and related occupations,2.030965552179964e-06,0.01,True,True
+G1,2004 service occupations,1.7195971273586963e-06,0.01,True,True
+G1,2004 transportation and material moving occupations,2.0797480764667142e-05,0.01,True,True
+G1,2005 construction and extraction occupations,3.33637109184437e-06,0.01,True,True
+G1,"2005 farming, fishing, and forestry occupations",8.274735853874837e-05,0.01,True,True
+G1,"2005 installation, maintenance, and repair occupations",9.288987036892848e-06,0.01,True,True
+G1,"2005 management, business, and financial operations occupations",2.623207729257615e-06,0.01,True,True
+G1,2005 office and administrative support occupations,4.389428025497466e-06,0.01,True,True
+G1,2005 production occupations,2.5394829914482386e-06,0.01,True,True
+G1,2005 professional and related occupations,5.049617268770845e-08,0.01,True,True
+G1,2005 sales and related occupations,5.601293110113481e-06,0.01,True,True
+G1,2005 service occupations,9.329302295135733e-07,0.01,True,True
+G1,2005 transportation and material moving occupations,2.418175347462803e-05,0.01,True,True
+G1,2006 construction and extraction occupations,2.0448786045568212e-06,0.01,True,True
+G1,"2006 farming, fishing, and forestry occupations",6.719295310753104e-05,0.01,True,True
+G1,"2006 installation, maintenance, and repair occupations",1.100844433388204e-05,0.01,True,True
+G1,"2006 management, business, and financial operations occupations",5.393495009498039e-06,0.01,True,True
+G1,2006 office and administrative support occupations,1.1372543239351884e-06,0.01,True,True
+G1,2006 production occupations,1.5223667140462638e-05,0.01,True,True
+G1,2006 professional and related occupations,2.931759962798708e-06,0.01,True,True
+G1,2006 sales and related occupations,4.507299705247547e-06,0.01,True,True
+G1,2006 service occupations,2.7440021976854467e-06,0.01,True,True
+G1,2006 transportation and material moving occupations,9.118773081073783e-07,0.01,True,True
+G1,2007 construction and extraction occupations,3.358510025641692e-07,0.01,True,True
+G1,"2007 farming, fishing, and forestry occupations",9.133705182740037e-05,0.01,True,True
+G1,"2007 installation, maintenance, and repair occupations",1.2575743950637985e-05,0.01,True,True
+G1,"2007 management, business, and financial operations occupations",5.74473697612099e-07,0.01,True,True
+G1,2007 office and administrative support occupations,1.3580590196848874e-06,0.01,True,True
+G1,2007 production occupations,7.453455203476622e-06,0.01,True,True
+G1,2007 professional and related occupations,5.561298224043831e-06,0.01,True,True
+G1,2007 sales and related occupations,5.510571073674697e-06,0.01,True,True
+G1,2007 service occupations,1.2394328172682378e-06,0.01,True,True
+G1,2007 transportation and material moving occupations,3.1556255104536746e-06,0.01,True,True
+G1,2008 construction and extraction occupations,3.360545395070247e-06,0.01,True,True
+G1,"2008 farming, fishing, and forestry occupations",0.00013822346990377543,0.01,True,True
+G1,"2008 installation, maintenance, and repair occupations",3.91747549266519e-06,0.01,True,True
+G1,"2008 management, business, and financial operations occupations",1.8650557029875614e-06,0.01,True,True
+G1,2008 office and administrative support occupations,1.3350202809903067e-07,0.01,True,True
+G1,2008 production occupations,3.6531203567724546e-06,0.01,True,True
+G1,2008 professional and related occupations,1.673277202685064e-06,0.01,True,True
+G1,2008 sales and related occupations,2.768441266898236e-06,0.01,True,True
+G1,2008 service occupations,1.1822499341729298e-06,0.01,True,True
+G1,2008 transportation and material moving occupations,2.665398415313547e-07,0.01,True,True
+G1,2009 construction and extraction occupations,5.073866093274759e-06,0.01,True,True
+G1,"2009 farming, fishing, and forestry occupations",1.7745524871992657e-05,0.01,True,True
+G1,"2009 installation, maintenance, and repair occupations",1.4537889180377128e-05,0.01,True,True
+G1,"2009 management, business, and financial operations occupations",1.2831548266145631e-06,0.01,True,True
+G1,2009 office and administrative support occupations,6.912069290265777e-07,0.01,True,True
+G1,2009 production occupations,2.826284214774155e-06,0.01,True,True
+G1,2009 professional and related occupations,6.106697096552871e-06,0.01,True,True
+G1,2009 sales and related occupations,6.976408283287938e-07,0.01,True,True
+G1,2009 service occupations,1.1994057822484194e-06,0.01,True,True
+G1,2009 transportation and material moving occupations,5.604851102347652e-06,0.01,True,True
+G1,2010 construction and extraction occupations,9.356748313038565e-06,0.01,True,True
+G1,"2010 farming, fishing, and forestry occupations",4.274100853107754e-05,0.01,True,True
+G1,"2010 installation, maintenance, and repair occupations",6.113595873769029e-06,0.01,True,True
+G1,"2010 management, business, and financial operations occupations",9.566895383672502e-07,0.01,True,True
+G1,2010 office and administrative support occupations,1.60997954414821e-05,0.01,True,True
+G1,2010 production occupations,5.866456540215559e-06,0.01,True,True
+G1,2010 professional and related occupations,8.249897878176427e-07,0.01,True,True
+G1,2010 sales and related occupations,1.663119269190716e-06,0.01,True,True
+G1,2010 service occupations,1.971849353576971e-06,0.01,True,True
+G1,2010 transportation and material moving occupations,1.340902221180773e-05,0.01,True,True
+G1,2011 construction and extraction occupations,0.00025875091347160595,0.01,True,True
+G1,"2011 farming, fishing, and forestry occupations",0.0010188367207657478,0.01,True,True
+G1,"2011 installation, maintenance, and repair occupations",0.0004247796361400713,0.01,True,True
+G1,"2011 management, business, and financial operations occupations",0.0010427518566124006,0.01,True,True
+G1,2011 office and administrative support occupations,1.9974515580445384e-05,0.01,True,True
+G1,2011 production occupations,0.00041267416307610993,0.01,True,True
+G1,2011 professional and related occupations,0.0006357693448005852,0.01,True,True
+G1,2011 sales and related occupations,0.0009934707043692814,0.01,True,True
+G1,2011 service occupations,0.001204050628191844,0.01,True,True
+G1,2011 transportation and material moving occupations,0.00030837510844827776,0.01,True,True
+G1,2012 construction and extraction occupations,4.082736324917402e-05,0.01,True,True
+G1,"2012 farming, fishing, and forestry occupations",0.0023564251948051673,0.01,True,True
+G1,"2012 installation, maintenance, and repair occupations",0.0002490037764872888,0.01,True,True
+G1,"2012 management, business, and financial operations occupations",0.0009001067954494957,0.01,True,True
+G1,2012 office and administrative support occupations,2.7624487854538415e-05,0.01,True,True
+G1,2012 production occupations,0.00021608418049023914,0.01,True,True
+G1,2012 professional and related occupations,0.0007129324692127792,0.01,True,True
+G1,2012 sales and related occupations,0.0010402839045324797,0.01,True,True
+G1,2012 service occupations,0.0010628493009980922,0.01,True,True
+G1,2012 transportation and material moving occupations,0.00020044833377241833,0.01,True,True
+G1,2013 construction and extraction occupations,9.836497510584685e-05,0.01,True,True
+G1,"2013 farming, fishing, and forestry occupations",0.0019275821002593396,0.01,True,True
+G1,"2013 installation, maintenance, and repair occupations",0.0004917635966825706,0.01,True,True
+G1,"2013 management, business, and financial operations occupations",0.0009423950798632674,0.01,True,True
+G1,2013 office and administrative support occupations,5.657488285437662e-05,0.01,True,True
+G1,2013 production occupations,0.0004888584676892016,0.01,True,True
+G1,2013 professional and related occupations,0.0005608831265501157,0.01,True,True
+G1,2013 sales and related occupations,0.0009662454036292178,0.01,True,True
+G1,2013 service occupations,0.0010763763785954783,0.01,True,True
+G1,2013 transportation and material moving occupations,0.0001711503329824282,0.01,True,True
+G1,2014 construction and extraction occupations,0.0003352664858848886,0.01,True,True
+G1,"2014 farming, fishing, and forestry occupations",0.0014466171778140247,0.01,True,True
+G1,"2014 installation, maintenance, and repair occupations",0.00011306528496524137,0.01,True,True
+G1,"2014 management, business, and financial operations occupations",0.0008503984143025667,0.01,True,True
+G1,2014 office and administrative support occupations,1.1263298179020609e-05,0.01,True,True
+G1,2014 production occupations,0.0004596695641869708,0.01,True,True
+G1,2014 professional and related occupations,0.0004557445889981082,0.01,True,True
+G1,2014 sales and related occupations,0.0007719990178272074,0.01,True,True
+G1,2014 service occupations,0.0009959571239781528,0.01,True,True
+G1,2014 transportation and material moving occupations,0.00033798357180525596,0.01,True,True
+G1,2015 construction and extraction occupations,3.721420341318282e-05,0.01,True,True
+G1,"2015 farming, fishing, and forestry occupations",0.0011676578252428627,0.01,True,True
+G1,"2015 installation, maintenance, and repair occupations",0.00020188811441312904,0.01,True,True
+G1,"2015 management, business, and financial operations occupations",0.0008535819510409048,0.01,True,True
+G1,2015 office and administrative support occupations,0.00016884429896446562,0.01,True,True
+G1,2015 production occupations,0.0005574290307439611,0.01,True,True
+G1,2015 professional and related occupations,0.0004626377500481782,0.01,True,True
+G1,2015 sales and related occupations,0.0007121752421646033,0.01,True,True
+G1,2015 service occupations,0.000976216610619085,0.01,True,True
+G1,2015 transportation and material moving occupations,0.00018210678831387384,0.01,True,True
+G1,2016 construction and extraction occupations,0.00011898166941670674,0.01,True,True
+G1,"2016 farming, fishing, and forestry occupations",0.0013258555276765005,0.01,True,True
+G1,"2016 installation, maintenance, and repair occupations",9.625195217777271e-05,0.01,True,True
+G1,"2016 management, business, and financial operations occupations",0.0008596860365266412,0.01,True,True
+G1,2016 office and administrative support occupations,0.0003167192127787599,0.01,True,True
+G1,2016 production occupations,0.0001771150026599333,0.01,True,True
+G1,2016 professional and related occupations,0.0005124078584646252,0.01,True,True
+G1,2016 sales and related occupations,0.0008799765714224694,0.01,True,True
+G1,2016 service occupations,0.0010197415574162427,0.01,True,True
+G1,2016 transportation and material moving occupations,0.00032337595120779383,0.01,True,True
+G1,2017 construction and extraction occupations,2.1375171213033894e-06,0.01,True,True
+G1,"2017 farming, fishing, and forestry occupations",0.0024519328947369967,0.01,True,True
+G1,"2017 installation, maintenance, and repair occupations",7.623180806004548e-05,0.01,True,True
+G1,"2017 management, business, and financial operations occupations",0.0006280598823159567,0.01,True,True
+G1,2017 office and administrative support occupations,0.0001210785005751891,0.01,True,True
+G1,2017 production occupations,0.000426138457230385,0.01,True,True
+G1,2017 professional and related occupations,0.00039635158843753793,0.01,True,True
+G1,2017 sales and related occupations,0.0005781875355017618,0.01,True,True
+G1,2017 service occupations,0.000849132352996218,0.01,True,True
+G1,2017 transportation and material moving occupations,6.293108352539711e-05,0.01,True,True
+G1,2018 construction and extraction occupations,0.0003668482385392746,0.01,True,True
+G1,"2018 farming, fishing, and forestry occupations",0.001838254569112907,0.01,True,True
+G1,"2018 installation, maintenance, and repair occupations",0.00012213508970282394,0.01,True,True
+G1,"2018 management, business, and financial operations occupations",0.0011462312638017558,0.01,True,True
+G1,2018 office and administrative support occupations,5.5673379590226446e-05,0.01,True,True
+G1,2018 production occupations,0.00012339171854458542,0.01,True,True
+G1,2018 professional and related occupations,0.0005186917816363268,0.01,True,True
+G1,2018 sales and related occupations,0.0010082046838260084,0.01,True,True
+G1,2018 service occupations,0.0012737441494725665,0.01,True,True
+G1,2018 transportation and material moving occupations,0.00019369599052232456,0.01,True,True
+G1,2019 construction and extraction occupations,0.00011328847924885199,0.01,True,True
+G1,"2019 farming, fishing, and forestry occupations",0.0025020499243135763,0.01,True,True
+G1,"2019 installation, maintenance, and repair occupations",0.00046974855345705,0.01,True,True
+G1,"2019 management, business, and financial operations occupations",0.00099512606148211,0.01,True,True
+G1,2019 office and administrative support occupations,0.0004991749591265471,0.01,True,True
+G1,2019 production occupations,0.000564686857109642,0.01,True,True
+G1,2019 professional and related occupations,0.00039852648379812283,0.01,True,True
+G1,2019 sales and related occupations,0.000910534268355967,0.01,True,True
+G1,2019 service occupations,0.0009641185215960579,0.01,True,True
+G1,2019 transportation and material moving occupations,0.0001804688699712509,0.01,True,True
+G1,2020 construction and extraction occupations,0.00023813189831267678,0.01,True,True
+G1,"2020 farming, fishing, and forestry occupations",0.002087774368173534,0.01,True,True
+G1,"2020 installation, maintenance, and repair occupations",0.0005642345587568709,0.01,True,True
+G1,"2020 management, business, and financial operations occupations",0.0006670981210394888,0.01,True,True
+G1,2020 office and administrative support occupations,0.0003076920973132946,0.01,True,True
+G1,2020 production occupations,0.0006230146358067179,0.01,True,True
+G1,2020 professional and related occupations,0.00029962555294249515,0.01,True,True
+G1,2020 sales and related occupations,0.0008132250369072835,0.01,True,True
+G1,2020 service occupations,0.001183289198029458,0.01,True,True
+G1,2020 transportation and material moving occupations,0.00017446755086347743,0.01,True,True
+G1,2021 construction and extraction occupations,0.00017972806391552965,0.01,True,True
+G1,"2021 farming, fishing, and forestry occupations",0.0002883035579641646,0.01,True,True
+G1,"2021 installation, maintenance, and repair occupations",5.875533402188715e-05,0.01,True,True
+G1,"2021 management, business, and financial operations occupations",0.0007641778301815672,0.01,True,True
+G1,2021 office and administrative support occupations,5.120534436930946e-05,0.01,True,True
+G1,2021 production occupations,0.00014568378582346941,0.01,True,True
+G1,2021 professional and related occupations,0.00020652108792806878,0.01,True,True
+G1,2021 sales and related occupations,0.000814553704960197,0.01,True,True
+G1,2021 service occupations,0.0007462619545064442,0.01,True,True
+G1,2021 transportation and material moving occupations,6.473415059993215e-05,0.01,True,True
+G1,2022 construction and extraction occupations,3.325982892465884e-05,0.01,True,True
+G1,"2022 farming, fishing, and forestry occupations",0.0011511004508335532,0.01,True,True
+G1,"2022 installation, maintenance, and repair occupations",0.00030052822014248193,0.01,True,True
+G1,"2022 management, business, and financial operations occupations",0.0008738243420042258,0.01,True,True
+G1,2022 office and administrative support occupations,0.00028119030586359894,0.01,True,True
+G1,2022 production occupations,0.00020593066992347087,0.01,True,True
+G1,2022 professional and related occupations,0.0005173769863542343,0.01,True,True
+G1,2022 sales and related occupations,0.0009442425803145582,0.01,True,True
+G1,2022 service occupations,0.0011900428544282526,0.01,True,True
+G1,2022 transportation and material moving occupations,0.00046184293565953993,0.01,True,True
+G1,2023 construction and extraction occupations,0.00023189186768357573,0.01,True,True
+G1,"2023 farming, fishing, and forestry occupations",0.001025123609352585,0.01,True,True
+G1,"2023 installation, maintenance, and repair occupations",0.0005599023831880379,0.01,True,True
+G1,"2023 management, business, and financial operations occupations",0.0004841919575039322,0.01,True,True
+G1,2023 office and administrative support occupations,0.00037349956019394615,0.01,True,True
+G1,2023 production occupations,0.0006831710777405187,0.01,True,True
+G1,2023 professional and related occupations,0.00029364051274072267,0.01,True,True
+G1,2023 sales and related occupations,0.0004889372178527029,0.01,True,True
+G1,2023 service occupations,0.0013422471657740243,0.01,True,True
+G1,2023 transportation and material moving occupations,0.00017087130124648908,0.01,True,True
+G1,2024 construction and extraction occupations,7.74288490694719e-05,0.01,True,True
+G1,"2024 farming, fishing, and forestry occupations",0.0027584353840865994,0.01,True,True
+G1,"2024 installation, maintenance, and repair occupations",3.3144607851420815e-05,0.01,True,True
+G1,"2024 management, business, and financial operations occupations",0.000832219068405915,0.01,True,True
+G1,2024 office and administrative support occupations,0.00014456713006683053,0.01,True,True
+G1,2024 production occupations,0.0005191919423027658,0.01,True,True
+G1,2024 professional and related occupations,0.0004597276494372471,0.01,True,True
+G1,2024 sales and related occupations,0.0005465735362304436,0.01,True,True
+G1,2024 service occupations,0.001181747202444683,0.01,True,True
+G1,2024 transportation and material moving occupations,0.000703537525322373,0.01,True,True
+G1,2025 construction and extraction occupations,5.8577455106068044e-05,0.01,False,
+G1,"2025 farming, fishing, and forestry occupations",0.001127860825304361,0.01,False,
+G1,"2025 installation, maintenance, and repair occupations",0.00035113215004334286,0.01,False,
+G1,"2025 management, business, and financial operations occupations",0.0007775295191164711,0.01,False,
+G1,2025 office and administrative support occupations,0.00012825732308019422,0.01,False,
+G1,2025 production occupations,0.0007441056196995088,0.01,False,
+G1,2025 professional and related occupations,0.000211682614817299,0.01,False,
+G1,2025 sales and related occupations,0.0006374195702143481,0.01,False,
+G1,2025 service occupations,0.0009705371555910336,0.01,False,
+G1,2025 transportation and material moving occupations,0.00042818292677337944,0.01,False,
+G1,2026 construction and extraction occupations,0.0005641965068834409,0.01,False,
+G1,"2026 farming, fishing, and forestry occupations",0.0016823928328075777,0.01,False,
+G1,"2026 installation, maintenance, and repair occupations",0.00013272258700935957,0.01,False,
+G1,"2026 management, business, and financial operations occupations",0.0011621394938411411,0.01,False,
+G1,2026 office and administrative support occupations,1.13012794740186e-05,0.01,False,
+G1,2026 production occupations,3.1176372116803464e-05,0.01,False,
+G1,2026 professional and related occupations,0.0002913936664995509,0.01,False,
+G1,2026 sales and related occupations,0.00033404745664333824,0.01,False,
+G1,2026 service occupations,0.00157274665326268,0.01,False,
+G1,2026 transportation and material moving occupations,0.0005939065134257238,0.01,False,
+G2,1983,0.002392471126104523,0.01,False,
+G2,1984,0.002113298332465652,0.01,False,
+G2,1985,0.0011308185267047133,0.01,False,
+G2,1986,0.0008993490575364138,0.01,False,
+G2,1987,0.00044335040410303783,0.01,False,
+G2,1988,0.0002970665349395496,0.01,False,
+G2,1989,0.0006275456385704814,0.01,False,
+G2,1990,0.00010400939587618119,0.01,False,
+G2,1991,7.94546162450338e-05,0.01,False,
+G2,1992,0.0002619512217423292,0.01,False,
+G2,1993,0.0007049767065734347,0.01,False,
+G2,1994,0.0008087859612997406,0.01,False,
+G2,1995,0.0007031025799375534,0.01,False,
+G2,1996,0.0008745174263560251,0.01,False,
+G2,1997,0.0010019925748134817,0.01,False,
+G2,1998,4.7456315510618907e-07,0.01,True,True
+G2,1999,6.57552962302077e-07,0.01,True,True
+G2,2000,7.281172516027112e-07,0.01,True,True
+G2,2001,0.002191831272639111,0.01,True,True
+G2,2002,2.61516819088925e-07,0.01,True,True
+G2,2003,1.0895523914200567e-06,0.01,True,True
+G2,2004,4.1136303918776207e-07,0.01,True,True
+G2,2005,7.636594174798006e-07,0.01,True,True
+G2,2006,5.161999370173476e-07,0.01,True,True
+G2,2007,1.0120988155337685e-06,0.01,True,True
+G2,2008,8.340799151351774e-07,0.01,True,True
+G2,2009,2.740158352443345e-07,0.01,True,True
+G2,2010,3.711412079887566e-07,0.01,True,True
+G2,2011,2.940721424149473e-07,0.01,True,True
+G2,2012,8.909178528249129e-08,0.01,True,True
+G2,2013,4.4371254004360594e-08,0.01,True,True
+G2,2014,1.0481390422256709e-08,0.01,True,True
+G2,2015,7.492390541319338e-07,0.01,True,True
+G2,2016,5.28755303319528e-07,0.01,True,True
+G2,2017,1.3552427136076517e-07,0.01,True,True
+G2,2018,3.180561884974509e-07,0.01,True,True
+G2,2019,9.520465149570612e-08,0.01,True,True
+G2,2020,7.320848676162228e-07,0.01,True,True
+G2,2021,3.430354889033538e-08,0.01,True,True
+G2,2022,3.3491031570243024e-07,0.01,True,True
+G2,2023,3.830330480569799e-07,0.01,True,True
+G2,2024,1.840133441177727e-07,0.01,True,True
+G2,2025,8.516222823606867e-07,0.01,False,
+G2,2026,4.7621915100215517e-07,0.01,False,
+G5,codes in no Dorn group: [],0.0,0.0,True,True
+G6,1983,0.00011231468065860161,0.01,True,True
+G6,1984,8.58883031319848e-05,0.01,True,True
+G6,1985,7.727023898620085e-05,0.01,True,True
+G6,1986,8.52999972837297e-05,0.01,True,True
+G6,1987,5.4510486292600384e-05,0.01,True,True
+G6,1988,7.406609844822809e-05,0.01,True,True
+G6,1989,8.418415307947135e-05,0.01,True,True
+G6,1990,0.00012113221918161754,0.01,True,True
+G6,1991,0.00010971950359819777,0.01,True,True
+G6,1992,8.589604245073883e-05,0.01,True,True
+G6,1993,8.244278232281197e-05,0.01,True,True
+G6,1994,0.000111356631904819,0.01,True,True
+G6,1995,7.329632971409232e-05,0.01,True,True
+G6,1996,9.739014686614644e-05,0.01,True,True
+G6,1997,8.822761162657603e-05,0.01,True,True
+G6,1998,0.0001272020761370486,0.01,True,True
+G6,1999,0.00011414817585838728,0.01,True,True
+G6,2000,7.912204115674502e-05,0.01,True,True
+G6,2001,0.00011763840931248686,0.01,True,True
+G6,2002,0.00013713964356330387,0.01,True,True
+G6,2003,8.099528034711608e-05,0.01,True,True
+G6,2004,6.091850841562704e-05,0.01,True,True
+G6,2005,8.049347432698272e-05,0.01,True,True
+G6,2006,5.697296736114878e-05,0.01,True,True
+G6,2007,5.783421500191998e-05,0.01,True,True
+G6,2008,7.895048793047817e-05,0.01,True,True
+G6,2009,0.00010751085682376142,0.01,True,True
+G6,2010,3.985265781072743e-05,0.01,True,True
+G6,2011,5.1401609733563286e-05,0.01,True,True
+G6,2012,6.283026946533093e-05,0.01,True,True
+G6,2013,2.3100135931655674e-05,0.01,True,True
+G6,2014,6.201837800593265e-05,0.01,True,True
+G6,2015,3.380945135910665e-05,0.01,True,True
+G6,2016,2.963113824849034e-05,0.01,True,True
+G6,2017,6.0675927809773086e-05,0.01,True,True
+G6,2018,5.510033593850798e-05,0.01,True,True
+G6,2019,7.85639045149648e-05,0.01,True,True
+G6,2020,0.0,0.01,True,True
+G6,2021,0.0,0.01,True,True
+G6,2022,0.0,0.01,True,True
+G6,2023,0.0,0.01,True,True
+G6,2024,0.0,0.01,True,True
+G6,2025,0.0,0.01,True,True
+G6,2026,0.0,0.01,True,True

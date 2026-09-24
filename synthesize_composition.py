@@ -275,7 +275,9 @@ def run_stage() -> None:
     """
     import composition_displacement_validation
     import composition_era_validation
+    import cps_detailed_validation
     import cps_historical_panel
+    import dws_detailed_validation
 
     synthesize()
     # Must run before composition_era_validation.run(), which reads
@@ -284,7 +286,14 @@ def run_stage() -> None:
     cps_historical_panel.run_stage()
     write_displacement_rate_table()
     composition_era_validation.run()
+    # Phase 2: detailed CPS levels from the IPUMS seeds. Skips with a warning when the
+    # seeds have not been built, which is always the case in CI before the first local build.
+    cps_detailed_validation.run()
     composition_displacement_validation.run()
+    # Phase 2b: Dorn-group displacement validation from the IPUMS seeds; skips when absent.
+    # g4_passed_this_run carries THIS run's gate G4 verdict from the call above, so this never
+    # trusts a possibly-stale occ1990dd_bridge_check.csv left over from an earlier, different run.
+    dws_detailed_validation.run(g4_passed_this_run=cps_detailed_validation.LAST_RUN_G4_PASSED)
 
 
 if __name__ == "__main__":

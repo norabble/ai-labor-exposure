@@ -338,6 +338,11 @@ CPS_OUTPUT_PATH = "data/output/composition_model_era_comparison_cps.csv"
 CPS_CYCLE_OUTPUT_PATH = "data/output/composition_cycle_decomposition_cps.csv"
 CPS_CHART_NAME = "composition_model_signal_over_time_cps.png"
 
+# Phase 2 levels, drawn by cps_detailed_validation.py through plot_signal_over_time.
+CPS_DETAILED_CHART_NAME = "composition_model_signal_over_time_cps_detailed.png"
+CPS_MAJOR_CHART_NAME = "composition_model_signal_over_time_cps_major.png"
+PHASE_2_LEVEL_UNIT_NOUNS = {"cps_detailed": "CPS occ1990dd occupations", "cps_major": "SOC major groups (CPS rollup)"}
+
 
 def cps_group_correlation(
     scored_df: pd.DataFrame,
@@ -762,6 +767,8 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
         unit_label = f"n={group_range} CPS occupation groups"
     elif is_occupation_level and not unit_counts.empty:
         unit_label = f"n={int(unit_counts.min())}-{int(unit_counts.max())} harmonized units"
+    elif level in PHASE_2_LEVEL_UNIT_NOUNS and not unit_counts.empty:
+        unit_label = f"n={int(unit_counts.min())}-{int(unit_counts.max())} {PHASE_2_LEVEL_UNIT_NOUNS[level]}"
     elif is_cps_level:
         unit_label = f"n={MINIMUM_CPS_GROUPS}-10 CPS occupation groups"
     else:
@@ -815,7 +822,12 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
 
     axis.set_xticks(list(period_positions.values()))
     axis.set_xticklabels([f"{p.split('_')[0]}→\n{p.split('_')[1]}" for p in ordered_periods], fontsize=8)
-    level_word = {"occupation": "Occupation", "cps_group": "CPS group"}.get(level, "Sector")
+    level_word = {
+        "occupation": "Occupation",
+        "cps_group": "CPS group",
+        "cps_detailed": "CPS detailed-occupation",
+        "cps_major": "CPS SOC-major",
+    }.get(level, "Sector")
     axis.set_ylabel(f"{level_word}-level Pearson r vs. employment growth")
     axis.set_title(
         "Is the demand-type signal era-invariant?\n"
@@ -834,6 +846,12 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
             "Pearson r is bounded by that tie structure."
             if is_occupation_level
             else ""
+        )
+        + (
+            " Year-over-year growth at this grain is mostly sampling noise (cps_detailed_reliability.csv), "
+            "so raw r is biased toward zero; coding-seam periods are excluded."
+            if level == "cps_detailed"
+            else ""
         ),
         ha="center",
         fontsize=7.5,
@@ -842,7 +860,12 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    chart_name = {"occupation": OCCUPATION_CHART_NAME, "cps_group": CPS_CHART_NAME}.get(level, CHART_NAME)
+    chart_name = {
+        "occupation": OCCUPATION_CHART_NAME,
+        "cps_group": CPS_CHART_NAME,
+        "cps_detailed": CPS_DETAILED_CHART_NAME,
+        "cps_major": CPS_MAJOR_CHART_NAME,
+    }.get(level, CHART_NAME)
     figure.savefig(os.path.join(output_dir, chart_name), dpi=150, bbox_inches="tight")
     plt.close(figure)
     print(f"  Saved {os.path.join(output_dir, chart_name)}")

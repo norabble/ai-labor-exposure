@@ -334,3 +334,112 @@ class TestDisplacementPanel:
 
         panel_df = build_displacement_comparison_panel(self._multi_survey_panel())
         assert set(panel_df["model"]) == {"composition", "dynamic"}
+
+
+class TestExistingOutputColumnsAreUnchanged:
+    """Guards the byte-identity requirement: the size benchmark is a new, separate output, and
+    must not add or reorder a column on either pinned output."""
+
+    def test_single_survey_output_columns(self):
+        from composition_displacement_validation import OUTPUT_COLUMNS
+
+        assert OUTPUT_COLUMNS == [
+            "dws_group",
+            "soc_majors",
+            "observed_displaced_thousands",
+            "observed_share",
+            "composition_predicted_share",
+            "ai_model_predicted_share",
+            "group_employment",
+            "observed_rate",
+            "composition_predicted_rate",
+        ]
+
+    def test_panel_output_columns(self):
+        from composition_displacement_validation import PANEL_OUTPUT_COLUMNS
+
+        assert PANEL_OUTPUT_COLUMNS == ["survey_year", "model", "pearson_r", "pearson_p", "spearman_r", "spearman_p", "n_groups"]
+
+
+class TestDisplacementSizeBenchmarkPanel:
+    """The size-only benchmark: does a group's plain employment share alone predict its observed
+    displacement share, with no model score involved at all?"""
+
+    @staticmethod
+    def _proportional_inputs(tmp_path, monkeypatch):
+        import composition_displacement_validation as displacement_validation_module
+
+        group_names = [f"group_{letter}" for letter in "abcdef"]
+        soc_major_by_group = {group_name: [f"{10 + index}"] for index, group_name in enumerate(group_names)}
+        monkeypatch.setattr(displacement_validation_module, "DWS_TO_SOC_MAJOR", soc_major_by_group)
+
+        employment_by_group = {group_name: 100.0 * (index + 1) for index, group_name in enumerate(group_names)}
+        report_df = pd.DataFrame(
+            {
+                "OCC_CODE": [f"{soc_major_by_group[group_name][0]}-1011" for group_name in group_names],
+                "gross_displacement": 0.05,
+                "TOT_EMP_2025": [employment_by_group[group_name] for group_name in group_names],
+            }
+        )
+        report_path = tmp_path / "composition_report.csv"
+        report_df.to_csv(report_path, index=False)
+        monkeypatch.setattr(displacement_validation_module, "COMPOSITION_REPORT_PATH", str(report_path))
+
+        # Observed displacement exactly proportional to employment, so the size benchmark
+        # correlation must come out to a perfect r = 1.
+        displacement_rows = [
+            {
+                "survey_year": 2024,
+                "source_table": "table_5_occupation",
+                "group_name": group_name,
+                "soc_majors": soc_major_by_group[group_name][0],
+                "displaced_thousands": 0.02 * employment_by_group[group_name],
+                "tenure_class": "long_tenured",
+                "reason": None,
+                "measurement_basis": "count_thousands",
+            }
+            for group_name in group_names
+        ]
+        displacement_panel_df = pd.DataFrame(displacement_rows)
+
+        panel_df = pd.DataFrame(
+            {
+                "survey_year": [2024, 2024],
+                "model": ["composition", "dynamic"],
+                "pearson_r": [0.42, 0.17],
+                "pearson_p": [0.3, 0.6],
+                "spearman_r": [0.4, 0.15],
+                "spearman_p": [0.3, 0.6],
+                "n_groups": [6, 6],
+            }
+        )
+        return displacement_panel_df, panel_df
+
+    def test_proportional_displacement_gives_a_perfect_benchmark_correlation(self, tmp_path, monkeypatch):
+        from composition_displacement_validation import build_displacement_size_benchmark_panel
+
+        displacement_panel_df, panel_df = self._proportional_inputs(tmp_path, monkeypatch)
+        benchmark_df = build_displacement_size_benchmark_panel(displacement_panel_df, panel_df)
+
+        assert benchmark_df is not None
+        row = benchmark_df.iloc[0]
+        assert row["employment_size_benchmark_pearson_r"] == pytest.approx(1.0)
+        assert row["n_groups"] == 6
+
+    def test_composition_and_dynamic_r_are_joined_in_not_recomputed(self, tmp_path, monkeypatch):
+        from composition_displacement_validation import build_displacement_size_benchmark_panel
+
+        displacement_panel_df, panel_df = self._proportional_inputs(tmp_path, monkeypatch)
+        benchmark_df = build_displacement_size_benchmark_panel(displacement_panel_df, panel_df)
+
+        row = benchmark_df.iloc[0]
+        assert row["composition_pearson_r"] == pytest.approx(0.42)
+        assert row["dynamic_pearson_r"] == pytest.approx(0.17)
+
+    def test_output_columns(self, tmp_path, monkeypatch):
+        from composition_displacement_validation import SIZE_BENCHMARK_OUTPUT_COLUMNS, build_displacement_size_benchmark_panel
+
+        displacement_panel_df, panel_df = self._proportional_inputs(tmp_path, monkeypatch)
+        benchmark_df = build_displacement_size_benchmark_panel(displacement_panel_df, panel_df)
+
+        assert list(benchmark_df.columns) == SIZE_BENCHMARK_OUTPUT_COLUMNS

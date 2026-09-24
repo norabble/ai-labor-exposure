@@ -807,3 +807,334 @@ explanations (ten-group aggregation, genuinely different pre-1999 cyclical
 behaviour, and instrument differences). Full numbers, the two internal
 comparability breaks the CPS series carries, and the composition-stability
 sensitivity check are in `docs/charts/composition_model_signal_over_time_cps.md`.
+
+### Detailed occupations (deep history, Phase 2)
+
+The CPS instrument above runs at ten occupation groups. Phase 2 raises the
+cross-sectional n by tabulating IPUMS CPS microdata directly, rather than the
+published ten-series route above, onto two finer grains — **333 `occ1990dd`
+occupations** (Autor and Dorn's time-consistent spine, chosen because Phase 1
+already pinned it and because a detailed 1983–2002 Census→SOC crosswalk does
+not exist published), excluding the unclassified code 999, and a
+**22-SOC-major rollup**, both 1983–2026 — plus a Displaced Worker Supplement
+validation at the coarser **Dorn partition, ~25 occupation groups per
+survey**, the finest resolution DWS cell sizes can support. The
+published-crosswalk chain (below) reaches only **328 of the 333** codes; the
+remaining five exist solely in pre-2010 Census vintages with no route to a
+modern SOC code at all. Of the 328 the chain reaches, only **307 meet the 0.8
+labeled-share floor** with the model's real scores (measured 2026-09-23) —
+the rest are diluted below that floor by unlabeled SOC constituents. Neither
+grain replaces the ten-group CPS instrument above; each level
+writes its own files (`cps_detailed_*`, `occ1990dd_*`, `cps_major_*`,
+`dws_detailed_*`), and none carries a `level` column. CI never tabulates this
+level; `cps_detailed_panel.py` and `dws_detailed_panel.py` run only locally,
+against IPUMS microdata, and write committed aggregate seeds — see the
+README's IPUMS section for the rebuild procedure.
+
+**The label bridge is a published crosswalk chain, with its own error
+measured.** Demand-type labels live on SOC 2018 codes; the panel lives on
+`occ1990dd`. `occ1990dd_soc_bridge.py` chains each `occ1990dd` code through
+Dorn's own occ2010 crosswalk to a 2010 Census code, then through the
+Census/BLS code list to SOC 2010, then through `seeds/soc_crosswalks` to SOC
+2018 — anchored on 2010 because that is the newest vintage Dorn's crosswalks
+reach. Where one `occ1990dd` code splits across several SOC codes, 2022 OEWS
+employment sets the split weights, the same anchor the harmonized SOC units
+already use. A unit's score is the weighted mean over its *labeled* SOC
+constituents only (`labeled_share` records how much weight those carry), and
+`dominant_demand` is re-derived after aggregation rather than carried, per the
+Chief Executives failure mode documented in `CLAUDE.md`. Gate **G4** checks
+this chain's fitness for 2003–2026 by scoring each `occ1990dd` code a second,
+direct way — straight from the raw CPS `OCC` code for that year's vintage to
+SOC, bypassing the chain entirely — and requiring the two score vectors to
+correlate at r ≥ 0.8 in every coding block (2003–10, 2011–19, 2020–26). Below
+that, the bridge is unfit: no detailed-level or rollup result file is written,
+and the design returns for review. **This measured error is a lower bound for
+1983–2002 only** — no direct route exists from the 1980 or 1990 Census
+occupation vintages to SOC, so the compounded error in exactly the stretch
+Phase 2 buys (the 1983–2002 span, spanning the 1990–91 downturn) cannot itself
+be measured and is not claimed to be bounded by the 2003+ figure.
+
+**Every build-time and pipeline-time gate, and what promotes a seed.** A
+seed is written only if every gate its build's gate record depends on
+passed — `promote_rebuilt` in `cps_detailed_panel.py` and
+`dws_detailed_panel.py` refuses to promote otherwise:
+
+| Gate | Check | Threshold | Runs in |
+|---|---|---|---|
+| **G1** | Microdata mapped to Phase 1's ten CPS groups through raw `OCC`, bypassing the bridge, against Phase 1's published series | Within 1% per group-year, `COMPWT`, gated from 2003 onward (`G1_TOLERANCE = 0.01`, `G1_FIRST_GATED_YEAR = 2003`); reported only before 2003 | Build (`cps_detailed_panel.py`) |
+| **G2** | Economy-wide civilian employment against the published CPS annual mean (`LNU02000000`) | Within 1% from 1998 (`G2_TOLERANCE = 0.01`), `COMPWT`; reported only before 1998 | Build (`cps_detailed_panel.py`) |
+| **G3** | Long-tenured displacement by Phase 1's ten groups against published Table 5 rows | Within 3% of the published figure or half a published thousand, whichever is looser (`G3_TOLERANCE = 0.03`, `G3_ROUNDING_THOUSANDS = 0.5`) | Build (`dws_detailed_panel.py`) |
+| **G4** | Chained vs. direct `occ1990dd` scores, correlated across units | r ≥ 0.8 in every coding block (`G4_MINIMUM_R = 0.8`); below it, no detailed-level or rollup result file is written and the design returns for review | Pipeline (`occ1990dd_soc_bridge.py`, from the committed crosstab seed) |
+| **G5** | Every `occ1990dd` code carrying employment falls in exactly one Dorn group | Structural — the partition must be exhaustive and non-overlapping | Build (`cps_detailed_panel.py`) and test |
+| **G6** | Civilian employment carrying an `OCC1990` code Dorn's table cannot map to any `occ1990dd` code | At most 1% of civilian employment, every year (`G6_MAXIMUM_UNMAPPED_SHARE = 0.01`) — added by the implementation plan, beyond the original design's gate list | Build (`cps_detailed_panel.py`) |
+| **G6D** | Lost-job weight in the DWS supplement reaching no `occ1990dd` code | At most 1% of lost-job weight, every survey (`G6D_MAXIMUM_UNMAPPED_SHARE = 0.01`) — added by the implementation plan | Build (`dws_detailed_panel.py`) |
+
+G1, G2, G5 and G6 gate `cps_detailed_panel.py`'s promotion
+(`REQUIRED_GATES = ("G1", "G2", "G5", "G6")`); G3 and G6D gate
+`dws_detailed_panel.py`'s (`REQUIRED_GATES = ("G3", "G6D")`) — two separate
+gate records, since the two builds promote independently. G4 alone runs in
+the pipeline rather than the build, because it needs the model's current
+scores, which change with every re-synthesis; it is checked fresh on every
+`main.py composition` run rather than once at build time.
+
+**Year-over-year noise at this grain is accepted by decision, not corrected.**
+A median-size `occ1990dd` occupation (~90k workers) carries a level relative
+standard error near 15%, so its year-over-year growth carries a standard error
+of roughly 15–20% against genuine cross-occupation growth differences of only
+a few percent — estimated reliability **~0.1–0.2**, measured per period in
+`cps_detailed_reliability.csv`. Multi-year growth windows would fix this by
+letting real change accumulate while endpoint noise stays fixed, and were
+considered; they were declined because they would cut the detailed test from
+37 usable periods to roughly 9–12, and the decision was to run year-over-year
+and see how it turns out. The only noise handling is therefore a bracket:
+`reliability = 1 − mean(sampling variance of growth) / variance(observed
+growth)`, and `r_corrected = r_raw / sqrt(reliability)` where reliability is
+positive. Raw r is biased toward zero; the household-cluster bootstrap behind
+the sampling-variance estimate treats adjacent years as independent when half
+the sample actually carries over, which overstates growth noise and biases
+corrected r away from zero. The two bracket the true value rather than pinning
+it — and where measured reliability is near the low end of the estimated
+range, the two can diverge widely. If a result later motivates a move to
+multi-year windows, that move is recorded as a named deviation, not a quiet
+change.
+
+**Eligibility is chosen per period, and the fixed alternative is a
+sensitivity only.** A code enters a given year-over-year period's test if its
+employment relative standard error is ≤ 20% in *both* endpoint years — not a
+single set of codes held fixed across the whole span. A fixed set would drop
+every occupation that was small at either end of 1983–2026: typists, word
+processors, and telephone operators on the way down; computer occupations on
+the way up. Those are exactly the occupations that changed most, so a fixed
+set selects on the outcome and hides the strongest cases. Per-period
+eligibility keeps a code until it is genuinely unmeasurable, at the cost that
+eras compare somewhat different occupation mixes — bounded by reporting each
+period's eligible count and employment share, and by the fixed-set and
+10%/20%/30%/no-cutoff sweep in `cps_detailed_eligibility_sweep.csv`. Four
+known seam periods (1991→92, 1993→94, 2002→03, 2010→11 — coding-vintage and
+survey-design breaks, not method artifacts) are excluded from the headline the
+same way Phase 1 excludes COVID periods, and measured, not patched, in
+`cps_detailed_seam_breaks.csv`.
+
+**The asymmetric reading rule applies here more strongly than at any other
+grain.** A positive result at detailed occupation level is strong evidence,
+because 2025 O\*NET demand-type labels applied to 1990-vintage occupation
+categories across 1983–2026 is the hardest test this project runs — if the
+taxonomy still shows through that much anachronism and that much sampling
+noise, it is not an artifact of convenient aggregation. A null result proves
+nothing: task content drifts more for an individual occupation than for a
+sector aggregate, `occ1990dd` forces modern occupations into categories built
+for 1990, and estimated reliability of ~0.1–0.2 means most of a null's
+variance could be sampling noise rather than absence of signal. The
+composition-stability proxy from the ten-group CPS instrument
+(`sector_composition_stability.csv`) is recomputed at this grain, so the
+least-stable occupations can be named directly rather than inferred from
+sector shares.
+
+**Pre-written readings, in the spec's own terms, before any result was
+seen:**
+
+- Expected magnitude: the harmonized-SOC occupation-level composition r
+  averages +0.123 pre-AI; CPS sampling noise attenuates further, so per-period
+  raw r in roughly **+0.05 to +0.15**, possibly lower, is an expectation, not
+  a threshold.
+- A positive, significant intercept in the detailed cycle decomposition across
+  1983–2026 (three downturns) means the general mechanism holds at occupation
+  grain, not only at sector aggregation.
+- A detailed-level null alongside a positive 22-major rollup result, from the
+  *same* microdata, would mean the signal is between-sector composition
+  rather than within-sector occupational sorting — informative despite the
+  reliability caveats, because anachronism alone cannot explain a gap between
+  two grains built from identical source data.
+- An era difference whose sign flips between raw and corrected r is
+  attributed to noise, not reported as an era effect.
+- The AI era contributes only 4 periods at this grain (2022→23 through
+  2025→26); no AI-specific claim is made from it, whatever the result.
+- At the Dorn partition (n≈25), a per-survey displacement correlation above
+  roughly r = 0.40 is individually significant. As with the ten-group DWS
+  panel, a uniform sign across surveys is noted but never pooled into a
+  significance claim — the predicted vector is identical across surveys, so a
+  sign test or averaged r would be bogus.
+
+One resolution choice narrowed after the original design: the 1990 Census
+occupational subheadings sensitivity for the DWS validation is not run,
+because no such code list exists in the Census documentation directory the
+plan checked — the Dorn ~25-group partition is the DWS headline with no
+finer-grained sensitivity available.
+
+#### Results
+
+Measured against the pre-written readings above, from the first local IPUMS
+build (2026-09-24). Every deviation made while building this — the DWS
+self-employment and recall-rule fixes, the redefined G6D, and the
+rate-measure-leads-share-measure interpretation decision — is recorded with
+its reasoning and commit in the Deviations log of
+`docs/superpowers/plans/2026-09-23-deep-history-phase-2.md`; the numbers below
+are computed under those corrected definitions, not the ones the plan started
+with.
+
+**Gate G4 passed in every coding block**
+(`occ1990dd_bridge_check.csv`): chained-vs-direct score correlation is
+r = 0.993 (2003–2010, n=315 codes), r = 0.994 (2011–2019, n=315), and
+r = 0.997 (2020–2026, n=293) — all comfortably above the 0.8 threshold, so
+every detailed-level and rollup file below was written. **This is a lower
+bound on the chain's error for 1983–2002 only**: no direct CPS-to-SOC route
+exists for the 1980/1990 Census occupation vintages, so the bridge's fitness
+for the 1983–2002 span — which is exactly the stretch this phase exists to
+reach, including the 1990–91 downturn — is unmeasured, not merely
+unfavorable.
+
+**Detailed occupations (`occ1990dd`, 333 codes, 1983–2026).** The cycle
+decomposition (`composition_cycle_decomposition_cps_detailed.csv`, `run ==
+"headline"`, n=37 periods) gives `composition_net_change` an intercept of
++0.078 (p = 5.0e-6, well under 0.0001), `unemployment_change` +0.022
+(p = 0.148, not significant), and `ai_era` +0.001 (p = 0.984, not
+significant). Per the spec's pre-written reading, **a positive, significant
+intercept across 1983–2026 means the general demand-type mechanism holds at
+occupation grain, across the three downturns this span covers, not only at
+sector or ten-group aggregation** — with the reliability caveat below
+attached to how much confidence that intercept can carry. The cyclical and
+AI-era terms are indistinguishable from zero at this grain and power.
+
+The era comparison (`composition_model_era_comparison_cps_detailed.csv`,
+`run == "headline"`, `composition_net_change`): pre-AI mean r = +0.073
+(n=33 periods, 11 individually significant), AI-era mean r = +0.082 (n=4
+periods, 0 significant), difference +0.009, Welch p = 0.810 — not
+distinguishable from zero. The pre-AI mean falls at the bottom of the spec's
+expected +0.05 to +0.15 range, consistent with the expected-magnitude
+reading. The `noise_corrected` view cannot arbitrate the era difference the
+way the spec's "sign differs between raw and corrected r" rule anticipates:
+correcting for sampling noise leaves only 1 AI-era period with a defined
+corrected r (−0.012, against a pre-AI corrected mean of +0.223 over 14
+periods) — too thin to compare against the raw view rather than
+contradicting it, so this AI-era result is read the same way the spec
+already requires independent of any raw/corrected disagreement: **4 periods,
+no AI-specific claim at this level, whatever the sign.**
+
+Neither grain returned the null the "detailed null, rollup positive" reading
+anticipates — the detailed intercept above is itself significant and
+positive — so that specific contingency does not apply here; instead both
+grains agree in direction, which is a milder form of the same result
+(below).
+
+**22-major rollup, same microdata, 1983–2026.** Cycle decomposition
+(`composition_cycle_decomposition_cps_major.csv`, n=41 periods):
+`composition_net_change` intercept +0.277 (p = 8.2e-8), `unemployment_change`
+−0.002 (p = 0.961), `ai_era` −0.134 (p = 0.316). Era comparison
+(`composition_model_era_comparison_cps_major.csv`): pre-AI mean r = +0.271
+(n=37, 11 significant), AI-era mean r = +0.142 (n=4, 0 significant),
+difference −0.129, Welch p = 0.346 — again not distinguishable from zero.
+The rollup's intercept is roughly 3.5x the detailed intercept (+0.277 vs.
++0.078) built from the *same* microdata and the same demand-type labels —
+consistent with `docs/charts/composition_model_signal_over_time_occupation.md`'s
+already-documented pattern that sector- or group-level aggregation raises r
+by averaging away occupation-level idiosyncratic noise rather than by adding
+information. Read the two intercepts as confirming the same mechanism at two
+resolutions, not as a contradiction.
+
+**Reliability is far below the spec's own estimate, and the noise-handling
+bracket is mostly unavailable as a result.** Median reliability across all 43
+periods is **0.005** (`cps_detailed_reliability.csv`), against the spec's
+pre-written estimate of ~0.1–0.2 — meaning essentially all of the measured
+year-over-year growth variance at `occ1990dd` grain is sampling noise, not
+signal. Because `r_corrected = r_raw / sqrt(reliability)` is undefined for
+reliability ≤ 0, 89 of the 172 period/score rows in the full (`seams_included`)
+view have no corrected r at all — the raw/corrected bracket the spec named as
+the only noise handling is available for just under half (83 of 172 rows) of this grain's
+results. This was accepted by decision before any data existed (see the
+"Year-over-year noise at this grain is accepted by decision" paragraph
+above), not discovered as a problem now.
+
+The eligibility-cutoff sweep (`cps_detailed_eligibility_sweep.csv`,
+`composition_net_change`, pre-AI mean r) ranges from **+0.053** (no cutoff)
+to **+0.112** (10% RSE cutoff), with the headline 20% cutoff at +0.073 and
+the fixed-set sensitivity at +0.077 — all inside the spec's expected +0.05
+to +0.15 band, and none reversing sign.
+
+**Seams.** Only one of the four excluded seam periods actually stands out
+(`cps_detailed_seam_breaks.csv`): the 2002→2003 classification-change seam
+carries a median |growth| of 0.169 against an ordinary-period median of
+0.067 — a real, disclosed break. The other three measure indistinguishably
+from an ordinary period — 1991→92 at 0.065, 1993→94 at 0.065, and 2010→11 at
+0.070 — but all four stay excluded per the pre-pinned choice rather than
+being reinstated on the strength of this measurement, the same treatment
+Phase 1 gives COVID periods.
+
+**Displaced Worker Supplement at the Dorn partition (~25 groups, 21 surveys,
+1984–2024).** Per the user's decision, interpretation leads with the
+size-free rate measure rather than the share measure
+(`composition_model_displacement_validation_detailed.csv`,
+`tenure_class == "all_tenures"`, `measure == "rate"`): the composition
+model's per-survey Pearson r has a median of **+0.319** (range +0.218 to
++0.401), positive in all 21 surveys, 1 of 21 individually significant against
+the spec's n≈25 threshold of r ≈ 0.40. The dynamic model's rate correlation
+has a median of **−0.036** and is positive in only 7 of 21 surveys. Per the
+spec's rule, uniform positive sign across the composition model's 21 surveys
+is noted, not pooled into a significance claim — the predicted vector is
+identical across surveys.
+
+The share measure tells a different story once checked against a
+group-size-only benchmark added during execution (see the Deviations log):
+composition's share correlation (median r = +0.899) is essentially
+indistinguishable from the benchmark of a group's plain employment share
+alone predicting its displacement share (median r = +0.905) — **the share
+test at this partition mostly measures group size, not the demand-type
+model.** The same comparison at the coarser ten-group DWS partition
+(`composition_model_displacement_size_benchmark.csv`) shows the model
+trailing the size benchmark by more here (composition 0.387 vs 0.752) than
+at the Dorn partition above (0.899 vs 0.905), which is why the rate measure,
+where the benchmark does not apply, is the informative test here rather than
+the share result.
+
+One definitional break is disclosed rather than patched: the DWRECALL
+recall-expectation exclusion (added to fix gate G3) does not exist before the
+1994 survey, so the 1992→1994 boundary carries a method change that cannot be
+applied before 1994. It is sized for the first two surveys with DWRECALL:
+`measure_recall_rule_impact` shows the rule removes 4.24% of recall-included
+all-tenures weight in 1994 and 4.66% in 1996, about 2.5x the all-tenures
+total's sampling RSE (~1.7–1.8%, computed from `seeds/dws_detailed_panel.csv`).
+The removal concentrates in construction, farming and production (see the
+Deviations log in `docs/superpowers/plans/2026-09-23-deep-history-phase-2.md`),
+so pre-1994 surveys' group mix is not strictly comparable. Per-survey
+correlations are never pooled, which limits the effect but does not remove
+it.
+
+**Composition-stability proxy at this grain** is in
+`occ1990dd_composition_stability.csv`, following the same method as the
+ten-group instrument's `sector_composition_stability.csv`, naming the
+`occ1990dd` codes where carrying 2025 O\*NET labels back to 1983 is least
+defensible directly, rather than inferring it from sector shares. 41 of the
+328 mapped codes carry a `stable_share` of exactly zero — none of their 2022
+OEWS-anchored SOC weight sits in a detailed occupation OEWS already
+published in 1999. The measure joins SOC 2018 codes against the 1999 file,
+so a zero means the code did not survive the SOC revisions, not necessarily
+that the work is new — it flags both genuinely new occupations and
+long-standing ones that were renumbered or split. Examples include computer
+occupations (`occ1990dd` 64 — database administrators, computer systems
+analysts, web developers, and the other titles the ~3% SOC-2018
+computer-code renumbering survivorship figure above already documents
+independently), physicians and surgeons (84), registered nurses and nurse
+practitioners (95), and dentists (85) — the same
+occupations flagged as least stable at sector grain (SOC 15 Computer and
+Mathematical, SOC 29 Healthcare Practitioners and Technical), now named
+individually rather than only bounded by sector share.
+
+**Bottom line, read against the asymmetric rule strengthened for this grain:**
+the detailed-occupation cycle decomposition returns a significant, positive,
+non-cyclical intercept across three downturns and 43 years of the most
+anachronism- and noise-exposed test this project runs — read as evidence the
+general mechanism is not an artifact of sector aggregation, tempered
+immediately by the reliability figure above. The era and AI-specific results
+at both detailed and rollup grain are null (Welch p = 0.81 and 0.35), which
+under this project's asymmetric rule is uninformative, not disconfirming — at
+n=4 AI-era periods, no result at this grain could have supported an
+AI-specific claim regardless of sign. The displacement validation, led by the
+rate measure, shows a uniformly positive but individually mostly
+non-significant composition signal (median +0.319 across 21 surveys) against
+a materially weaker dynamic-model signal (median −0.036) — the clearest
+directional separation between the two models in this phase — while the
+share measure at the same partition is shown to mostly recover group size
+rather than the model. Because the predicted vector is the same model score
+applied to every survey year, the 21 surveys are one comparison repeated
+against 21 independent measurements, not 21 independent tests of the model —
+the uniform sign is corroborating, but it cannot be pooled into a stronger
+significance claim than any single survey already carries.

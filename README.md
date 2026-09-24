@@ -196,6 +196,39 @@ Regressing each model's per-period sector-level fit strength on the change in un
 
 The taxonomy has a real sector-level signal before AI, from a predictor carrying no technology data at all; its strength is strongly cyclical; and AI penetration adds a separable increment that composition alone does not. See [docs/framework.md](docs/framework.md) § Demand Composition Model.
 
+### Detailed occupations from IPUMS CPS (optional, local only)
+
+The demand composition model above also runs at two finer grains than the 22
+BLS sectors: ~330 `occ1990dd` occupations and a 22-SOC-major rollup, both
+1983–2026, plus a Dorn-group (~25 groups) Displaced Worker Supplement
+validation — all built from IPUMS CPS microdata rather than published BLS
+series. CI never builds these; it reads the committed seeds under `seeds/`. To
+rebuild them locally:
+
+1. Register for an account at https://cps.ipums.org, then register that
+   account for IPUMS CPS specifically at
+   https://uma.pop.umn.edu/cps/registration/new — an API key alone is not
+   enough; extract requests from a key whose account is not registered for CPS
+   fail with "not registered to IPUMS cps." Create the key at
+   https://account.ipums.org/api_keys.
+2. Add `IPUMS_API_KEY=...` to `.env`.
+3. `uv run download_ipums_cps.py basic 1983 2026` and
+   `uv run download_ipums_cps.py dws` (hours; resumable).
+4. `uv run cps_detailed_panel.py build 1983 2026` and
+   `uv run dws_detailed_panel.py build`. Read the gate records in
+   `data/output/*_gates_rebuilt.csv`.
+5. `uv run cps_detailed_panel.py promote` and
+   `uv run dws_detailed_panel.py promote`. Both refuse unless every gate
+   passed.
+
+There is no `ipumspy` dependency to install here: `download_ipums_cps.py`
+talks to the IPUMS extract API directly with `requests` and receives gzipped
+CSV, because `ipumspy` pins `pandas<3`, which this project does not.
+
+IPUMS terms prohibit redistributing microdata; only aggregate tables are
+committed. Please cite IPUMS CPS and Autor & Dorn (2013) when using these
+outputs.
+
 ## Outputs
 
 | File | Description |

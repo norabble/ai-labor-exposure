@@ -6,6 +6,12 @@
           {
             "type": "command",
             "command": "echo '{\"systemMessage\": \"If you added or changed a pipeline output, visualization, or data file this session — update its row in docs/outputs.md before committing.\"}'"
+          },
+          {
+            "type": "command",
+            "command": "out=$(cd \"$CLAUDE_PROJECT_DIR\" && MPLCONFIGDIR=\"${TMPDIR:-/tmp}/mpl\" .venv/bin/python check_charts.py --quiet 2>/dev/null) || jq -n --arg report \"$out\" '{systemMessage: (\"Chart check failed — committed charts are missing, orphaned, or stale:\\n\" + $report)}'; exit 0",
+            "timeout": 60,
+            "statusMessage": "checking chart freshness"
           }
         ]
       }

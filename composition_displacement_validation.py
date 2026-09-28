@@ -101,6 +101,7 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 
+from chart_manifest import save_figure
 from dws_panel import COUNT_MEASUREMENT_BASIS, DWS_TO_SOC_MAJOR, load_dws_panel
 
 COMPOSITION_REPORT_PATH = "data/output/occupation_composition_model_report.csv"
@@ -492,7 +493,7 @@ def plot_observed_vs_predicted(comparison_df: pd.DataFrame, output_dir: str) -> 
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    figure.savefig(os.path.join(output_dir, CHART_NAME), dpi=150, bbox_inches="tight")
+    save_figure(figure, os.path.join(output_dir, CHART_NAME), dpi=150, bbox_inches="tight")
     plt.close(figure)
     print(f"  Saved {os.path.join(output_dir, CHART_NAME)}")
 

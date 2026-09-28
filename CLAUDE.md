@@ -11,6 +11,7 @@ make classify       # LLM-classify all O*NET tasks (expensive, ~19k calls, resum
 make run-pipeline   # Run the full analysis pipeline (analyze → synthesize → plot → validate)
 make test           # Run unit tests
 make lint           # Ruff check + format
+uv run check_charts.py  # Committed charts vs docs/outputs.md, and vs the latest run's fingerprints
 ```
 
 Run specific pipeline stages:
@@ -104,6 +105,10 @@ BLS zip downloads are cached by `download_bls.js` hash, so re-runs only re-fetch
 Both workflows set `defaults.run.shell: bash`. GitHub's default is `bash -e`, which stops on a failing command but not on one inside a pipeline — a pipeline's exit code is its last command's. The release job pipes the pipeline into `tee` to capture the run log, so without this a crashed `main.py` would exit 0 and the workflow would go on to package and publish a release from whatever partial output survived.
 
 The release job holds `contents: write` and `pull-requests: write`. It opens a pull request rather than pushing to `main` directly, because `main` is protected and `GITHUB_TOKEN` acts as `github-actions[bot]`, which is not an admin and cannot bypass that.
+
+## Chart freshness
+
+Every chart is saved through `chart_manifest.save_figure`, never a bare `savefig`, so it gets a content fingerprint. `check_charts.py` fails if a documented chart has no committed image, a committed image is undocumented, a markdown image link is broken (all three also run in `pytest` as the CI gate), or a committed image's fingerprint differs from the latest local run's. A Stop hook runs it and reports failures. The committed `docs/charts/images/chart_manifest.json` is refreshed by the release PR along with the images.
 
 ## Outputs Reference
 

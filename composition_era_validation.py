@@ -66,6 +66,8 @@ import pandas as pd
 import scipy.stats as stats
 import seaborn as sns
 
+from chart_manifest import save_figure
+
 # _sector_weighted_means is imported rather than reimplemented so this module and
 # every existing sector-level chart aggregate identically. Duplicating it would
 # let the two drift and report different numbers for the same quantity.
@@ -866,7 +868,7 @@ def plot_signal_over_time(period_correlation_df: pd.DataFrame, output_dir: str, 
         "cps_detailed": CPS_DETAILED_CHART_NAME,
         "cps_major": CPS_MAJOR_CHART_NAME,
     }.get(level, CHART_NAME)
-    figure.savefig(os.path.join(output_dir, chart_name), dpi=150, bbox_inches="tight")
+    save_figure(figure, os.path.join(output_dir, chart_name), dpi=150, bbox_inches="tight")
     plt.close(figure)
     print(f"  Saved {os.path.join(output_dir, chart_name)}")
 

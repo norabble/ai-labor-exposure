@@ -242,7 +242,7 @@ outputs.
 | `exposure_volume_by_group.csv` | Same metric rolled up to SOC major group |
 | `employment_by_demand_type.csv` | Workers in each demand type bucket with mean exposure scores |
 
-Visualizations (30+ charts) are saved to `data/output/visualizations/`. See [CLAUDE.md](CLAUDE.md#outputs-reference) for the full list with descriptions.
+Visualizations (30+ charts) are saved to `data/output/visualizations/`. See [docs/outputs.md](docs/outputs.md#visualizations--dataoutputvisualizations) for the full list with descriptions.
 
 ## Development
 

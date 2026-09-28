@@ -5,7 +5,39 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '{\"systemMessage\": \"If you added or changed a pipeline output, visualization, or data file this session — update the Outputs Reference table in CLAUDE.md before committing.\"}'"
+            "command": "echo '{\"systemMessage\": \"If you added or changed a pipeline output, visualization, or data file this session — update its row in docs/outputs.md before committing.\"}'"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty'); case \"$f\" in .env|*/.env|.env.*|*/.env.*|uv.lock|*/uv.lock) printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Protected file: .env holds API keys and uv.lock changes only via uv lock / uv add.\"}}' ;; seeds/*.csv|*/seeds/*.csv|seeds/*.xls*|*/seeds/*.xls*) printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"seeds/ data changes only via a gated promote or a deliberate cp from data/output/ — confirm this is a hand-derived reference file.\"}}' ;; esac; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "c=$(jq -r '.tool_input.command // empty'); if printf '%s' \"$c\" | grep -qE '(^|[;&|(] *)(make +classify\\b|(uv +run +)?(python3? +)?(\\./)?classify_tasks\\.py\\b)'; then printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Task classification is ~19k paid Vertex AI calls. Ask the user to run it themselves (! make classify).\"}}'; fi; exit 0"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_response.filePath // .tool_input.file_path // empty'); case \"$f\" in *.py) r=\"$CLAUDE_PROJECT_DIR/.venv/bin/ruff\"; [ -x \"$r\" ] || r=\"uv run --quiet ruff\"; cd \"$CLAUDE_PROJECT_DIR\" && $r format --quiet \"$f\" && $r check --fix --unfixable F401 --quiet \"$f\" >&2 || exit 2 ;; esac; exit 0",
+            "statusMessage": "ruff format + check"
           }
         ]
       }

@@ -697,7 +697,7 @@ on disk — is the first thing to try next.
 **The DWS panel reaches 2008 as counts, not the spec's 1984 floor — extended back
 to 1981-82 as rates.** An earlier note here claimed BLS published no archive of
 prior Displaced Worker Supplement releases, so the panel held only the single
-January 2026 survey; that claim was wrong — see the correction in `CLAUDE.md`
+January 2026 survey; that claim was wrong — see the correction in `docs/seeds.md`
 under `seeds/dws_displacement_panel.csv` — and the panel now holds ten biennial
 surveys, 2008–2026, as counts. The archive itself is the hard floor for that
 route: no BLS news-release archive exists for 2000–2006, so 2008 is as far back

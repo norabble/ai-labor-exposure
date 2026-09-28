@@ -79,6 +79,7 @@ import seaborn as sns
 from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
+from chart_manifest import save_figure
 from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
 
 
@@ -398,7 +399,7 @@ def plot_net_change_distribution(dynamic_equilibrium_df: pd.DataFrame, output_di
     ]
     plt.legend(handles=legend_handles, title="Dominant Demand Type", fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/dynamic_model_net_change_distribution.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/dynamic_model_net_change_distribution.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"  Saved {output_dir}/dynamic_model_net_change_distribution.png")
 
@@ -443,7 +444,7 @@ def plot_winners_losers(dynamic_equilibrium_df: pd.DataFrame, output_dir: str) -
     ax.axhline(len(top_losers_df) - 0.5, color="grey", linewidth=0.8, linestyle=":")
 
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/dynamic_model_winners_losers.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/dynamic_model_winners_losers.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"  Saved {output_dir}/dynamic_model_winners_losers.png")
 
@@ -499,7 +500,7 @@ def plot_dynamic_vs_rebound_comparison(dynamic_equilibrium_df: pd.DataFrame, out
     plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
     plt.legend(title="Dominant Demand Type")
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/dynamic_vs_rebound_model_comparison.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/dynamic_vs_rebound_model_comparison.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"  Saved {output_dir}/dynamic_vs_rebound_model_comparison.png")
 
@@ -601,7 +602,7 @@ def plot_dynamic_sector_level_validation(
         fontsize=12,
     )
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/dynamic_sector_level_validation.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/dynamic_sector_level_validation.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"  Saved {output_dir}/dynamic_sector_level_validation.png")
 

@@ -80,6 +80,7 @@ import requests
 import seaborn as sns
 from dotenv import load_dotenv
 
+from chart_manifest import save_figure
 from dws_panel import STRUCTURAL_REASON, load_dws_panel
 from mlr_displacement import parse_total_displacement_rate
 
@@ -662,7 +663,7 @@ def plot_displacement_rate_history(displacement_rate_df: pd.DataFrame, output_di
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, CHART_NAME)
-    figure.savefig(output_path, dpi=150, bbox_inches="tight")
+    save_figure(figure, output_path, dpi=150, bbox_inches="tight")
     plt.close(figure)
     print(f"  Saved {output_path}")
 

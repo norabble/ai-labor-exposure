@@ -1,0 +1,27 @@
+dorn_group,group_label,first_code,last_code
+exec,"Executive, administrative and managerial",3,22
+mgmtrel,Management related,23,37
+prof,Professional specialty,43,200
+tech,Technicians and related support,203,235
+finsales,Financial sales and related,243,258
+retsales,Retail sales,274,283
+cleric,Administrative support,303,389
+clean,"Housekeeping, cleaning, laundry",405,408
+guard,Supervisors of guards; guards,415,415
+guard,Supervisors of guards; guards,425,427
+firepol,"Fire fighting, police, and correctional institutions",417,423
+food,Food preparation and service,433,444
+shealth,"Health service (dental assistants, health and nursing aides)",445,447
+janitor,Building and grounds cleaning and maintenance,448,455
+beauty,Personal appearance,457,458
+recreation,Recreation and hospitality,459,467
+child,Child care workers,468,468
+othpers,Miscellaneous personal care and service,469,472
+farmer,Farm operators and managers,473,475
+otheragr,Other agricultural and related,479,498
+mechanic,Mechanics and repairers,503,549
+constr,Construction trades,558,599
+mining,Extractive,614,617
+product,Precision production,628,699
+operator,"Machine operators, assemblers, and inspectors",703,799
+transp,Transportation and material moving,803,889

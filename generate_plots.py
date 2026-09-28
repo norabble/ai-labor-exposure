@@ -25,6 +25,7 @@ import seaborn as sns
 from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
+from chart_manifest import save_figure
 from plot_constants import DEMAND_PALETTE, SOC_MAJOR_GROUPS
 
 
@@ -57,7 +58,7 @@ def main():
     legend_handles = [Patch(color=DEMAND_PALETTE[dt], label=dt) for dt in ["Bounded", "Unbounded", "Adversarial"]]
     plt.legend(handles=legend_handles, title="Dominant Demand Type", loc="lower right")
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/highest_exposure_occupations.png", dpi=300)
+    save_figure(plt.gcf(), f"{output_dir}/highest_exposure_occupations.png", dpi=300)
     plt.close()
 
     if _has_eloundou:
@@ -95,7 +96,7 @@ def main():
         plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/theoretical_vs_rebound_adjusted_exposure.png", dpi=300)
+        save_figure(plt.gcf(), f"{output_dir}/theoretical_vs_rebound_adjusted_exposure.png", dpi=300)
         plt.close()
 
         # 3. Occupations most different from naive exposure prediction
@@ -121,7 +122,7 @@ def main():
 
         plt.gca().xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/model_vs_naive_divergence.png", dpi=300)
+        save_figure(plt.gcf(), f"{output_dir}/model_vs_naive_divergence.png", dpi=300)
         plt.close()
     else:
         print("  Skipping Eloundou charts — eloundou_exposure_mid not in report (run with eloundou_exposure.csv present).")
@@ -235,7 +236,7 @@ def main():
             fontsize=11,
         )
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/usage_by_demand_type.png", dpi=300, bbox_inches="tight")
+        save_figure(plt.gcf(), f"{output_dir}/usage_by_demand_type.png", dpi=300, bbox_inches="tight")
         plt.close()
 
     # 5. Task importance vs. AI penetration by demand type
@@ -282,7 +283,7 @@ def main():
         handles_imp, _ = plt.gca().get_legend_handles_labels()
         plt.legend(handles=handles_imp, labels=["AI Penetrated (penetration > 0)", "Not Penetrated"], title="AI Coverage")
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/task_importance_vs_penetration.png", dpi=300)
+        save_figure(plt.gcf(), f"{output_dir}/task_importance_vs_penetration.png", dpi=300)
         plt.close()
 
     print(f"Visualizations saved to {output_dir}")

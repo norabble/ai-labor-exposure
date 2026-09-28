@@ -152,6 +152,9 @@ jobs:
           git checkout -B "$artifact_branch" origin/main
 
           cp data/output/visualizations/*.png docs/charts/images/
+          # Fingerprints of the charts just copied, so check_charts.py can tell
+          # later runs whether the committed images still match.
+          cp data/output/visualizations/chart_manifest.json docs/charts/images/
           if [ -f data/output/cps_a19_panel.csv ]; then
             cp data/output/cps_a19_panel.csv seeds/cps_a19_panel.csv
           else

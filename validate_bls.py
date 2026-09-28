@@ -47,6 +47,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 from matplotlib.ticker import PercentFormatter
 
+from chart_manifest import save_figure
 from cps_panel import (
     CpsComparisonWindows,
     build_growth_frame,
@@ -213,7 +214,7 @@ def _make_subplot_figure(
 
     fig.suptitle(f"{xlabel} vs. {ylabel}", fontsize=13, y=1.02)
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), output_path, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -321,7 +322,7 @@ def _make_sector_subplot_figure(
 
     fig.suptitle(suptitle, fontsize=12, y=1.02)
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), output_path, dpi=300, bbox_inches="tight")
     plt.close()
 
 
@@ -641,7 +642,7 @@ def plot_model_signal_over_time(
     )
 
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/model_signal_over_time.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/model_signal_over_time.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"Saved {output_dir}/model_signal_over_time.png")
 
@@ -834,7 +835,7 @@ def plot_model_signal_over_time_occupation(
     )
 
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/model_signal_over_time_occupation.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/model_signal_over_time_occupation.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"Saved {output_dir}/model_signal_over_time_occupation.png")
 
@@ -955,7 +956,7 @@ def _plot_cps_2026_direction(
 
     fig.text(0.5, -0.01, cps_windows.window_caveat, ha="center", fontsize=7.5, color="dimgrey", wrap=True)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/cps_2026_direction.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/cps_2026_direction.png", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"\n  Saved {output_dir}/cps_2026_direction.png")
 
@@ -1070,7 +1071,7 @@ def _plot_cps_model_vs_actual(
     legend_handles_scatter = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
     ax_cps_scatter.legend(handles=legend_handles_scatter, title="Dominant Demand Type", fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/{output_filename}", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/{output_filename}", dpi=300, bbox_inches="tight")
     plt.close()
     print(f"  Saved {output_dir}/{output_filename}")
 
@@ -1367,7 +1368,7 @@ def main():
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.legend(title="Demand Type")
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/employment_vs_wage_growth_by_demand_type.png", dpi=300)
+        save_figure(plt.gcf(), f"{output_dir}/employment_vs_wage_growth_by_demand_type.png", dpi=300)
         plt.close()
 
     # ── Correlation summary ───────────────────────────────────────────────────
@@ -1701,7 +1702,7 @@ def main():
                 color="dimgrey",
             )
         plt.tight_layout()
-        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        save_figure(plt.gcf(), output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
     _exposure_bar_chart(
@@ -1784,7 +1785,7 @@ def main():
         label = f"{row['workers_millions']:.1f}M\n({row['pct_of_modeled']:.0%} of modeled)\nMean exposure: {row['mean_exposure']:.1%}"
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.8, label, ha="center", va="bottom", fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/employment_by_demand_type.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/employment_by_demand_type.png", dpi=300, bbox_inches="tight")
     plt.close()
 
     print("\n── Employment by Dominant Demand Type ──")
@@ -1869,7 +1870,7 @@ def main():
         )
 
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/wage_quartile_demand_type.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/wage_quartile_demand_type.png", dpi=300, bbox_inches="tight")
     plt.close()
 
     # ── Anthropic observed exposure vs. our model impact ─────────────────────
@@ -1921,7 +1922,7 @@ def main():
         plt.gca().yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
         plt.legend(title="Dominant Demand Type")
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/observed_vs_rebound_adjusted_exposure.png", dpi=300)
+        save_figure(plt.gcf(), f"{output_dir}/observed_vs_rebound_adjusted_exposure.png", dpi=300)
         plt.close()
 
         print(f"\n── Anthropic Exposure vs. Our Impact (n={len(anthropic_merged_df)}) ──")
@@ -2043,7 +2044,7 @@ def main():
             fontsize=12,
         )
         plt.tight_layout()
-        plt.savefig(f"{output_dir}/sector_level_validation.png", dpi=300, bbox_inches="tight")
+        save_figure(plt.gcf(), f"{output_dir}/sector_level_validation.png", dpi=300, bbox_inches="tight")
         plt.close()
 
         print(f"\n── Sector-Level Validation (n={len(sector_agg_df)}) ──")
@@ -2146,7 +2147,7 @@ def main():
     )
     ax_traj.set_xticks(trajectory_years)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/top_exposure_trajectories.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/top_exposure_trajectories.png", dpi=300, bbox_inches="tight")
     plt.close()
 
     # ── High-risk concentration bubble chart ─────────────────────────────────
@@ -2198,7 +2199,7 @@ def main():
     legend_handles_b = [Patch(facecolor=color, label=demand_type) for demand_type, color in DEMAND_PALETTE.items()]
     ax_bubble.legend(handles=legend_handles_b, title="Dominant Demand Type", fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"{output_dir}/high_exposure_concentration.png", dpi=300, bbox_inches="tight")
+    save_figure(plt.gcf(), f"{output_dir}/high_exposure_concentration.png", dpi=300, bbox_inches="tight")
     plt.close()
 
     # ── CPS 2026 directional indicator + model comparison ────────────────────

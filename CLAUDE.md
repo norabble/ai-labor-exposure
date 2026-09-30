@@ -114,6 +114,15 @@ Every chart is saved through `chart_manifest.save_figure`, never a bare `savefig
 
 `docs/outputs.md` is the authoritative record of every pipeline output (CSV, visualization, printed table) and what it is for. **When adding, changing, or removing an output, update its row there in the same commit.** Rows describe the output; measured results go in `docs/framework.md` or `docs/charts/*.md` (use the `record-measured-result` skill).
 
+## Implementation Plans
+
+Plans in `docs/superpowers/plans/` are the lasting record of what was executed. The
+superpowers execution skills track progress only in the session's task list and ledger,
+which do not survive the session, so the plan file must be updated by hand:
+
+- **Tick a task's `- [ ]` boxes in the plan file in the same commit as that task's code.** Tick only steps that actually ran; a skipped or changed step stays unticked and gets an entry in the plan's Deviations log.
+- **In the pull request that finishes the plan, add a `**Status:** complete` line under its title**, naming that PR once it is open, as the existing plans do.
+
 ## Coding Standards
 
 From `CONTRIBUTING.md`. Only some of these are machine-checkable — the rest are

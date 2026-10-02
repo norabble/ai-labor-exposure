@@ -394,7 +394,7 @@ git commit -m "Add the Census BTOS AI-use series with a two-wording seed"
 - Consumes: `SERIES_COLUMNS`, `WORDING_PRODUCTION`, `load_series()` (Task 1).
 - Produces: `@dataclass AdoptionFit(name: str, parameters: tuple[float, ...], splice_multiplier: float, accepted: bool, rejection_reason: str = "")`; `decimal_years(dates) -> np.ndarray`; `fit_adoption(series_df) -> dict[str, AdoptionFit]`; `evaluate_fit(fit, dates) -> np.ndarray`; `annual_mean_adoption(fit, years: list[int]) -> pd.Series` (index int year); `accepted_fits(fits) -> dict[str, AdoptionFit]`; `fits_table(fits) -> pd.DataFrame`; `run_adoption() -> tuple[pd.DataFrame, dict[str, AdoptionFit]]`; constants `GROWTH_FORMS`, `FORECAST_HORIZON_END = pd.Timestamp("2030-12-01")`.
 
-- [ ] **Step 1: Write the failing tests** (append to `tests/test_btos_adoption.py`)
+- [x] **Step 1: Write the failing tests** (append to `tests/test_btos_adoption.py`)
 
 ```python
 from btos_adoption import AdoptionFit, annual_mean_adoption, evaluate_fit, fit_adoption, fits_table
@@ -463,12 +463,12 @@ class TestGrowthFits:
         assert all(not fit.accepted and "did not converge" in fit.rejection_reason for fit in fits.values())
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_btos_adoption.py::TestGrowthFits -v`
 Expected: FAIL — `ImportError: cannot import name 'AdoptionFit'`
 
-- [ ] **Step 3: Append the fits to `btos_adoption.py`**
+- [x] **Step 3: Append the fits to `btos_adoption.py`**
 
 Add `from dataclasses import dataclass` and `from scipy.optimize import curve_fit` to the imports, then append:
 
@@ -610,17 +610,17 @@ def run_adoption() -> tuple[pd.DataFrame, dict[str, AdoptionFit]]:
     return series_df, adoption_fits
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_btos_adoption.py -v`
 Expected: PASS (12 tests)
 
-- [ ] **Step 5: Smoke-run on the real series**
+- [x] **Step 5: Smoke-run on the real series**
 
 Run: `uv run python -c "import btos_adoption as b; b.run_adoption()"`
 Expected: four lines, logistic/gompertz/linear accepted with splice multipliers between 0.1 and 2.0; `data/output/btos_adoption_fits.csv` written. Record the four splice multipliers in this task's commit message.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add btos_adoption.py tests/test_btos_adoption.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

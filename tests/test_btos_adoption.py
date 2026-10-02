@@ -17,6 +17,10 @@ from btos_adoption import (
     SERIES_COLUMNS,
     WORDING_ANY_FUNCTION,
     WORDING_PRODUCTION,
+    annual_mean_adoption,
+    evaluate_fit,
+    fit_adoption,
+    fits_table,
     merge_with_seed,
     parse_btos_workbook,
     parse_percent,
@@ -113,3 +117,66 @@ class TestMerge:
         seed_df = pd.read_csv(btos_adoption.SEED_PATH, dtype={"smpdt": str})
         assert set(seed_df["wording"]) == {WORDING_PRODUCTION, WORDING_ANY_FUNCTION}
         assert seed_df["ai_use"].between(0, 1).all()
+
+
+def synthetic_series(splice_multiplier=0.55):
+    """Logistic adoption on the new-wording scale; old-wording points scaled down by the splice."""
+    old_dates = pd.date_range("2023-09-10", "2025-08-17", freq="14D")
+    new_dates = pd.date_range("2025-11-30", "2026-09-20", freq="14D")
+    rows = []
+    for dates, wording, multiplier in ((old_dates, WORDING_PRODUCTION, splice_multiplier), (new_dates, WORDING_ANY_FUNCTION, 1.0)):
+        years = btos_adoption.decimal_years(pd.Series(dates))
+        adoption = 0.7 / (1 + np.exp(-0.6 * (years - 6.0)))
+        rows.append(
+            pd.DataFrame(
+                {
+                    "smpdt": [str(i) for i in range(len(dates))],
+                    "ref_end": dates,
+                    "wording": wording,
+                    "ai_use": adoption * multiplier,
+                    "std_error": 0.002,
+                }
+            )
+        )
+    return pd.concat(rows, ignore_index=True)
+
+
+class TestGrowthFits:
+    def test_logistic_fit_recovers_the_splice(self):
+        fits = fit_adoption(synthetic_series(splice_multiplier=0.55))
+        assert fits["logistic"].accepted
+        assert fits["logistic"].splice_multiplier == pytest.approx(0.55, abs=0.03)
+
+    def test_accepted_fits_are_bounded_and_non_decreasing(self):
+        fits = fit_adoption(synthetic_series())
+        monthly = pd.Series(pd.date_range("2022-01-01", "2030-12-01", freq="MS"))
+        for fit in fits.values():
+            if not fit.accepted:
+                continue
+            adoption = evaluate_fit(fit, monthly)
+            assert ((adoption >= 0) & (adoption <= 1)).all(), fit.name
+            assert (np.diff(adoption) >= -1e-12).all(), fit.name
+
+    def test_exponential_exceeding_full_adoption_is_rejected(self):
+        fast_series = synthetic_series()
+        years = btos_adoption.decimal_years(fast_series["ref_end"])
+        fast_series["ai_use"] = 0.01 * np.exp(0.9 * years)  # passes 100% well before 2030
+        fits = fit_adoption(fast_series)
+        assert not fits["exponential"].accepted
+        assert "exceeds 100%" in fits["exponential"].rejection_reason
+
+    def test_annual_mean_and_table(self):
+        fits = fit_adoption(synthetic_series())
+        annual = annual_mean_adoption(fits["logistic"], [2024, 2030])
+        assert annual[2030] > annual[2024]
+        table = fits_table(fits)
+        assert {"fit", "accepted", "splice_multiplier", "month", "adoption"} <= set(table.columns)
+        assert table.loc[table["fit"] == "logistic", "month"].max() == pd.Timestamp("2030-12-01")
+
+    def test_failed_fit_is_reported_not_replaced(self, monkeypatch):
+        def failing_curve_fit(*args, **kwargs):
+            raise RuntimeError("Optimal parameters not found")
+
+        monkeypatch.setattr(btos_adoption, "curve_fit", failing_curve_fit)
+        fits = fit_adoption(synthetic_series())
+        assert all(not fit.accepted and "did not converge" in fit.rejection_reason for fit in fits.values())

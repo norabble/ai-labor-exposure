@@ -14,18 +14,25 @@ import pytest
 import forecast_composition
 from btos_adoption import AdoptionFit
 from forecast_composition import (
+    ProjectionStep,
     align_sectors,
     attach_drivers,
     coefficients_from,
+    cps_start_shares,
+    cps_steps,
     decompose_slopes,
     estimate_instrument,
     estimate_period_slopes,
     fit_coefficients,
+    oews_steps,
+    project_shares,
     report_employment_column,
     sector_code,
     sector_employment_panel,
     sector_scores,
+    slope_path,
     stage2_input,
+    step_shares,
 )
 
 SECTORS = [f"{code:02d}" for code in range(11, 55, 2)]  # 22 two-digit codes
@@ -198,3 +205,55 @@ class TestEstimationEntryPoint:
         monkeypatch.setattr(forecast_composition, "run_adoption", lambda: (pd.DataFrame(), {}))
         assert forecast_composition.run_estimation() is None
         assert "No unemployment series available" in capsys.readouterr().out
+
+
+class TestProjection:
+    def test_oews_steps_are_annual_to_2030(self):
+        steps = oews_steps(2025)
+        assert [step.as_of for step in steps] == ["2026-05", "2027-05", "2028-05", "2029-05", "2030-05"]
+        assert all(step.year_fraction == 1.0 for step in steps)
+
+    def test_cps_partial_first_step(self):
+        june = cps_steps("2026-06")
+        assert june[0] == ProjectionStep("2026-12", 2026, 0.5)
+        assert [step.as_of for step in june[1:]] == ["2027-12", "2028-12", "2029-12", "2030-12"]
+        december = cps_steps("2026-12")
+        assert december[0] == ProjectionStep("2027-12", 2027, 1.0)
+
+    def test_slope_path_combines_terms(self):
+        path = slope_path({"structural": 0.02, "cycle": 0.01, "ai": 0.1}, {2027: 1.5}, pd.Series({2026: 0.2, 2027: 0.3}), [2026, 2027])
+        assert path[2026] == pytest.approx(0.02 + 0.1 * 0.2)
+        assert path[2027] == pytest.approx(0.02 + 0.015 + 0.1 * 0.3)
+
+    def test_shares_sum_to_one_and_zero_slope_is_identity(self, scores):
+        start = pd.Series(np.arange(1, len(SECTORS) + 1, dtype=float), index=SECTORS)
+        steps = oews_steps(2025)
+        flat = project_shares(start, scores, "2025-05", steps, dict.fromkeys(range(2026, 2031), 0.0))
+        assert np.allclose(flat.sum(axis=1), 1.0)
+        assert np.allclose(flat.loc["2030-05"], start / start.sum())
+
+    def test_positive_slope_moves_share_toward_high_scores(self, scores):
+        start = pd.Series(1.0, index=SECTORS)
+        path = project_shares(start, scores, "2025-05", oews_steps(2025), dict.fromkeys(range(2026, 2031), 0.05))
+        change = path.loc["2030-05"] - path.loc["2025-05"]
+        assert change[scores.idxmax()] > 0 > change[scores.idxmin()]
+
+    def test_step_shares_rejects_nonpositive_share(self, scores):
+        with pytest.raises(ValueError, match="non-positive share"):
+            step_shares(pd.Series(1.0 / len(SECTORS), index=SECTORS), scores, slope=-10.0)
+
+    def test_cps_start_shares_requires_every_sector(self):
+        a19_df = pd.DataFrame({"month": "2026-08", "soc_major": SECTORS[:-1], "employed_thousands": 100.0})
+        with pytest.raises(ValueError, match="missing sector"):
+            cps_start_shares(a19_df)
+
+    def test_cps_start_uses_latest_month(self):
+        a19_df = pd.concat(
+            [
+                pd.DataFrame({"month": "2026-06", "soc_major": SECTORS, "employed_thousands": 50.0}),
+                pd.DataFrame({"month": "2026-08", "soc_major": SECTORS, "employed_thousands": 100.0}),
+            ]
+        )
+        label, employment = cps_start_shares(a19_df)
+        assert label == "2026-08"
+        assert (employment == 100.0).all()

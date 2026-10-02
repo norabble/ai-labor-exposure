@@ -1385,7 +1385,7 @@ git commit -m "Record the Stage 2 checkpoint result and decision"
 - Consumes: `InstrumentEstimate`, `run_estimation()` (Task 5); `annual_mean_adoption` (Task 2).
 - Produces: `FORECAST_END_YEAR = 2030`; `UNEMPLOYMENT_SCENARIOS: dict[str, dict[int, float]]`; `@dataclass(frozen=True) ProjectionStep(as_of: str, driver_year: int, year_fraction: float)`; `oews_steps(start_year: int) -> list[ProjectionStep]`; `cps_steps(start_month: str) -> list[ProjectionStep]`; `slope_path(coefficients, unemployment_path, adoption_by_year, driver_years) -> dict[int, float]`; `step_shares(shares, scores, slope, year_fraction=1.0) -> pd.Series`; `project_shares(start_shares, scores, start_label, steps, slope_by_year) -> pd.DataFrame` (index `as_of`, columns sectors); `oews_start(panel_df) -> tuple[str, int, pd.Series]` (label, year, employment); `cps_start_shares(a19_panel_df) -> tuple[str, pd.Series]` (month label, employment); `project_scenarios(estimate, start_label, start_employment, steps, adoption_fits, coefficients=None) -> pd.DataFrame` with columns `SECTOR_PATH_COLUMNS = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major", "share", "employment"]`.
 
-- [ ] **Step 1: Write the failing tests** (append)
+- [x] **Step 1: Write the failing tests** (append)
 
 ```python
 from forecast_composition import (
@@ -1451,12 +1451,12 @@ class TestProjection:
         assert (employment == 100.0).all()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_forecast_composition.py::TestProjection -v`
 Expected: FAIL — `ImportError: cannot import name 'ProjectionStep'`
 
-- [ ] **Step 3: Append Stages 3–4 to `forecast_composition.py`**
+- [x] **Step 3: Append Stages 3–4 to `forecast_composition.py`**
 
 ```python
 # ── Stages 3–4: scenario slopes and share projection ───────────────────────────
@@ -1589,18 +1589,18 @@ def run_stage() -> None:
     print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS (24 tests)
 
-- [ ] **Step 5: Run the stage on real data**
+- [x] **Step 5: Run the stage on real data**
 
 Run: `uv run main.py forecast`
 Expected: `✓ data/output/forecast_sector_paths.csv`; spot-check that shares sum to 1 per (instrument, scenario, fit, as_of):
 `uv run python -c "import pandas as p; d=p.read_csv('data/output/forecast_sector_paths.csv'); print(d.groupby(['instrument','unemployment_scenario','adoption_fit','as_of'])['share'].sum().agg(['min','max']))"`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add forecast_composition.py tests/test_forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

@@ -376,9 +376,131 @@ def run_estimation() -> tuple[dict[str, InstrumentEstimate], dict[str, AdoptionF
     return estimates, usable_fits
 
 
+# ── Stages 3–4: scenario slopes and share projection ───────────────────────────
+
+FORECAST_END_YEAR = 2030
+# ΔU for the period ending in each year; a year not listed is 0.
+UNEMPLOYMENT_SCENARIOS = {
+    "steady": {},
+    "mild_recession": {2027: 1.5, 2028: -0.75, 2029: -0.75},
+}
+SECTOR_PATH_COLUMNS = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major", "share", "employment"]
+REQUIRED_SECTOR_COUNT = 22
+
+
+@dataclass(frozen=True)
+class ProjectionStep:
+    as_of: str
+    driver_year: int
+    year_fraction: float
+
+
+def oews_steps(start_year: int) -> list[ProjectionStep]:
+    """OEWS is a May reference month: one full-year step per May to 2030."""
+    return [ProjectionStep(f"{year}-05", year, 1.0) for year in range(start_year + 1, FORECAST_END_YEAR + 1)]
+
+
+def cps_steps(start_month: str) -> list[ProjectionStep]:
+    """From the start month to December (partial), then full calendar years to 2030."""
+    start_year, month = (int(part) for part in start_month.split("-"))
+    remaining_fraction = (12 - month) / 12
+    steps = [ProjectionStep(f"{start_year}-12", start_year, remaining_fraction)] if remaining_fraction > 0 else []
+    return steps + [ProjectionStep(f"{year}-12", year, 1.0) for year in range(start_year + 1, FORECAST_END_YEAR + 1)]
+
+
+def slope_path(
+    coefficients: dict[str, float], unemployment_path: dict[int, float], adoption_by_year: pd.Series, driver_years
+) -> dict[int, float]:
+    """Stage 3: β_y = β_structural + β_cycle·ΔU_y + β_AI·A_y."""
+    return {
+        year: coefficients["structural"]
+        + coefficients["cycle"] * unemployment_path.get(year, 0.0)
+        + coefficients.get("ai", 0.0) * float(adoption_by_year[year])
+        for year in driver_years
+    }
+
+
+def step_shares(shares: pd.Series, scores: pd.Series, slope: float, year_fraction: float = 1.0) -> pd.Series:
+    """One multiplicative step, renormalised. Raises rather than clipping a share at or below zero."""
+    updated_shares = shares * (1.0 + slope * year_fraction * scores.reindex(shares.index))
+    if updated_shares.isna().any() or (updated_shares <= 0).any():
+        raise ValueError(f"Projection produced a non-positive share (slope {slope:+.4f}); the scenario is outside the model's range")
+    return updated_shares / updated_shares.sum()
+
+
+def project_shares(
+    start_shares: pd.Series, scores: pd.Series, start_label: str, steps: list[ProjectionStep], slope_by_year: dict[int, float]
+) -> pd.DataFrame:
+    """Stage 4: share path, one row per as_of label (start first), one column per sector."""
+    shares = start_shares / start_shares.sum()
+    path = {start_label: shares}
+    for step in steps:
+        shares = step_shares(shares, scores, slope_by_year[step.driver_year], step.year_fraction)
+        path[step.as_of] = shares
+    return pd.DataFrame(path).T
+
+
+def oews_start(panel_df: pd.DataFrame) -> tuple[str, int, pd.Series]:
+    """Latest OEWS year's sector totals; label uses OEWS's May reference month."""
+    start_year = max(panel_df.columns)
+    return f"{start_year}-05", start_year, panel_df[start_year].dropna()
+
+
+def cps_start_shares(a19_panel_df: pd.DataFrame) -> tuple[str, pd.Series]:
+    """Latest A-19 month's sector levels; every one of the 22 sectors must be present."""
+    latest_month = str(a19_panel_df["month"].max())
+    month_df = a19_panel_df[a19_panel_df["month"].astype(str) == latest_month]
+    employment = month_df.set_index(month_df["soc_major"].map(sector_code))["employed_thousands"].astype(float)
+    if employment.index.nunique() != REQUIRED_SECTOR_COUNT:
+        raise ValueError(f"A-19 {latest_month} has {employment.index.nunique()} sectors; a missing sector would distort every share")
+    return latest_month, employment.sort_index()
+
+
+def project_scenarios(
+    estimate: InstrumentEstimate,
+    start_label: str,
+    start_employment: pd.Series,
+    steps: list[ProjectionStep],
+    adoption_fits: dict[str, AdoptionFit],
+    coefficients: dict[str, float] | None = None,
+) -> pd.DataFrame:
+    """Every ΔU scenario × adoption fit for one instrument, as long-form share and employment paths."""
+    coefficients = coefficients or estimate.coefficients
+    driver_years = [step.driver_year for step in steps]
+    total_employment = start_employment.sum()
+    scores = estimate.scores.reindex(start_employment.index)
+    path_frames = []
+    for scenario_name, unemployment_path in UNEMPLOYMENT_SCENARIOS.items():
+        for fit_name, adoption_fit in adoption_fits.items():
+            slope_by_year = slope_path(coefficients, unemployment_path, annual_mean_adoption(adoption_fit, driver_years), driver_years)
+            share_path = project_shares(start_employment, scores, start_label, steps, slope_by_year)
+            long_df = share_path.rename_axis("as_of").reset_index().melt(id_vars="as_of", var_name="soc_major", value_name="share")
+            long_df["employment"] = long_df["share"] * total_employment
+            path_frames.append(long_df.assign(instrument=estimate.instrument, unemployment_scenario=scenario_name, adoption_fit=fit_name))
+    return pd.concat(path_frames, ignore_index=True)[SECTOR_PATH_COLUMNS]
+
+
+def project_both_instruments(estimates: dict[str, InstrumentEstimate], adoption_fits: dict[str, AdoptionFit]) -> tuple[pd.DataFrame, dict]:
+    """Point projections for OEWS and CPS; returns the paths and each instrument's (label, employment, steps)."""
+    oews_label, oews_year, oews_employment = oews_start(estimates["oews"].panel_df)
+    cps_label, cps_employment = cps_start_shares(pd.read_csv(CPS_A19_PANEL_PATH, dtype={"month": str}))
+    starts = {
+        "oews": (oews_label, oews_employment, oews_steps(oews_year)),
+        "cps": (cps_label, cps_employment, cps_steps(cps_label)),
+    }
+    path_frames = [project_scenarios(estimates[instrument], *starts[instrument], adoption_fits) for instrument in ("oews", "cps")]
+    return pd.concat(path_frames, ignore_index=True), starts
+
+
 def run_stage() -> None:
     """The `forecast` pipeline stage."""
-    run_estimation()
+    estimation = run_estimation()
+    if estimation is None:
+        return
+    estimates, adoption_fits = estimation
+    sector_paths_df, _ = project_both_instruments(estimates, adoption_fits)
+    sector_paths_df.to_csv(SECTOR_PATHS_OUTPUT_PATH, index=False)
+    print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ Inputs:
 Outputs:
   • data/output/historical_displacement_rate.csv
   • data/output/visualizations/historical_displacement_rate_sources.png
-  • data/raw/bls_api/<series_id>_<start>_<end>.json  (fetch cache)
+  • data/raw/bls_api/<series_id>_<start>_<end>.json  (fetch cache; ranges covering the current year expire after 24 hours)
 
 Six estimates are produced, so the model can be swept across D sources the way
 synthesize_dynamic.compute_equilibration_sensitivity sweeps the absorption
@@ -72,7 +72,9 @@ insufficient work at the survey instrument, losing no variance in the process.
 import functools
 import json
 import os
+import time
 import warnings
+from datetime import date
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -216,6 +218,38 @@ def _cache_path(series_id: str, start_year: int, end_year: int) -> str:
     return os.path.join(API_CACHE_DIR, f"{series_id}_{start_year}_{end_year}.json")
 
 
+# A cache file covering the current year goes stale as BLS publishes new months;
+# one covering only past years never changes. 24 hours is shorter than the gap
+# between monthly releases and long enough that a day's re-runs stay offline.
+CURRENT_YEAR_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60
+
+
+def _cache_is_fresh(cache_path: str, end_year: int) -> bool:
+    if not os.path.exists(cache_path):
+        return False
+    if end_year < date.today().year:
+        return True
+    return time.time() - os.path.getmtime(cache_path) < CURRENT_YEAR_CACHE_MAX_AGE_SECONDS
+
+
+def _request_series(series_id: str, start_year: int, end_year: int) -> dict | None:
+    """One API request; warns and returns None on any failure."""
+    request_body: dict[str, object] = {"seriesid": [series_id], "startyear": str(start_year), "endyear": str(end_year)}
+    if _api_key():
+        request_body["registrationkey"] = _api_key()
+    try:
+        response = requests.post(BLS_API_URL, json=request_body, timeout=REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError) as request_error:
+        warnings.warn(f"Could not fetch BLS series {series_id}: {request_error}", stacklevel=3)
+        return None
+    if payload.get("status") != "REQUEST_SUCCEEDED":
+        warnings.warn(f"BLS API refused series {series_id}: {payload.get('message')}", stacklevel=3)
+        return None
+    return payload
+
+
 def fetch_bls_series(series_id: str, start_year: int, end_year: int) -> pd.DataFrame | None:
     """Fetch one BLS time series, caching the response so re-runs need no network.
 
@@ -225,31 +259,20 @@ def fetch_bls_series(series_id: str, start_year: int, end_year: int) -> pd.DataF
     os.makedirs(API_CACHE_DIR, exist_ok=True)
     cache_path = _cache_path(series_id, start_year, end_year)
 
-    payload = None
-    if os.path.exists(cache_path):
+    if _cache_is_fresh(cache_path, end_year):
         with open(cache_path, encoding="utf-8") as cache_file:
             payload = json.load(cache_file)
     else:
-        request_body: dict[str, object] = {
-            "seriesid": [series_id],
-            "startyear": str(start_year),
-            "endyear": str(end_year),
-        }
-        if _api_key():
-            request_body["registrationkey"] = _api_key()
-        try:
-            response = requests.post(BLS_API_URL, json=request_body, timeout=REQUEST_TIMEOUT_SECONDS)
-            response.raise_for_status()
-            payload = response.json()
-        except (requests.RequestException, ValueError) as request_error:
-            warnings.warn(f"Could not fetch BLS series {series_id}: {request_error}", stacklevel=2)
-            return None
-
-        if payload.get("status") != "REQUEST_SUCCEEDED":
-            warnings.warn(f"BLS API refused series {series_id}: {payload.get('message')}", stacklevel=2)
-            return None
-        with open(cache_path, "w", encoding="utf-8") as cache_file:
-            json.dump(payload, cache_file)
+        payload = _request_series(series_id, start_year, end_year)
+        if payload is None:
+            if not os.path.exists(cache_path):
+                return None
+            warnings.warn(f"Using a stale cached copy of BLS series {series_id}; newer months may be missing", stacklevel=2)
+            with open(cache_path, encoding="utf-8") as cache_file:
+                payload = json.load(cache_file)
+        else:
+            with open(cache_path, "w", encoding="utf-8") as cache_file:
+                json.dump(payload, cache_file)
 
     observation_rows = []
     for series in payload.get("Results", {}).get("series", []):

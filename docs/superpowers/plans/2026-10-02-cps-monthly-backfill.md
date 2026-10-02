@@ -505,7 +505,7 @@ git commit -m "Merge the API history into the A-19 panel and cross-check the pag
 **Interfaces:**
 - Produces: `historical_displacement.CURRENT_YEAR_CACHE_MAX_AGE_SECONDS = 86400`; `fetch_bls_series` signature unchanged.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/test_historical_displacement.py` (add `import json`, `import time`, `from datetime import date` to the top import block):
 
@@ -575,12 +575,12 @@ class TestFetchBlsSeriesCache:
 
 (`os` is already imported at the top of that test file.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `uv run pytest tests/test_historical_displacement.py::TestFetchBlsSeriesCache -v`
 Expected: `test_refetches_an_expired_current_year_cache` and `test_falls_back_to_a_stale_cache_when_the_request_fails` FAIL (the cache is always used); the other two pass.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add `import time` and `from datetime import date` to the top imports. Add near `_cache_path`:
 
@@ -638,7 +638,7 @@ Replace the cache/request block at the top of `fetch_bls_series` (from `payload 
 
 Update the docstring line `data/raw/bls_api/<series_id>_<start>_<end>.json  (fetch cache)` to `(fetch cache; ranges covering the current year expire after 24 hours)`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/test_historical_displacement.py -v`
 Expected: PASS, all classes.

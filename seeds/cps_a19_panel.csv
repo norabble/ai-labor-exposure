@@ -65,6 +65,28 @@ month,soc_major,occupation,employed_thousands,source_reference_month
 2025-08,49,"Installation, maintenance, and repair occupations",5185,2026-08
 2025-08,51,Production occupations,7482,2026-08
 2025-08,53,Transportation and material moving occupations,11647,2026-08
+2025-09,11,Management occupations,21168,2026-09
+2025-09,13,Business and financial operations occupations,10194,2026-09
+2025-09,15,Computer and mathematical occupations,6766,2026-09
+2025-09,17,Architecture and engineering occupations,3546,2026-09
+2025-09,19,"Life, physical, and social science occupations",1705,2026-09
+2025-09,21,Community and social service occupations,2870,2026-09
+2025-09,23,Legal occupations,1899,2026-09
+2025-09,25,"Education, training, and library occupations",9615,2026-09
+2025-09,27,"Arts, design, entertainment, sports, and media occupations",3691,2026-09
+2025-09,29,Healthcare practitioners and technical occupations,10191,2026-09
+2025-09,31,Healthcare support occupations,5648,2026-09
+2025-09,33,Protective service occupations,3458,2026-09
+2025-09,35,Food preparation and serving related occupations,8367,2026-09
+2025-09,37,Building and grounds cleaning and maintenance occupations,5921,2026-09
+2025-09,39,Personal care and service occupations,3952,2026-09
+2025-09,41,Sales and related occupations,14054,2026-09
+2025-09,43,Office and administrative support occupations,16608,2026-09
+2025-09,45,"Farming, fishing, and forestry occupations",1064,2026-09
+2025-09,47,Construction and extraction occupations,8577,2026-09
+2025-09,49,"Installation, maintenance, and repair occupations",5264,2026-09
+2025-09,51,Production occupations,7425,2026-09
+2025-09,53,Transportation and material moving occupations,11910,2026-09
 2026-04,11,Management occupations,20526,2026-04
 2026-04,13,Business and financial operations occupations,10133,2026-04
 2026-04,15,Computer and mathematical occupations,6834,2026-04
@@ -131,3 +153,25 @@ month,soc_major,occupation,employed_thousands,source_reference_month
 2026-08,49,"Installation, maintenance, and repair occupations",4847,2026-08
 2026-08,51,Production occupations,7716,2026-08
 2026-08,53,Transportation and material moving occupations,12011,2026-08
+2026-09,11,Management occupations,21631,2026-09
+2026-09,13,Business and financial operations occupations,10268,2026-09
+2026-09,15,Computer and mathematical occupations,7004,2026-09
+2026-09,17,Architecture and engineering occupations,3625,2026-09
+2026-09,19,"Life, physical, and social science occupations",1848,2026-09
+2026-09,21,Community and social service occupations,2879,2026-09
+2026-09,23,Legal occupations,1743,2026-09
+2026-09,25,"Education, training, and library occupations",9799,2026-09
+2026-09,27,"Arts, design, entertainment, sports, and media occupations",3455,2026-09
+2026-09,29,Healthcare practitioners and technical occupations,10871,2026-09
+2026-09,31,Healthcare support occupations,5649,2026-09
+2026-09,33,Protective service occupations,3181,2026-09
+2026-09,35,Food preparation and serving related occupations,7971,2026-09
+2026-09,37,Building and grounds cleaning and maintenance occupations,5634,2026-09
+2026-09,39,Personal care and service occupations,3788,2026-09
+2026-09,41,Sales and related occupations,14040,2026-09
+2026-09,43,Office and administrative support occupations,16065,2026-09
+2026-09,45,"Farming, fishing, and forestry occupations",1178,2026-09
+2026-09,47,Construction and extraction occupations,7916,2026-09
+2026-09,49,"Installation, maintenance, and repair occupations",4802,2026-09
+2026-09,51,Production occupations,7775,2026-09
+2026-09,53,Transportation and material moving occupations,12318,2026-09

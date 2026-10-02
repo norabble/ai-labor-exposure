@@ -55,6 +55,13 @@ jobs:
         if: steps.bls-cache.outputs.cache-hit != 'true'
         run: node download_bls.js
 
+      # The BLS API is the A-19 panel's source; the Puppeteer step after it only
+      # cross-checks the page against this history. Warns rather than fails under CI.
+      - name: Download CPS A-19 history from the BLS API
+        env:
+          BLS_API_KEY: ${{ secrets.BLS_API_KEY }}
+        run: uv run download_cps_history.py
+
       # Deliberately outside the BLS zip cache gate: A-19 is a rolling monthly
       # table and must be re-fetched every run. Warns rather than fails if BLS
       # blocks the runner — seeds/cps_a19_panel.csv still carries real months.

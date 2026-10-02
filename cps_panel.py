@@ -80,8 +80,29 @@ MONTH_NUMBER_BY_ABBREVIATION: dict[str, int] = {
 SEED_PANEL_PATH = "seeds/cps_a19_panel.csv"
 LATEST_RELEASE_HTML_PATH = "data/raw/cps/table_a19.html"
 OUTPUT_PANEL_PATH = "data/output/cps_a19_panel.csv"
+API_HISTORY_PATH = "data/raw/cps/a19_api_history.csv"
 
 PANEL_COLUMNS = ["month", "soc_major", "occupation", "employed_thousands", "source_reference_month"]
+PANEL_DTYPES = {"month": str, "soc_major": str, "source_reference_month": str}
+
+# BLS LN series carrying A-19's employment level for each SOC major group, verified
+# equal to every published A-19 value on 2026-10-02. 11–39 are a contiguous block;
+# 41–53 are the leaf series cps_historical_panel.py already uses.
+A19_SERIES_BY_SOC_MAJOR: dict[str, str] = {
+    **{
+        soc_major: f"LNU02032{453 + offset}"
+        for offset, soc_major in enumerate(["11", "13", "15", "17", "19", "21", "23", "25", "27", "29", "31", "33", "35", "37", "39"])
+    },
+    "41": "LNU02032206",
+    "43": "LNU02032207",
+    "45": "LNU02032209",
+    "47": "LNU02032210",
+    "49": "LNU02032211",
+    "51": "LNU02032213",
+    "53": "LNU02032214",
+}
+# A-19 writes group names in sentence case; CPS_TO_SOC_MAJOR's keys are those names lowercased.
+OCCUPATION_BY_SOC_MAJOR: dict[str, str] = {soc_major: name.capitalize() for name, soc_major in CPS_TO_SOC_MAJOR.items()}
 
 # A-19 reports the "Total" column group for a single age band; the Men and Women
 # column groups repeat the same months for two age bands each.

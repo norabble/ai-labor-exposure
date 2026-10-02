@@ -65,7 +65,7 @@
 **Interfaces:**
 - Produces: `cps_panel.A19_SERIES_BY_SOC_MAJOR: dict[str, str]`, `cps_panel.OCCUPATION_BY_SOC_MAJOR: dict[str, str]`, `cps_panel.API_HISTORY_PATH = "data/raw/cps/a19_api_history.csv"`, `cps_panel.PANEL_DTYPES: dict[str, type]`, `download_cps_history.HISTORY_START_YEAR = 2020`, `download_cps_history.parse_api_payload(payload: dict) -> pd.DataFrame` (columns `PANEL_COLUMNS`, `employed_thousands` int64).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_download_cps_history.py`:
 
@@ -147,12 +147,12 @@ class TestParseApiPayload:
             parse_api_payload(_payload(_every_group([("2026", "M09", "100.5")])))
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_download_cps_history.py -v`
 Expected: FAIL — `ImportError: cannot import name 'A19_SERIES_BY_SOC_MAJOR'`.
 
-- [ ] **Step 3: Add the mapping to `cps_panel.py`**
+- [x] **Step 3: Add the mapping to `cps_panel.py`**
 
 After `OUTPUT_PANEL_PATH = ...`, add:
 
@@ -182,7 +182,7 @@ OCCUPATION_BY_SOC_MAJOR: dict[str, str] = {soc_major: name.capitalize() for name
 
 Run `uv run ruff format cps_panel.py` so the long comprehension is wrapped.
 
-- [ ] **Step 4: Create `download_cps_history.py`**
+- [x] **Step 4: Create `download_cps_history.py`**
 
 ```python
 """
@@ -298,12 +298,12 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_download_cps_history.py -v`
 Expected: PASS (9 tests).
 
-- [ ] **Step 6: Wire it into the downloads**
+- [x] **Step 6: Wire it into the downloads**
 
 In `Makefile`, `download-data`, add `uv run download_cps_history.py` on the line before `node download_cps.js`, and extend the comment above the target: `download_cps_history.py runs before download_cps.js so the A-19 cross-check has API history to compare against.`
 
@@ -320,12 +320,12 @@ In `.github/workflows/release.yml`, insert before the "Download CPS Table A-19 v
 
 In `download_data.py`'s docstring, change "and CPS Table A-19 from download_cps.js, both via Puppeteer." to "CPS Table A-19 from download_cps.js, both via Puppeteer, and the A-19 monthly history from download_cps_history.py via the BLS API."
 
-- [ ] **Step 7: Run it for real (outside the sandbox)**
+- [x] **Step 7: Run it for real (outside the sandbox)**
 
 Run: `uv run download_cps_history.py`
 Expected: `Saved data/raw/cps/a19_api_history.csv (80 months, 2020-01 → 2026-09)` — 81 calendar months less October 2025. Fewer months, or a different latest month, is a finding to record in the Deviations log, not to paper over.
 
-- [ ] **Step 8: Lint and commit**
+- [x] **Step 8: Lint and commit**
 
 ```bash
 uv run ruff check . && uv run ruff format --check .

@@ -2351,7 +2351,7 @@ git commit -m "Draw the six composition forecast charts"
 - Copy: `data/output/visualizations/forecast_*.png` and `chart_manifest.json` → `docs/charts/images/`
 - Modify: this plan (Status line)
 
-- [ ] **Step 1: Add the `docs/outputs.md` rows**
+- [x] **Step 1: Add the `docs/outputs.md` rows**
 
 Data files table:
 
@@ -2376,15 +2376,15 @@ Visualizations table:
 | `forecast_scenario_comparison.png` | `forecast_charts.py` | 2030 share change for the six largest-moving sectors under each unemployment × adoption combination. See `docs/charts/forecast_scenario_comparison.md`. |
 ```
 
-- [ ] **Step 2: Write the six chart docs**
+- [x] **Step 2: Write the six chart docs**
 
 Each follows the existing chart-doc shape (`docs/charts/dynamic_model_winners_losers.md`): title, `**File:**`, an image link to the chart under `images/`, "What this chart shows", the reading, and a limitations section. Every doc states that the projection is conditional and composition-only; `forecast_demand_type_shares.md` and any occupation reference state the allocation caveat. Measured figures in them go through Step 3's skill.
 
-- [ ] **Step 3: Record measured results**
+- [x] **Step 3: Record measured results**
 
 Invoke the `record-measured-result` skill. Add `docs/framework.md` § Composition Forecast (after § Demand Composition Model) with: the method in four stages; the Stage 2 table per instrument (main + sensitivity rows) from `forecast_slope_decomposition.csv`; the Task 6 checkpoint decision; the splice multipliers; headline 2030 sector shifts under the reference scenario with bootstrap bands; bootstrap skip counts; the leave-one-period-out ranges; the weaknesses from the spec in order. Every number comes from `data/output/*.csv` of the latest run.
 
-- [ ] **Step 4: Update CLAUDE.md and docs/seeds.md**
+- [x] **Step 4: Update CLAUDE.md and docs/seeds.md**
 
 CLAUDE.md Phase 2 list, after item 5:
 
@@ -2400,11 +2400,11 @@ CLAUDE.md Seeds table row:
 
 `docs/seeds.md` paragraph: the two wordings, why the old wording exists only in the seed (census.gov's live file drops it; first built from Anthropic's republished copy in `Anthropic/EconomicIndex` `release_2025_09_15/data/input/BTOS_National.xlsx`), the merge rule (fetched row wins per `smpdt` × wording), CI fail-soft, and hand promotion.
 
-- [ ] **Step 5: Audit the prose**
+- [x] **Step 5: Audit the prose**
 
 Dispatch the `claims-auditor` agent on `docs/framework.md`, the six new chart docs and `docs/outputs.md`; dispatch the `inference-reviewer` agent on the same files. Fix every confirmed finding; record any finding you disagree with, and why, in the Deviations log.
 
-- [ ] **Step 6: Commit the images and verify**
+- [x] **Step 6: Commit the images and verify**
 
 ```bash
 cp data/output/visualizations/forecast_*.png docs/charts/images/
@@ -2440,4 +2440,4 @@ git commit -m "Document the composition forecast, its measured results and chart
   | CPS rollup 1983–2025 | +0.0918 (se 0.0134, p < 0.0001) | +0.0127 (se 0.0182, p = 0.49) | **−1.0684** (se 0.5001, p = 0.039) | 40 | 0.112 |
 
   β_AI sensitivity: OEWS +0.598 to +0.672 across `with_excluded_periods` and the linear/Gompertz backcasts (all p ≤ 0.002); CPS −1.020 to −1.065 across backcasts (p ≤ 0.04), but −0.341 (p = 0.19) with the partial-year 2025→26 period included. Mean period slope pre-2023 vs AI era: OEWS 0.064 → 0.153; CPS 0.091 → 0.003. Splice multipliers: linear 0.560, logistic 0.631, Gompertz 0.613; exponential rejected (159% by 2030-12).
-  The spec's continue condition (β_AI positive, p < 0.10, on at least one instrument) holds for OEWS, while CPS is significant in the opposite direction. The human partner chose to continue as specified, with each instrument driving its own forecast and the disagreement shown side by side. Docs must lead with the disagreement and with the extrapolation caveat: adoption reaches 0.14 in the estimation periods but 0.58 (logistic) by 2030.
+  The spec's continue condition (β_AI positive, p < 0.10, on at least one instrument) was met by OEWS. It did not anticipate CPS being significant in the opposite direction. The human partner chose to continue as specified, with each instrument driving its own forecast and the disagreement shown side by side. Docs must lead with the disagreement and with the extrapolation caveat: adoption reaches 0.14 in the estimation periods but 0.58 (logistic) by December 2030.

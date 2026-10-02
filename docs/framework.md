@@ -1138,3 +1138,126 @@ applied to every survey year, the 21 surveys are one comparison repeated
 against 21 independent measurements, not 21 independent tests of the model —
 the uniform sign is corroborating, but it cannot be pooled into a stronger
 significance claim than any single survey already carries.
+
+## Composition Forecast (conditional projection to 2030)
+
+**Read this first.**
+- **The two instruments point in opposite directions.** OEWS and CPS estimate the AI-era change in the score's slope with opposite signs, so their 2030 projections move the same sectors in opposite directions.
+- **The AI term is an extrapolation on both.** It is applied at about four times the highest adoption it was estimated on.
+- **The projected 2030 slopes are outside history.** On both instruments they fall outside the range of every annual slope used in estimation.
+
+`forecast_composition.py` projects how the sector composition of employment would shift to 2030 under three assumptions. The score's historical structural and cyclical sorting continues. The AI-era change in that sorting, estimated from three periods per instrument, keeps scaling linearly with BTOS adoption. And the stated unemployment and adoption scenarios hold.
+
+It is a **conditional projection, not a displacement prediction**:
+- The dynamic model is used unchanged.
+- Total employment is held at its start level, so only shares move.
+- Occupation figures are an allocation of sector change.
+
+Design: `docs/superpowers/specs/2026-10-02-decomposed-slope-forecast-design.md`.
+
+### Why a slope, not a correlation
+
+The sector-level evidence above is a correlation. A correlation says the score and employment growth line up, but not *how much* growth a unit of score buys, which is what a projection needs. The projection therefore rewrites the cycle decomposition of [Result: the signal is general, cyclical, and AI adds to it](#result-the-signal-is-general-cyclical-and-ai-adds-to-it) in slope units. In slope units, the CPS AI term turns out negative (below), unlike that result's AI increment.
+
+### Method
+
+1. **Stage 1, per year.** Across the 22 SOC major sectors, regress `relative_growth_s,t = growth_s,t − total_growth_t` on the sector score (the employment-weighted mean of `net_employment_change`). The slope `β_t` is that year's share growth per unit of score.
+2. **Stage 2, across years.** Weighted least squares (weights `1/se²`) of `β_t = β_structural + β_cycle·ΔU_t + β_AI·A_t`.
+   - `ΔU_t` is the change in the annual unemployment rate (`LNS14000000`).
+   - `A_t` is AI adoption from the Census Business Trends and Outlook Survey (the logistic fit's annual mean), and is zero for periods ending in 2022 or earlier. `β_AI` is therefore identified only by the three AI-era periods on each instrument, and the AI effect is assumed to scale linearly with adoption.
+   - COVID periods are excluded, as in `decompose_fit_strength`. So are the two OEWS SOC-revision level breaks, a departure that a sensitivity row reverses.
+   - The CPS rollup history crosses the measured 2002→2003 classification seam and the 1991→92, 1993→94 and 2010→11 seams (§ Seams). These periods are **kept** in CPS Stage 2 with no sensitivity row. On OEWS, the 2002→2003 interval is not a clean twelve months.
+3. **Stage 3, scenarios.** `β_y` for each future year under two unemployment paths, each combined with every accepted adoption fit:
+   - steady (ΔU = 0);
+   - mild recession (+1.5 pp in 2027, then −0.75 pp in each of 2028 and 2029).
+4. **Stage 4, projection.** `share_s(y+1) = share_s(y)·(1 + β_y·score_s)`, renormalised.
+
+Each instrument is estimated on its own history and drives its own projection; the two are never spliced:
+- **OEWS:** sector totals 1999–2025, projected from May 2025.
+- **CPS:** estimated on the 22-sector rollup 1983–2025, projected from CPS Table A-19 (August 2026). A-19 is a different CPS product from the rollup. Their 2025 sector shares (the mean of A-19's three 2025 months against the rollup's 2025 annual average) differ by 0.14 pp on average and by at most 0.37 pp (Computer and Mathematical). Measured 2026-10-02.
+
+### Stage 2 result: opposite AI terms on three periods each
+
+Measured 2026-10-02 from `forecast_slope_decomposition.csv`, main specification, logistic adoption backfill:
+
+| Instrument | β_structural | β_cycle | β_AI | n periods | R² |
+|---|---|---|---|---:|---:|
+| OEWS 1999–2025 | +0.0652 (se 0.0068, p < 0.0001) | +0.0523 (se 0.0079, p < 0.0001) | **+0.6666** (se 0.1812, p = 0.0016) | 22 | 0.797 |
+| CPS rollup 1983–2025 | +0.0918 (se 0.0134, p < 0.0001) | +0.0127 (se 0.0182, p = 0.49) | **−1.0684** (se 0.5001, p = 0.039) | 40 | 0.112 |
+
+Sensitivity of β_AI (same file):
+
+| Instrument | Specification | β_AI | p |
+|---|---|---:|---:|
+| OEWS | excluded periods included (n = 24) | +0.6717 | 0.0015 |
+| OEWS | linear adoption backfill | +0.5983 | 0.0019 |
+| OEWS | Gompertz adoption backfill | +0.6458 | 0.0017 |
+| CPS | partial-year 2025→26 included (n = 41) | −0.3407 | 0.19 |
+| CPS | linear adoption backfill | −1.0200 | 0.033 |
+| CPS | Gompertz adoption backfill | −1.0650 | 0.036 |
+
+Raw slopes from `forecast_period_slopes.csv`:
+- **OEWS:** the mean slope is 0.064 over 19 pre-2023 periods and 0.153 over 3 AI-era periods (0.143, 0.167, 0.149).
+- **CPS:** the mean slope is 0.091 over 37 pre-2023 periods and 0.003 over 3 AI-era periods (0.094, 0.035, −0.121). One period, 2024→25, carries most of that difference.
+
+What follows from these numbers:
+
+- **The structural term is positive and significant on both instruments.** In ordinary years, sectors the model scores as absorbing labor gain share. This agrees with the composition model's non-cyclical baseline.
+- **The cycle term is significant on OEWS only** (+0.0523, p < 0.0001, against +0.0127, p = 0.49).
+- **β_AI has opposite signs: p = 0.0016 on OEWS and p = 0.039 on CPS in the main specification.** Both rest on three AI-era periods, so these p-values, computed with n = 22 and 40, overstate the evidence for this term. The sensitivity rows vary the adoption backfill or the excluded periods, not those three periods, so they do not test its identification. The CPS decrement loses significance when the partial-year 2025→26 period is added (p = 0.19). On both instruments, one of the three periods (2022→23) overlaps post-COVID rehiring.
+- **The spec's checkpoint condition (β_AI positive at p < 0.10 on at least one instrument) was met by OEWS.** It did not anticipate CPS being significant in the opposite direction. The decision to continue and show both is recorded in the implementation plan's Deviations log.
+
+### Adoption driver
+
+`btos_adoption.py` combines BTOS Question 7 across the two wordings, using a fitted multiplicative splice. Measured 2026-10-02 from `btos_adoption_fits.csv`:
+
+| Fit | Splice multiplier | 2025-12 | 2030-12 | Status |
+|---|---:|---:|---:|---|
+| Linear | 0.560 | 17.9% | 45.5% | accepted |
+| Logistic | 0.631 | 17.0% | 58.1% | accepted |
+| Gompertz | 0.613 | 17.3% | 56.4% | accepted (ceiling at its 100% bound) |
+| Exponential | 0.630 | — | 159% | rejected |
+
+The Stage 2 estimation periods reach an annual adoption of 0.14 at most (2025). On 2030 annual means, the accepted fits reach 0.43 (linear), 0.53 (Gompertz) and 0.56 (logistic), which is 3.05 to 3.95 times higher. On December 2030 values, it is 3.2 to 4.1 times higher.
+
+So the projected steady-scenario 2030 slope is:
+- **OEWS:** 0.35 to 0.44, above every included historical year (maximum 0.239, 2008→09).
+- **CPS:** −0.37 to −0.51, below every historical year (minimum −0.263, 2002→03).
+
+Both projections run outside the range of slopes they were estimated from.
+
+### Projected 2030 shifts
+
+Measured 2026-10-02 from `forecast_sector_paths.csv` and `forecast_sector_stability.csv`. Reference scenario: steady unemployment, logistic adoption. n = 22 sectors.
+- **Band:** the 5th–95th percentile over 2,000 bootstrap resamples of Stage 2 periods. Replicates that could not identify β_AI were skipped (95 OEWS, 91 CPS), which narrows the band.
+- **LOO:** the range across leave-one-period-out refits.
+
+| Sector | OEWS change (band; LOO) | CPS change (band; LOO) |
+|---|---|---|
+| Office and Administrative Support | −3.26 (−5.83, −2.66; −4.45 to −2.93) | +3.47 (−1.10, +5.59; +0.70 to +4.35) |
+| Healthcare Practitioners and Technical | +0.99 (+0.79, +2.02; +0.88 to +1.43) | −0.88 (−1.34, +0.32; −1.08 to −0.19) |
+| Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.72, +0.38; −1.37 to −0.24) |
+| Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.18, +0.61; +0.10 to +0.51) |
+
+All values are percentage points. OEWS runs May 2025 → May 2030 and CPS runs August 2026 → December 2030. Because the horizons, employment bases and sector mapping differ, **only the signs are comparable across instruments, not the magnitudes.**
+
+- **The bands describe one result, not 22.** Every sector's projection is the same slope path multiplied by its fixed score, then renormalised. On OEWS the band excludes zero for 21 of 22 sectors; the exception is Farming, Fishing, and Forestry, whose score sits at the employment-weighted mean (projected change +0.001 pp). On CPS it excludes zero for 1 of 22 (Business and Financial Operations, itself near zero at −0.03 pp). The bands exclude sector noise and specification uncertainty. They do not cover the disagreement between instruments.
+- **Leave-one-period-out keeps each sector's sign on each instrument, but not its size on CPS.** Dropping a single period moves CPS's Office and Administrative Support projection anywhere from +0.70 to +4.35 pp, against a point estimate of +3.47. No leave-one-period-out range was computed for β_AI itself.
+- **Scenario choice moves sizes, not signs.** Across the six scenario combinations, Office and Administrative Support changes by −2.81 to −3.26 pp on OEWS and +2.53 to +3.47 pp on CPS. The recession scenario barely moves the 2030 end-point because its unemployment changes sum to zero over 2027–2029.
+
+Allocated to occupations (OEWS only, 770 occupations), the share of scored employment in Bounded-dominant occupations is 67.95%, 67.65% or 67.52% by May 2030 (linear, Gompertz, logistic), against 70.44% in May 2025. This happens because Bounded-dominant occupations are concentrated in sectors the OEWS projection shrinks. The allocation shows no movement of workers between occupations, and the CPS projection would reverse it.
+
+**Reading.**
+- **Under OEWS's AI-term estimate,** the projection lowers Office and Administrative Support's employment share by about three points by 2030, with total employment held fixed.
+- **Under CPS's estimate,** it raises that share by a similar amount.
+
+Both outcomes are conditional on an AI term identified by three periods and applied far beyond its estimation range. Which instrument's AI-era slope is right matters far more than which scenario is chosen, and current data cannot settle it.
+
+### Limitations
+
+- **β_AI rests on three AI-era periods per instrument.** On both instruments one of them overlaps post-COVID rehiring. The AI effect is assumed linear in adoption.
+- **Adoption is extrapolated** three to four times beyond its estimation range, and the projected 2030 slopes lie outside the historical range on both instruments.
+- **CPS classification seams are kept** in CPS Stage 2 without a sensitivity row.
+- **Scores are fixed** at the 2025 penetration pattern.
+- **Projection skill is unmeasured.** No rolling-origin backtest against naive baselines was run. Leave-one-period-out measures stability, not accuracy.
+- **Occupation figures are an allocation** of sector change. There is no occupation-level signal in current BLS data.

@@ -40,7 +40,8 @@ The pipeline has two distinct phases:
 2. `synthesize_impacts` — joins classified tasks with Anthropic's task penetration scores, computes per-occupation impact scores
 3. `generate_plots` — produces visualizations from the impact report
 4. `validate_bls` — correlates model predictions against actual BLS employment/wage trends
-5. `synthesize_composition` — **experimental**: the demand composition model, which strips all AI data from the predictor to test whether the Bounded/Unbounded/Adversarial taxonomy applies before AI. Runs last because its era comparison scores against the AI dynamic model that `validate` writes. See `docs/framework.md` § Demand Composition Model.
+5. `synthesize_composition` — **experimental**: the demand composition model, which strips all AI data from the predictor to test whether the Bounded/Unbounded/Adversarial taxonomy applies before AI. Runs after `validate` because its era comparison scores against the AI dynamic model that `validate` writes. See `docs/framework.md` § Demand Composition Model.
+6. `forecast_composition` — projects sector composition to 2030 from a decomposition of how strongly the dynamic score has sorted sector shares each year (structural + unemployment cycle + BTOS AI adoption), under unemployment and adoption scenarios; occupations receive an allocation of their sector's change. Runs last: it reads the dynamic report and the composition stage's CPS rollup. See `docs/framework.md` § Composition Forecast.
 
 ## Project Goal
 
@@ -94,6 +95,7 @@ The workflow (`.github/workflows/release.yml`) downloads fresh O\*NET, Anthropic
 | `cps_a19_panel.csv` | every run (rolling two-month A-19 page) | merging the release's `release-artifacts/<tag>` PR; after a local run, `cp` by hand |
 | `dws_displacement_panel.csv` | every run (current DWS release only) | same as above. `python dws_panel.py` rebuilds history from raw archives for comparison only, never promoted |
 | `cps_occupation_panel.csv` | composition stage (inline BLS API fetch) | `cp` by hand — `release.yml` does not promote it yet |
+| `btos_ai_use.csv` | every run (census.gov `National.xlsx`, new wording only) | `cp data/output/btos_ai_use.csv seeds/` by hand — `release.yml` does not promote it |
 | `cps_detailed_occupation_panel.csv`, `cps_detailed_occ_crosstab.csv`, `cps_detailed_gates.csv` | local IPUMS build only, never CI (`cps_detailed_panel.py build`) | `python cps_detailed_panel.py promote` — refuses unless gates G1/G2/G5/G6 pass |
 | `dws_detailed_panel.csv`, `dws_detailed_gates.csv` | local IPUMS build only, never CI (`dws_detailed_panel.py build`) | `python dws_detailed_panel.py promote` — refuses unless gates G3/G6D pass |
 | `mlr_occupation_crosswalk.csv`, `oews_aggregate_codes.csv`, `occ1990dd_groups.csv`, `soc_crosswalks/`, `cps_soc_crosswalks/`, `occ1990dd_crosswalks/` | never — static published or hand-derived reference data | edited directly, deliberately |

@@ -11,7 +11,7 @@
 This is each sector's projected change in employment share, in percentage points, from the start date to 2030. It uses the reference scenario: steady unemployment and logistic AI adoption. Sectors are ordered by the OEWS projection, and the two panels share that order.
 
 - **OEWS:** May 2025 → May 2030, from OEWS sector totals.
-- **CPS:** August 2026 → December 2030, from CPS Table A-19. A-19 is a different CPS product from the 22-sector rollup the CPS slope is estimated on. Their 2025 sector shares differ by 0.14 pp on average and at most 0.37 pp (measured 2026-10-02).
+- **CPS:** September 2026 → December 2030, from the CPS A-19 monthly panel, projected from the raw (not seasonally adjusted) September 2026 shares. A-19 is a different CPS product from the 22-sector rollup the CPS slope is estimated on. Their 2025 sector shares (the panel's eleven 2025 months against the rollup's 2025 annual average) differ by 0.10 pp on average and at most 0.37 pp (measured 2026-10-02, n = 22 sectors). The seasonally adjusted start is charted in `forecast_cps_start_basis.md`.
 
 Each sector shows:
 - **Dot:** the projected change, blue for a gain and red for a loss.
@@ -26,18 +26,18 @@ Measured 2026-10-02 from `forecast_sector_paths.csv` (filter `unemployment_scena
 
 | Sector | OEWS change (band; LOO) | CPS change (band; LOO) |
 |---|---|---|
-| Office and Administrative Support | −3.26 (−5.83, −2.66; −4.45 to −2.93) | +3.47 (−1.10, +5.59; +0.70 to +4.35) |
-| Healthcare Practitioners and Technical | +0.99 (+0.79, +2.02; +0.88 to +1.43) | −0.88 (−1.34, +0.32; −1.08 to −0.19) |
-| Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.72, +0.38; −1.37 to −0.24) |
-| Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.18, +0.61; +0.10 to +0.51) |
+| Office and Administrative Support | −3.26 (−5.83, −2.66; −4.45 to −2.93) | +3.41 (−1.08, +5.50; +0.70 to +4.28) |
+| Healthcare Practitioners and Technical | +0.99 (+0.79, +2.02; +0.88 to +1.43) | −0.87 (−1.32, +0.32; −1.07 to −0.19) |
+| Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.71, +0.38; −1.36 to −0.24) |
+| Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.17, +0.61; +0.10 to +0.50) |
 
-LOO is the range across leave-one-period-out refits.
+LOO is the range across leave-one-period-out refits. CPS rows use the raw start (`start_basis == "raw"`). From the seasonally adjusted start the same four sectors read +3.43, −0.88, −1.09 and +0.42; across all 22 sectors the largest raw-versus-adjusted gap in projected change is 0.018 pp and 0 of 22 change sign.
 
-**Only the signs are comparable across the panels, not the magnitudes.** The horizons differ (60 against about 52 months), the employment bases differ, and CPS reaches SOC sectors through a crosswalk.
+**Only the signs are comparable across the panels, not the magnitudes.** The horizons differ (60 against 51 months), the employment bases differ, and CPS reaches SOC sectors through a crosswalk.
 
-**The bands show one result repeated, not 22 independent ones.** Every sector's projection is the same slope path multiplied by that sector's fixed score. The OEWS band excludes zero for 21 of 22 sectors; the exception, Farming, Fishing, and Forestry, has a score at the employment-weighted mean. The CPS band excludes zero for 1 of 22. OEWS's narrower bands reflect its smaller β_AI standard error (0.18 against 0.50). They do not show that OEWS is the right instrument, and neither band covers the disagreement between instruments.
+**The bands show one result repeated, not 22 independent ones.** Every sector's projection is the same slope path multiplied by that sector's fixed score. The OEWS band excludes zero for 21 of 22 sectors; the exception, Farming, Fishing, and Forestry, has a score at the employment-weighted mean. The CPS band excludes zero for 0 of 22. OEWS's narrower bands reflect its smaller β_AI standard error (0.18 against 0.50). They do not show that OEWS is the right instrument, and neither band covers the disagreement between instruments.
 
-**Leave-one-period-out refits keep every tabled sector's sign, but CPS sizes depend on single periods.** Office and Administrative Support's CPS projection ranges from +0.70 to +4.35 pp when one period is dropped.
+**Leave-one-period-out refits keep every tabled sector's sign, but CPS sizes depend on single periods.** Office and Administrative Support's CPS projection ranges from +0.70 to +4.28 pp when one period is dropped. Across all 22 sectors the refits keep the point estimate's sign for 22 of 22 on OEWS and 20 of 22 on CPS; the two exceptions (Business and Financial Operations, Farming, Fishing, and Forestry) project changes within 0.03 pp of zero.
 
 ## Limitations
 

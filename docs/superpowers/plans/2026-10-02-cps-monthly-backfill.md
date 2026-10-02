@@ -1399,12 +1399,12 @@ git commit -m "Backfill the A-19 seed to 2020-01 and document the start-basis ch
 **Files:**
 - Modify: `docs/framework.md` (§ Composition Forecast, ~lines 1170–1260), `docs/charts/forecast_sector_change_2030.md`, `docs/charts/cps_model_vs_actual.md`, `docs/charts/cps_2026_direction.md`, `docs/charts/composition_model_signal_over_time_cps.md`, `docs/outputs.md` (`cps_occupation_panel.csv` row's "2026 currently holds 8 months"; `cps_a19_panel.csv` row), `docs/seeds.md` (cps_a19 paragraph), `CLAUDE.md` (BLS downloads paragraph and seeds table row), `docs/cps_data_expansion.md` (status line)
 
-- [ ] **Step 1: Find every stale figure**
+- [x] **Step 1: Find every stale figure**
 
 Run: `grep -rn -E "Aug(ust)? 2026|2026-08|Apr 2025|Jan–Aug|8 months|six months|two months" docs/*.md docs/charts/*.md README.md CLAUDE.md`
 Every hit is either updated in Step 2 or left with a reason recorded in the Deviations log (some, such as the IPUMS rollup's 8 months, are still true).
 
-- [ ] **Step 2: Update the prose**
+- [x] **Step 2: Update the prose**
 
 Use the `record-measured-result` skill for every number. Content to carry:
 - `framework.md` § Composition Forecast: the CPS start is September 2026; report both starts in the 2030 table (raw primary, adjusted alongside) and state the largest raw-vs-adjusted difference; the CPS excluded period reads "2026 averages 8 months" and comes from the IPUMS panel.
@@ -1417,7 +1417,7 @@ Use the `record-measured-result` skill for every number. Content to carry:
 
 Dispatch the `claims-auditor` agent on every file changed in Step 2, and the `inference-reviewer` agent on the `framework.md` section and the CPS chart pages. Fix every finding. Run `uv run check_charts.py` and `uv run pytest tests/ -q`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs CLAUDE.md README.md docs/superpowers/plans/2026-10-02-cps-monthly-backfill.md
@@ -1533,3 +1533,9 @@ git commit -m "Add the monthly CPS update skill"
 **Task 8, Step 6 (note):** The claims-auditor dispatch moved to the controller's review; the box for it is unticked. The implementer instead listed every figure in `docs/charts/forecast_cps_start_basis.md` with its reproducing filter in the task report. Step 4 also copied `forecast_slope_history.png`, which check_charts reported stale after the backfill, in addition to `forecast_sector_change_2030.png` and the new chart.
 
 **Task 8 (controller ruling):** The start-basis chart gained a second panel (2030 share difference, adjusted minus raw) because the change comparison alone hides the seasonal effect, which sits in the start level and cancels out of a change.
+
+**Task 9 (note):** Step 3's claims-auditor and inference-reviewer dispatches moved to the controller's review, so its box is unticked; the implementer ran `check_charts.py` (53 fresh, 0 stale) and `pytest tests/ -q` (815 passed, 6 skipped, 1 xfailed, 7 warnings) and listed every figure with its reproducing command in the task report.
+
+**Task 9 (scope additions):** `docs/charts/model_signal_over_time.md` was edited although the brief names `composition_model_signal_over_time_cps.md` for the CPS endpoints: the A-19 endpoint table (now May–Sep 2026, April dropped because its window starts before the OEWS handoff) lives in the former. The latter changed for a different reason. The ten-group CPS series behind it (`cps_occupation_panel.csv`, fetched inline from the BLS API) now holds nine 2026 months, not eight, so its era comparison, cycle decomposition, 8-group sensitivity and matched-month sensitivity were re-measured and updated there and in `framework.md` (the CPS-instrument paragraph). The matched-month figures come from the 10 `CPS_GROUP_SERIES` monthly values re-fetched from the BLS API, Jan–Sep of 2025 and 2026.
+
+**Task 9, Step 1 (hits left unchanged):** `docs/cps_data_expansion.md` lines 7, 9, 11, 12, 13 and 19 are the proposal's analysis of the state before the backfill ("six months", "Apr 2025", "three so far", "verified 2026-08-02"); the brief says to leave the analysis intact and only the status line changed. `docs/framework.md` § Composition Forecast states "2026 averages 8 months" on purpose, because it describes the IPUMS detailed panel (still eight 2026 months). The `docs/outputs.md` `cps_occupation_panel.csv` hit was updated to 9 months, since that panel is fetched inline from the BLS API, not built from IPUMS. `docs/seeds.md` "two months" describes the A-19 page itself, which still carries two.

@@ -794,15 +794,15 @@ comparable in magnitude.
 
 Run through the same era comparison and cycle decomposition as the sector-level
 result above, `composition_net_change` on the CPS instrument is a null: the
-AI-era mean r (+0.256, n=4 periods) is not distinguishable from the pre-2022
-mean (+0.425, n=37 periods; Welch p = 0.445), and the cycle decomposition's
-`ai_era` term is negative and non-significant (n=41 periods, R² = 0.023). Under
+AI-era mean r (+0.250, n=4 periods) is not distinguishable from the pre-2022
+mean (+0.425, n=37 periods; Welch p = 0.430), and the cycle decomposition's
+`ai_era` term is negative and non-significant (n=41 periods, R² = 0.025). Under
 this project's anachronism rule — 2025 O\*NET labels are strong evidence when
 they still produce a positive result, but uninformative rather than
 disconfirming when they do not — this null says nothing against the taxonomy.
 One divergence is worth flagging rather than burying: the business-cycle term
 that is significant at sector level (+0.137, p = 0.002) vanishes at CPS level
-(+0.030, p = 0.692), and the data on hand do not distinguish between candidate
+(+0.030, p = 0.691), and the data on hand do not distinguish between candidate
 explanations (ten-group aggregation, genuinely different pre-1999 cyclical
 behaviour, and instrument differences). Full numbers, the two internal
 comparability breaks the CPS series carries, and the composition-stability
@@ -1174,7 +1174,7 @@ The sector-level evidence above is a correlation. A correlation says the score a
 
 Each instrument is estimated on its own history and drives its own projection; the two are never spliced:
 - **OEWS:** sector totals 1999–2025, projected from May 2025.
-- **CPS:** estimated on the 22-sector rollup 1983–2025, projected from CPS Table A-19 (August 2026). A-19 is a different CPS product from the rollup. Their 2025 sector shares (the mean of A-19's three 2025 months against the rollup's 2025 annual average) differ by 0.14 pp on average and by at most 0.37 pp (Computer and Mathematical). Measured 2026-10-02.
+- **CPS:** estimated on the 22-sector rollup 1983–2025, projected from the CPS A-19 monthly panel (September 2026). A-19 is a different CPS product from the rollup. Their 2025 sector shares (the mean of the panel's eleven 2025 months, October absent, against the rollup's 2025 annual average) differ by 0.10 pp on average and by at most 0.37 pp (Computer and Mathematical), n = 22 sectors. Measured 2026-10-02 from `cps_a19_panel.csv` and `cps_major_rollup_trends.csv`. The CPS rollup's partial-year exclusion (the 2025→26 period, "2026 averages 8 months") comes from the IPUMS detailed panel, which holds eight 2026 months, not from A-19, which holds nine.
 
 ### Stage 2 result: opposite AI terms on three periods each
 
@@ -1232,18 +1232,18 @@ Measured 2026-10-02 from `forecast_sector_paths.csv` and `forecast_sector_stabil
 - **Band:** the 5th–95th percentile over 2,000 bootstrap resamples of Stage 2 periods. Replicates that could not identify β_AI were skipped (95 OEWS, 91 CPS), which narrows the band.
 - **LOO:** the range across leave-one-period-out refits.
 
-| Sector | OEWS change (band; LOO) | CPS change (band; LOO) |
-|---|---|---|
-| Office and Administrative Support | −3.26 (−5.83, −2.66; −4.45 to −2.93) | +3.47 (−1.10, +5.59; +0.70 to +4.35) |
-| Healthcare Practitioners and Technical | +0.99 (+0.79, +2.02; +0.88 to +1.43) | −0.88 (−1.34, +0.32; −1.08 to −0.19) |
-| Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.72, +0.38; −1.37 to −0.24) |
-| Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.18, +0.61; +0.10 to +0.51) |
+| Sector | OEWS change (band; LOO) | CPS change, raw start (band; LOO) | CPS change, seasonally adjusted start |
+|---|---|---|---:|
+| Office and Administrative Support | −3.26 (−5.83, −2.66; −4.45 to −2.93) | +3.41 (−1.08, +5.50; +0.70 to +4.28) | +3.43 |
+| Healthcare Practitioners and Technical | +0.99 (+0.79, +2.02; +0.88 to +1.43) | −0.87 (−1.32, +0.32; −1.07 to −0.19) | −0.88 |
+| Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.71, +0.38; −1.36 to −0.24) | −1.09 |
+| Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.17, +0.61; +0.10 to +0.50) | +0.42 |
 
-All values are percentage points. OEWS runs May 2025 → May 2030 and CPS runs August 2026 → December 2030. Because the horizons, employment bases and sector mapping differ, **only the signs are comparable across instruments, not the magnitudes.**
+All values are percentage points. OEWS runs May 2025 → May 2030 and CPS runs September 2026 → December 2030. The CPS raw start is the primary result; the seasonally adjusted start divides each sector's September 2026 share by its September seasonal factor (`cps_seasonal_factors.csv`) and renormalises. Bands and LOO ranges are given for the raw start only. The two starts differ little in projected change: across the 22 sectors the largest absolute raw-versus-adjusted gap is 0.018 pp (Office and Administrative Support, +3.414 raw against +3.432 adjusted), the median is 0.002 pp, and 0 of 22 sectors change sign. The 2030 share gap is larger, up to 0.139 pp (Building and Grounds Cleaning and Maintenance), because it carries the start-share adjustment through almost unchanged (see `docs/charts/forecast_cps_start_basis.md`). Measured 2026-10-02 from `forecast_sector_paths.csv` (`instrument == "cps"`, steady, logistic, `as_of` 2026-09 and 2030-12, both `start_basis` values, n = 22 sectors). Because the horizons, employment bases and sector mapping differ, **only the signs are comparable across instruments, not the magnitudes.**
 
-- **The bands describe one result, not 22.** Every sector's projection is the same slope path multiplied by its fixed score, then renormalised. On OEWS the band excludes zero for 21 of 22 sectors; the exception is Farming, Fishing, and Forestry, whose score sits at the employment-weighted mean (projected change +0.001 pp). On CPS it excludes zero for 1 of 22 (Business and Financial Operations, itself near zero at −0.03 pp). The bands exclude sector noise and specification uncertainty. They do not cover the disagreement between instruments.
-- **Leave-one-period-out keeps each sector's sign on each instrument, but not its size on CPS.** Dropping a single period moves CPS's Office and Administrative Support projection anywhere from +0.70 to +4.35 pp, against a point estimate of +3.47. No leave-one-period-out range was computed for β_AI itself.
-- **Scenario choice moves sizes, not signs.** Across the six scenario combinations, Office and Administrative Support changes by −2.81 to −3.26 pp on OEWS and +2.53 to +3.47 pp on CPS. The recession scenario barely moves the 2030 end-point because its unemployment changes sum to zero over 2027–2029.
+- **The bands describe one result, not 22.** Every sector's projection is the same slope path multiplied by its fixed score, then renormalised. On OEWS the band excludes zero for 21 of 22 sectors; the exception is Farming, Fishing, and Forestry, whose score sits at the employment-weighted mean (projected change +0.001 pp). On CPS (raw start) it excludes zero for 0 of 22. The bands exclude sector noise and specification uncertainty. They do not cover the disagreement between instruments.
+- **Leave-one-period-out keeps each sector's sign on OEWS (22 of 22) and on CPS for 20 of 22, but not CPS's size.** The two CPS exceptions, Business and Financial Operations (−0.027 pp point estimate, range −0.043 to +0.0002) and Farming, Fishing, and Forestry (range −0.0016 to +0.0006), sit within 0.03 pp of zero. Dropping a single period moves CPS's Office and Administrative Support projection anywhere from +0.70 to +4.28 pp, against a point estimate of +3.41. No leave-one-period-out range was computed for β_AI itself.
+- **Scenario choice moves sizes, not signs.** Across the six scenario combinations, Office and Administrative Support changes by −2.81 to −3.26 pp on OEWS and +2.49 to +3.41 pp on CPS (raw start). The recession scenario barely moves the 2030 end-point because its unemployment changes sum to zero over 2027–2029.
 
 Allocated to occupations (OEWS only, 770 occupations), the share of scored employment in Bounded-dominant occupations is 67.95%, 67.65% or 67.52% by May 2030 (linear, Gompertz, logistic), against 70.44% in May 2025. This happens because Bounded-dominant occupations are concentrated in sectors the OEWS projection shrinks. The allocation shows no movement of workers between occupations, and the CPS projection would reverse it.
 

@@ -1,6 +1,6 @@
 # Using CPS more fully: building real monthly history
 
-**Status: proposal. Nothing here is implemented.**
+**Status: Steps 1–4 implemented (2026-10-02, `docs/superpowers/plans/2026-10-02-cps-monthly-backfill.md`); step 5 (unemployment by occupation) not started.**
 
 ## Why this exists
 

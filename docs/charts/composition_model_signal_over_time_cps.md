@@ -84,23 +84,25 @@ as a real employment shift.
 The underlying series is not seasonally adjusted, and `fetch_annual_means`
 averages whatever months BLS has published for a year — it does not require a
 full twelve. In the cache behind this chart, 2025 carries 11 months (October
-is unpublished) and 2026 carries 8 (January–August), so `emp_growth_2025_2026`
+is unpublished) and 2026 carries 9 (January–September), so `emp_growth_2025_2026`
 — one of only four CPS AI-era periods — compares two unequal, seasonally
 unbalanced month sets: an NSA series has a within-year seasonal shape, so
-averaging 8 months of one year against 11 of another is not the same
+averaging 9 months of one year against 11 of another is not the same
 comparison as averaging matched months of both. The panel now carries a
 `months_observed` column recording how many months back each annual mean, so
 this is visible rather than silent.
 
 The period is kept, not dropped: excluding it would discard one of only four
 CPS AI-era observations to correct a shift that changes neither sign nor
-significance. Recomputed on matched months (January–August of both 2025 and
-2026), `emp_growth_2025_2026`'s Pearson r moves from **+0.259 to +0.330** for
-`composition_net_change` and from **+0.204 to +0.346** for
-`occupation_exposure` — both shifts point the same direction (stronger, not
-weaker) and neither crosses zero or a significance threshold at n=10. Treat
-the headline numbers below as a slight understatement of this period's fit,
-not a distortion of its sign.
+significance. Measured 2026-10-02, recomputed on matched months (January–September
+of both 2025 and 2026; n = 10 groups), `emp_growth_2025_2026`'s Pearson r moves
+from **+0.233 (p = 0.517) to +0.337 (p = 0.341)** for `composition_net_change`
+and from **+0.093 (p = 0.798) to +0.253 (p = 0.480)** for `occupation_exposure`
+— both shifts point the same direction (stronger, not weaker) and neither
+crosses zero or the n=10 significance threshold (|r| ≈ 0.63). Treat the headline
+numbers below as an understatement of this period's fit, not a distortion of its
+sign. (Before September 2026 was published the same recomputation on
+January–August read +0.259 to +0.330 and +0.204 to +0.346.)
 
 ## The anachronism rule, and what the era result means under it
 
@@ -113,14 +115,14 @@ result, below, is a null — report it as uninformative, not as evidence against
 the taxonomy.
 
 **Era comparison** (`composition_model_era_comparison_cps.csv`,
-`composition_net_change`): pre-2022 mean r = +0.425 (n=37 periods), AI-era mean
-r = +0.256 (n=4 periods), difference −0.169, Welch p = 0.445 — not
-distinguishable from zero.
+`composition_net_change`; measured 2026-10-02): pre-2022 mean r = +0.425 (n=37
+periods), AI-era mean r = +0.250 (n=4 periods), difference −0.175, Welch
+p = 0.430 — not distinguishable from zero.
 
 **Cycle decomposition** (`composition_cycle_decomposition_cps.csv`,
-`composition_net_change`, n=41 periods, R² = 0.023): intercept +0.4603
-(p < 0.0001), `unemployment_change` +0.0298 (p = 0.692), `ai_era` −0.2026
-(p = 0.370). The R² and the intercept are answering two different questions,
+`composition_net_change`, n=41 periods, R² = 0.025): intercept +0.4603
+(p < 0.0001), `unemployment_change` +0.0300 (p = 0.691), `ai_era` −0.2096
+(p = 0.354). The R² and the intercept are answering two different questions,
 not contradicting each other: the intercept asks whether mean period-level fit
 strength is above zero across the whole 1983–2026 span (it robustly is), while
 R² asks whether unemployment change and an AI-era indicator explain the
@@ -129,7 +131,7 @@ of aggregation and power).
 
 One divergence from the sector-level result is worth stating rather than
 burying: the business-cycle term is significant at sector level (+0.137,
-p = 0.002, n=24 periods) but vanishes at CPS level (+0.030, p = 0.692, n=41).
+p = 0.002, n=24 periods) but vanishes at CPS level (+0.030, p = 0.691, n=41).
 Candidate explanations include the ten-group aggregation washing out cyclical
 sorting that survives at 22 sectors, genuinely different pre-1999 cyclical
 behaviour, and differences between the two instruments themselves. None of
@@ -154,14 +156,14 @@ majors drops exactly **two** CPS groups, leaving eight:
 
 | | pre-2022 mean r | AI-era mean r | difference | Welch p |
 |---|---:|---:|---:|---:|
-| Full sample (10 groups) | +0.425 | +0.256 | −0.169 | 0.445 |
-| Excluding least-stable (8 groups) | +0.386 | +0.277 | −0.109 | 0.674 |
+| Full sample (10 groups) | +0.425 | +0.250 | −0.175 | 0.430 |
+| Excluding least-stable (8 groups) | +0.386 | +0.270 | −0.115 | 0.657 |
 
 | Term | Full sample | Excluding least-stable |
 |---|---:|---:|
 | intercept | +0.460 (p < 0.0001) | +0.402 (p < 0.0001) |
 | `unemployment_change` | +0.030 | −0.021 |
-| `ai_era` | −0.203 | −0.115 |
+| `ai_era` | −0.210 | −0.122 |
 
 **No sign or significance flip on any headline number.** Two caveats bound how
 much that is worth: (a) at n=8, the significance threshold rises to

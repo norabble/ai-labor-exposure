@@ -119,31 +119,41 @@ deliberate.** Three things make a spliced series misleading:
    score on the x-axis is built identically in both cases — an employment-weighted
    mean over occupations, weighted by `TOT_EMP_2025` — so only the y-variable
    differs, but that is enough.
-3. **No overlapping period exists to calibrate them.** The panel's earliest month
-   is Apr 2025 and OEWS's last reference month is May 2025. There is no span both
-   surveys measure, so the offset between them cannot be estimated and removed.
-   Any apparent jump from the last OEWS point to the CPS panel is of unknown
-   composition — part survey difference, part real change.
+3. **No overlapping period exists to calibrate them.** The panel reaches back to
+   2020-01 and carries May 2025, OEWS's last reference month, so the two surveys
+   share exactly one month, not a span. One month does not give an estimate of the
+   offset between them, so it cannot be removed. Any apparent jump from the last
+   OEWS point to the CPS panel is of unknown composition — part survey difference,
+   part real change.
 
-**The panel's x-axis is the endpoint month, not time.** A-19 hands over the latest
-month and the same month a year earlier in one release, so each fetch contributes
-one year-over-year pair. The panel currently holds three (Apr, Jun, Aug), and all
-three measure *the same 12-month 2025→2026 span* from endpoints two months apart.
-The points are drawn hollow and deliberately **unconnected**: their vertical
-spread is endpoint sensitivity, not a trend. Reading the three as a rising or
-falling sequence is the specific misreading this layout exists to prevent.
+**The panel's x-axis is the endpoint month, not time.** Each endpoint pairs a
+CPS month with the same month a year earlier, and only pairs whose year-earlier
+month is at or after May 2025 (OEWS's last reference month) are kept, so the
+endpoints are May, Jun, Jul, Aug and Sep 2026. April 2026 is dropped: its window
+starts in April 2025, a month before OEWS's handoff, so it overlaps a period OEWS
+already covers. The five windows overlap one another (adjacent windows share eleven of
+their twelve months), and all five measure *nearly the same 12-month
+2025→2026 span* from endpoints up to four months apart, so they are repeated
+measurements of one period, not five independent tests. The points are drawn
+hollow and deliberately **unconnected**: their vertical spread is endpoint
+sensitivity, not a trend. Reading the five as a rising or falling sequence is the
+specific misreading this layout exists to prevent.
 
 ### What the panel currently shows
 
-| Model | Apr | Jun | Aug | Spread |
-|-------|----:|----:|----:|-------:|
-| Rebound-adjusted (−r = correct) | +0.28 | +0.09 | +0.12 | 0.19 |
-| Dynamic net change (+r = correct) | −0.03 | +0.13 | +0.18 | 0.22 |
-| Observed AI coverage (−r = correct) | +0.08 | +0.07 | +0.03 | 0.05 |
+Measured 2026-10-02 from the validate stage's console output (`CPS year-over-year signal`; n = 22 sectors per endpoint; p in parentheses). The n = 22 significance threshold is |r| ≈ 0.42.
 
-**The dynamic model does not reproduce on CPS.** Two of three endpoints are
-weakly positive and none approaches significance, well below its AI-era OEWS
-values (+0.53, +0.48). This changed when Adversarial share was added to absorption
+| Model | May | Jun | Jul | Aug | Sep | Spread |
+|-------|----:|----:|----:|----:|----:|-------:|
+| Rebound-adjusted (−r = correct) | +0.113 (0.617) | +0.094 (0.676) | +0.173 (0.440) | +0.124 (0.582) | +0.038 (0.867) | 0.135 |
+| Dynamic net change (+r = correct) | +0.303 (0.171) | +0.133 (0.556) | +0.061 (0.788) | +0.181 (0.421) | +0.190 (0.396) | 0.242 |
+| Observed AI coverage (−r = correct) | +0.324 (0.141) | +0.069 (0.762) | +0.057 (0.801) | +0.029 (0.897) | +0.011 (0.960) | 0.313 |
+
+None of the 15 values is significant (0 of 15; smallest p = 0.141).
+
+**The dynamic model does not reproduce on CPS.** All five endpoints are positive,
+the correct sign, but none is significant (largest +0.303, p = 0.171), and all
+sit well below its AI-era OEWS values (+0.53, +0.48). This changed when Adversarial share was added to absorption
 capacity: the previous model version read +0.24, +0.37 and +0.48 (p = 0.023)
 here, and the Adversarial-heavy sectors whose scores rose — Legal, Sales,
 Protective Service, Management — fit their 2022→2025 OEWS growth better but
@@ -152,14 +162,15 @@ discussion. The cross-survey replication is an open question.
 
 **The rebound-adjusted model disagrees with itself across surveys.** Its OEWS
 AI-era values are clearly negative (−0.41 in 2023→24, −0.35 in 2024→25), which is
-the correct sign. All three CPS endpoints are positive, which is the wrong one.
-None of the CPS values approach significance (the largest, +0.28, is far from it),
-so this is a failure to reproduce rather than a contradiction — but it is a
+the correct sign. All five CPS endpoints are positive, which is the wrong one.
+None of the CPS values approach significance (the largest, +0.173, p = 0.440, is
+far from it), so this is a failure to reproduce rather than a contradiction — but it is a
 caution against treating the OEWS-era negative signal as established. Which of the
 three explanations above accounts for the flip is not determinable from the data
 on hand.
 
-**Observed AI coverage is flat and slightly wrong-signed** on employment,
+**Observed AI coverage is wrong-signed at all five endpoints** on employment
+(none significant; it falls from +0.324 in May to +0.011 in Sep),
 consistent with its weak employment showing throughout. (Its sector-level
 *wage* signal is a different matter — see
 `anthropic_observed_sector_level_wage_validation.md`.)

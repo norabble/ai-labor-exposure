@@ -149,14 +149,14 @@ Measured 2026-10-02 from the validate stage's console output (`CPS year-over-yea
 | Dynamic net change (+r = correct) | +0.303 (0.171) | +0.133 (0.556) | +0.061 (0.788) | +0.181 (0.421) | +0.190 (0.396) | 0.242 |
 | Observed AI coverage (−r = correct) | +0.324 (0.141) | +0.069 (0.762) | +0.057 (0.801) | +0.029 (0.897) | +0.011 (0.960) | 0.313 |
 
-None of the 15 values is significant (0 of 15; smallest p = 0.141).
+No model is significant at any endpoint month (smallest p = 0.141).
 
 **The dynamic model does not reproduce on CPS.** Across the five endpoint months
 of the one 2025→2026 span, r ranges from +0.061 to +0.303 (the correct sign), and
 none is significant at n = 22 (smallest p = 0.171). The range is endpoint
 sensitivity, not five tests, and all five sit below its AI-era OEWS values (+0.53, +0.48). This changed when Adversarial share was added to absorption
 capacity: the previous model version read +0.24, +0.37 and +0.48 (p = 0.023)
-here, and the Adversarial-heavy sectors whose scores rose — Legal, Sales,
+here (endpoints of the same span; the one significant value is a single endpoint of it), and the Adversarial-heavy sectors whose scores rose — Legal, Sales,
 Protective Service, Management — fit their 2022→2025 OEWS growth better but
 their 2025→2026 CPS growth worse. See `cps_model_vs_actual.md` for the
 discussion. The cross-survey replication is an open question.

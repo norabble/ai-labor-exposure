@@ -80,8 +80,11 @@ exits non-zero, matching `download_cps.js`. It runs from `make download-data`, b
   where the API was blocked) are merged as today.
 - With neither fetch present it uses the seed alone, as today.
 
-**Seed.** Grows from 176 rows to roughly 1,500. Promotion is unchanged — the release
-PR, or `cp data/output/cps_a19_panel.csv seeds/` after a local run.
+**Seed.** Grows from 176 rows to 1,760 (80 months — 2020-01 to 2026-09 less
+October 2025 — × 22 groups). Existing rows keep their values; their
+`source_reference_month` moves to the API pull's latest month, since the API is now
+what reports them. Promotion is unchanged — the release PR, or
+`cp data/output/cps_a19_panel.csv seeds/` after a local run.
 
 **Since-OEWS window.** `since_anchor` already picks the last panel month at or before
 the OEWS reference month; with May 2025 present it becomes May 2025 with no code
@@ -99,8 +102,11 @@ change.
 4. Factor = mean ratio per calendar month; `n_years` = how many ratios went in.
 5. Scale the twelve factors per group so they average exactly 1.
 
-Any factor with `n_years < 3` raises `ValueError`. Written to
-`data/output/cps_seasonal_factors.csv` and printed as a 22 × 12 table.
+Any factor with `n_years < 3` raises `ValueError`. The forecast stage calls it,
+writes `data/output/cps_seasonal_factors.csv` and prints a 22 × 12 table; if it raises
+there, the stage warns and projects the raw start only, consistent with the stage's
+fail-soft handling of withheld or partial inputs. With today's data October 2025's gap
+leaves April–December resting on exactly 3 years (2022–2024) and January–March on 4.
 
 **Starts.** `forecast_composition.cps_start_shares` gains a `start_basis` argument.
 `raw` is today's behaviour. `seasonally_adjusted` divides each group's latest-month
@@ -120,8 +126,14 @@ otherwise unchanged. One new chart, `forecast_cps_start_basis.png`: per sector, 
 start month's seasonal factor annotated. It has a `docs/charts/` page and an
 `outputs.md` row.
 
-**Excluded-period label.** `CPS_EXCLUDED_PERIODS` stops hardcoding "Jan–Aug"; the
-reason string is built from the months present for the terminal year.
+**Excluded-period label.** `CPS_EXCLUDED_PERIODS` stops being a hardcoded constant.
+The CPS slope is estimated on `cps_major_rollup_trends.csv`, which is built from the
+IPUMS detailed panel (`seeds/cps_detailed_occupation_panel.csv`), not from A-19 — so
+the new A-19 months never reach it, and its 2026 really does average 8 months. A new
+`cps_excluded_periods` reads that panel's `months_observed` for the terminal year and
+excludes the terminal period only when it is under 12, with reason
+`partial year (<year> averages <n> months)`. When the IPUMS panel is next rebuilt with a
+complete year, the period is included without a code change.
 
 ## §3 Knock-on changes
 
@@ -161,7 +173,7 @@ starts; the CPS chart pages (`cps_2026_direction.md`, `cps_model_vs_actual.md`,
 |---|---|
 | A-19 page disagrees with API on a shared month | `ValueError` |
 | A start is missing any of the 22 sectors | `ValueError` (unchanged) |
-| A seasonal factor rests on fewer than 3 years | `ValueError` |
+| A seasonal factor rests on fewer than 3 years | `ValueError` from `seasonal_factors`; the forecast stage warns and projects the raw start only |
 | API or A-19 fetch blocked, under CI | Warn, exit 0, fall back to seed |
 | API or A-19 fetch blocked, locally | Non-zero exit |
 

@@ -580,8 +580,8 @@ def plot_model_signal_over_time(
             entry_x = [cps_x_by_month[month] for month, _, _ in entries]
             entry_r = [r for _, r, _ in entries]
             # Markers only, deliberately unconnected. A line across the month axis
-            # would read as a trend, but these are one 12-month span measured from
-            # three endpoints — the vertical spread is endpoint sensitivity.
+            # would read as a trend, but these are overlapping 12-month windows from
+            # consecutive endpoints — the vertical spread is endpoint sensitivity.
             cps_ax.plot(
                 entry_x,
                 entry_r,

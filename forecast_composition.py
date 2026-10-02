@@ -569,6 +569,46 @@ def leave_one_period_out(estimate: InstrumentEstimate, start: tuple, adoption_fi
     )
 
 
+# ── Occupation allocation ──────────────────────────────────────────────────────
+
+
+def allocate_to_occupations(dynamic_report_df: pd.DataFrame, sector_paths_df: pd.DataFrame) -> pd.DataFrame:
+    """OEWS only: each occupation takes its sector's projected growth — an allocation, not an occupation forecast."""
+    employment_column = report_employment_column(dynamic_report_df)
+    occupation_df = dynamic_report_df.dropna(subset=[employment_column])[["OCC_CODE", "Title", "dominant_demand", employment_column]].copy()
+    occupation_df = occupation_df.rename(columns={employment_column: "start_employment"})
+    occupation_df["soc_major"] = occupation_df["OCC_CODE"].astype(str).str[:2].map(sector_code)
+
+    oews_paths_df = sector_paths_df[sector_paths_df["instrument"] == "oews"].copy()
+    oews_paths_df["soc_major"] = oews_paths_df["soc_major"].map(sector_code)
+    start_label = oews_paths_df["as_of"].min()
+    start_employment = (
+        oews_paths_df[oews_paths_df["as_of"] == start_label]
+        .groupby(["unemployment_scenario", "adoption_fit", "soc_major"])["employment"]
+        .first()
+    )
+    oews_paths_df["sector_growth_factor"] = (
+        oews_paths_df["employment"].to_numpy()
+        / start_employment.reindex(
+            pd.MultiIndex.from_frame(oews_paths_df[["unemployment_scenario", "adoption_fit", "soc_major"]])
+        ).to_numpy()
+    )
+
+    allocation_df = occupation_df.merge(
+        oews_paths_df[["soc_major", "unemployment_scenario", "adoption_fit", "as_of", "sector_growth_factor"]], on="soc_major", how="inner"
+    )
+    allocation_df["allocated_employment"] = allocation_df["start_employment"] * allocation_df["sector_growth_factor"]
+    return allocation_df.drop(columns="sector_growth_factor")
+
+
+def demand_type_shares(allocation_df: pd.DataFrame) -> pd.DataFrame:
+    """Share of allocated employment by dominant_demand, per scenario and as_of."""
+    keys = ["unemployment_scenario", "adoption_fit", "as_of"]
+    by_type = allocation_df.groupby([*keys, "dominant_demand"])["allocated_employment"].sum().rename("employment").reset_index()
+    by_type["share"] = by_type["employment"] / by_type.groupby(keys)["employment"].transform("sum")
+    return by_type.drop(columns="employment")
+
+
 def run_stage() -> None:
     """The `forecast` pipeline stage."""
     estimation = run_estimation()
@@ -593,6 +633,12 @@ def run_stage() -> None:
     sector_paths_df.to_csv(SECTOR_PATHS_OUTPUT_PATH, index=False)
     pd.concat(stability_frames, ignore_index=True).to_csv(STABILITY_OUTPUT_PATH, index=False)
     print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}\n  ✓ {STABILITY_OUTPUT_PATH}")
+
+    dynamic_report_df, _ = _load_inputs()
+    allocation_df = allocate_to_occupations(dynamic_report_df, sector_paths_df)
+    final_label = allocation_df["as_of"].max()
+    allocation_df[allocation_df["as_of"] == final_label].to_csv(OCCUPATION_OUTPUT_PATH, index=False)
+    print(f"  ✓ {OCCUPATION_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

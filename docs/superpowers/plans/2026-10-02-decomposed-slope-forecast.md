@@ -1788,7 +1788,7 @@ git commit -m "Add bootstrap bands, sector noise and leave-one-period-out stabil
 - Consumes: `sector_paths_df` (Task 8), `report_employment_column` (Task 3).
 - Produces: `allocate_to_occupations(dynamic_report_df, sector_paths_df) -> pd.DataFrame` — OEWS only, every as_of, columns `OCC_CODE, Title, soc_major, dominant_demand, unemployment_scenario, adoption_fit, as_of, start_employment, allocated_employment`; `demand_type_shares(allocation_df) -> pd.DataFrame` — columns `unemployment_scenario, adoption_fit, as_of, dominant_demand, share`.
 
-- [ ] **Step 1: Write the failing tests** (append)
+- [x] **Step 1: Write the failing tests** (append)
 
 ```python
 from forecast_composition import allocate_to_occupations, demand_type_shares
@@ -1849,12 +1849,12 @@ class TestAllocation:
         assert final["Unbounded"] == pytest.approx(55.0 / 100.0)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_forecast_composition.py::TestAllocation -v`
 Expected: FAIL — `ImportError: cannot import name 'allocate_to_occupations'`
 
-- [ ] **Step 3: Append the allocation**
+- [x] **Step 3: Append the allocation**
 
 ```python
 # ── Occupation allocation ──────────────────────────────────────────────────────
@@ -1907,12 +1907,12 @@ Extend `run_stage` — after writing the stability CSV, add:
     print(f"  ✓ {OCCUPATION_OUTPUT_PATH}")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS (28 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add forecast_composition.py tests/test_forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

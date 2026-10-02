@@ -16,12 +16,14 @@ from btos_adoption import AdoptionFit
 from forecast_composition import (
     ProjectionStep,
     align_sectors,
+    allocate_to_occupations,
     attach_drivers,
     bootstrap_coefficients,
     coefficients_from,
     cps_start_shares,
     cps_steps,
     decompose_slopes,
+    demand_type_shares,
     estimate_instrument,
     estimate_period_slopes,
     fit_coefficients,
@@ -276,3 +278,58 @@ class TestUncertainty:
         assert skipped > 0
         assert len(draws) + skipped == 200
         assert draws["ai"].notna().all()
+
+
+def sector_paths_for(growth_by_sector: dict[str, float]):
+    rows = []
+    for soc_major, growth in growth_by_sector.items():
+        rows += [
+            {
+                "instrument": "oews",
+                "unemployment_scenario": "steady",
+                "adoption_fit": "logistic",
+                "as_of": "2025-05",
+                "soc_major": soc_major,
+                "employment": 100.0,
+            },
+            {
+                "instrument": "oews",
+                "unemployment_scenario": "steady",
+                "adoption_fit": "logistic",
+                "as_of": "2030-05",
+                "soc_major": soc_major,
+                "employment": 100.0 * (1 + growth),
+            },
+        ]
+    return pd.DataFrame(rows)
+
+
+class TestAllocation:
+    def test_every_occupation_gets_its_sector_growth(self):
+        report_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["43-1011", "43-9061", "15-1252"],
+                "Title": ["Supervisors", "Office Clerks", "Software Developers"],
+                "dominant_demand": ["Bounded", "Bounded", "Unbounded"],
+                "TOT_EMP_2025": [40.0, 60.0, 80.0],
+            }
+        )
+        allocation_df = allocate_to_occupations(report_df, sector_paths_for({"43": -0.10, "15": 0.05}))
+        final_df = allocation_df[allocation_df["as_of"] == "2030-05"].set_index("OCC_CODE")
+        assert final_df.loc["43-1011", "allocated_employment"] == pytest.approx(36.0)
+        assert final_df.loc["43-9061", "allocated_employment"] == pytest.approx(54.0)
+        assert final_df.loc["15-1252", "allocated_employment"] == pytest.approx(84.0)
+
+    def test_demand_type_shares_sum_to_one(self):
+        report_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["43-1011", "15-1252"],
+                "Title": ["A", "B"],
+                "dominant_demand": ["Bounded", "Unbounded"],
+                "TOT_EMP_2025": [50.0, 50.0],
+            }
+        )
+        shares_df = demand_type_shares(allocate_to_occupations(report_df, sector_paths_for({"43": -0.10, "15": 0.10})))
+        final = shares_df[shares_df["as_of"] == "2030-05"].set_index("dominant_demand")["share"]
+        assert final.sum() == pytest.approx(1.0)
+        assert final["Unbounded"] == pytest.approx(55.0 / 100.0)

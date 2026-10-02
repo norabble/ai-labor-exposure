@@ -296,7 +296,18 @@ def plot_cps_start_basis(sector_paths_df, seasonal_factors_df, output_dir):
     month_factors_df = seasonal_factors_df[seasonal_factors_df["calendar_month"] == int(start_label[5:7])]
     month_factors = month_factors_df.set_index(month_factors_df["soc_major"].astype(str).str.zfill(2))["factor"]
 
-    figure, axis = plt.subplots(figsize=(10, 9))
+    final_shares = {
+        basis: cps_df[
+            (cps_df["start_basis"] == basis)
+            & (cps_df["unemployment_scenario"] == scenario)
+            & (cps_df["adoption_fit"] == fit)
+            & (cps_df["as_of"] == end_label)
+        ].set_index("soc_major")["share"]
+        for basis in START_BASIS_LABELS
+    }
+    share_gap = ((final_shares["seasonally_adjusted"] - final_shares["raw"]) * 100).reindex(order)
+
+    figure, (axis, gap_axis) = plt.subplots(1, 2, figsize=(15, 9), sharey=True, gridspec_kw={"width_ratios": [1.2, 1]})
     for basis, offset in (("raw", -0.18), ("seasonally_adjusted", 0.18)):
         axis.barh(
             positions + offset,
@@ -307,18 +318,21 @@ def plot_cps_start_basis(sector_paths_df, seasonal_factors_df, output_dir):
         )
     axis.set_yticks(positions, [f"{_sector_label(code)}  (factor {month_factors.get(code, np.nan):.3f})" for code in order])
     axis.axvline(0, color="#999999", linewidth=0.8)
-    axis.set_xlabel(f"Change in employment share, {start_label} → {end_label} (percentage points)")
+    axis.set_xlabel(f"Change {start_label} to {end_label} (pp)")
     axis.legend(fontsize=8, loc="lower right")
+    axis.set_title("Change to 2030 from each start", fontsize=10)
+    gap_axis.barh(positions, share_gap, height=0.6, color=np.where(share_gap >= 0, GAIN_COLOR, LOSS_COLOR))
+    gap_axis.axvline(0, color="#999999", linewidth=0.8)
+    gap_axis.set_xlabel(f"{end_label} share, adjusted minus raw (pp)")
+    gap_axis.set_title("2030 share: adjusted − raw", fontsize=10)
     start_month_name = pd.Period(start_label, freq="M").strftime("%B")
-    axis.set_title(
-        f"CPS projection: raw vs seasonally adjusted {start_label} start\n"
-        f"Steady unemployment, logistic adoption\n"
+    figure.suptitle(
+        f"CPS projection: raw vs seasonally adjusted {start_label} start. Steady unemployment, logistic adoption.\n"
         f"Factor = the sector's {start_month_name} seasonal factor; above 1 means {start_month_name} runs seasonally high.\n"
         f"{PROJECTION_NOTE}",
         fontsize=9,
-        loc="right",
     )
-    figure.tight_layout()
+    figure.tight_layout(rect=(0, 0, 1, 0.94))
     save_figure(figure, os.path.join(output_dir, CHART_NAMES[6]), dpi=150)
     plt.close(figure)
 

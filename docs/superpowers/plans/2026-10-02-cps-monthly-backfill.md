@@ -1531,3 +1531,5 @@ git commit -m "Add the monthly CPS update skill"
 **Task 6 (note):** The brief's title was one centred `set_title` that clipped at the right edge once rendered (long y labels shift the axes). It is now four short lines, right-aligned, at fontsize 9. The byte-comparison test was deterministic, so the manifest-fingerprint fallback was not needed.
 
 **Task 8, Step 6 (note):** The claims-auditor dispatch moved to the controller's review; the box for it is unticked. The implementer instead listed every figure in `docs/charts/forecast_cps_start_basis.md` with its reproducing filter in the task report. Step 4 also copied `forecast_slope_history.png`, which check_charts reported stale after the backfill, in addition to `forecast_sector_change_2030.png` and the new chart.
+
+**Task 8 (controller ruling):** The start-basis chart gained a second panel (2030 share difference, adjusted minus raw) because the change comparison alone hides the seasonal effect, which sits in the start level and cancels out of a change.

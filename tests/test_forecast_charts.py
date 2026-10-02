@@ -125,3 +125,14 @@ def test_existing_charts_ignore_the_adjusted_start(tmp_path):
     for chart_name in without_adjusted:
         assert (tmp_path / "with" / chart_name).read_bytes() == (tmp_path / "without" / chart_name).read_bytes()
     assert "forecast_cps_start_basis.png" in with_adjusted
+
+
+def test_start_basis_chart_draws_both_panels(tmp_path):
+    import matplotlib.pyplot as plt
+
+    from forecast_charts import plot_cps_start_basis
+
+    inputs = synthetic_inputs()
+    plot_cps_start_basis(inputs[4], inputs[6], str(tmp_path))
+    assert (tmp_path / "forecast_cps_start_basis.png").stat().st_size > 0
+    plt.close("all")

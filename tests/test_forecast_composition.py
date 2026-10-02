@@ -13,11 +13,16 @@ import pytest
 
 from forecast_composition import (
     align_sectors,
+    attach_drivers,
+    coefficients_from,
+    decompose_slopes,
     estimate_period_slopes,
+    fit_coefficients,
     report_employment_column,
     sector_code,
     sector_employment_panel,
     sector_scores,
+    stage2_input,
 )
 
 SECTORS = [f"{code:02d}" for code in range(11, 55, 2)]  # 22 two-digit codes
@@ -101,3 +106,61 @@ class TestPeriodSlopes:
     def test_skips_non_consecutive_years(self, scores):
         panel_df = synthetic_panel({}, scores, years=range(2000, 2003)).drop(columns=[2001])
         assert estimate_period_slopes(panel_df, scores, "oews", {}).empty
+
+
+def synthetic_period_slopes(structural=0.02, cycle=0.01, ai=0.08, noise=0.0, ai_periods=4, seed=0):
+    """Periods 2000→2025 whose slopes follow the decomposition exactly (plus optional noise)."""
+    rng = np.random.default_rng(seed)
+    end_years = np.arange(2001, 2026)
+    unemployment = rng.normal(0, 1, len(end_years))
+    adoption = np.where(end_years > 2025 - ai_periods, np.linspace(0.05, 0.25, len(end_years)), 0.0)
+    slopes = structural + cycle * unemployment + ai * adoption + rng.normal(0, noise, len(end_years))
+    periods = [f"{year - 1}_{year}" for year in end_years]
+    return pd.DataFrame(
+        {
+            "instrument": "oews",
+            "period": periods,
+            "start_year": end_years - 1,
+            "end_year": end_years,
+            "slope": slopes,
+            "std_error": 0.01,
+            "residual_sd": 0.02,
+            "n_sectors": 22,
+            "is_covid": False,
+            "excluded_reason": "",
+            "unemployment_change": unemployment,
+            "adoption": adoption,
+        }
+    )
+
+
+class TestStageTwo:
+    def test_attach_drivers_zeroes_adoption_through_2022(self):
+        slopes_df = pd.DataFrame({"period": ["2021_2022", "2022_2023"], "end_year": [2022, 2023]})
+        driven_df = attach_drivers(slopes_df, pd.Series({"2021_2022": -1.0, "2022_2023": -0.3}), pd.Series({2023: 0.12}))
+        assert driven_df["adoption"].tolist() == [0.0, 0.12]
+        assert driven_df["unemployment_change"].tolist() == [-1.0, -0.3]
+
+    def test_stage2_input_drops_covid_excluded_and_undriven(self):
+        driven_df = synthetic_period_slopes()
+        driven_df.loc[0, "is_covid"] = True
+        driven_df.loc[1, "excluded_reason"] = "SOC revision level break"
+        driven_df.loc[2, "unemployment_change"] = np.nan
+        assert len(stage2_input(driven_df)) == len(driven_df) - 3
+        assert len(stage2_input(driven_df, include_excluded=True)) == len(driven_df) - 2
+
+    def test_recovers_known_coefficients(self):
+        coefficients = coefficients_from(decompose_slopes(synthetic_period_slopes(noise=0.0)))
+        assert coefficients["structural"] == pytest.approx(0.02, abs=1e-9)
+        assert coefficients["cycle"] == pytest.approx(0.01, abs=1e-9)
+        assert coefficients["ai"] == pytest.approx(0.08, abs=1e-9)
+
+    def test_without_ai_periods_warns_and_omits_ai(self):
+        pre_ai_df = synthetic_period_slopes(ai_periods=0)
+        with pytest.warns(UserWarning, match="AI term is not identified"):
+            decomposition_df = decompose_slopes(pre_ai_df)
+        assert "ai" not in set(decomposition_df["term"])
+        assert coefficients_from(decomposition_df)["ai"] == 0.0
+
+    def test_fit_coefficients_returns_none_when_rank_deficient(self):
+        assert fit_coefficients(synthetic_period_slopes(ai_periods=0)) is None

@@ -932,7 +932,7 @@ git commit -m "Add Stage 1 of the composition forecast: per-period sector slopes
 - Consumes: `PERIOD_SLOPE_COLUMNS` frames from Task 3; `annual_mean_adoption` from Task 2.
 - Produces: `PRE_ADOPTION_LAST_YEAR = 2022`; `DECOMPOSITION_TERMS = ("structural", "cycle", "ai")`; `attach_drivers(period_slopes_df, unemployment_change: pd.Series, adoption_by_year: pd.Series) -> pd.DataFrame` (adds `unemployment_change`, `adoption`); `stage2_input(driven_df, include_excluded: bool = False) -> pd.DataFrame`; `fit_coefficients(stage2_df, terms=DECOMPOSITION_TERMS) -> dict[str, float] | None`; `decompose_slopes(stage2_df) -> pd.DataFrame` with columns `DECOMPOSITION_COLUMNS = ["term", "coefficient", "std_error", "t_statistic", "p_value", "r_squared", "n_periods"]`; `coefficients_from(decomposition_df) -> dict[str, float]` (missing `ai` → 0.0).
 
-- [ ] **Step 1: Write the failing tests** (append)
+- [x] **Step 1: Write the failing tests** (append)
 
 ```python
 from forecast_composition import (
@@ -1002,12 +1002,12 @@ class TestStageTwo:
         assert fit_coefficients(synthetic_period_slopes(ai_periods=0)) is None
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_forecast_composition.py::TestStageTwo -v`
 Expected: FAIL — `ImportError: cannot import name 'attach_drivers'`
 
-- [ ] **Step 3: Append Stage 2 to `forecast_composition.py`**
+- [x] **Step 3: Append Stage 2 to `forecast_composition.py`**
 
 Add `import warnings` to the imports, then append:
 
@@ -1117,12 +1117,12 @@ def coefficients_from(decomposition_df: pd.DataFrame) -> dict[str, float]:
     return coefficients
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS (13 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add forecast_composition.py tests/test_forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

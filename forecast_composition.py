@@ -34,6 +34,7 @@ Outputs:
 """
 
 import re
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -149,3 +150,108 @@ def estimate_period_slopes(panel_df: pd.DataFrame, scores: pd.Series, instrument
             }
         )
     return pd.DataFrame(slope_rows, columns=PERIOD_SLOPE_COLUMNS)
+
+
+# ── Stage 2: decompose the slope over time ─────────────────────────────────────
+
+PRE_ADOPTION_LAST_YEAR = 2022
+DECOMPOSITION_TERMS = ("structural", "cycle", "ai")
+DECOMPOSITION_COLUMNS = ["term", "coefficient", "std_error", "t_statistic", "p_value", "r_squared", "n_periods"]
+
+
+def attach_drivers(period_slopes_df: pd.DataFrame, unemployment_change: pd.Series, adoption_by_year: pd.Series) -> pd.DataFrame:
+    """Add ΔU_t and A_t; A_t is 0 for any period ending in 2022 or earlier."""
+    driven_df = period_slopes_df.copy()
+    driven_df["unemployment_change"] = driven_df["period"].map(unemployment_change)
+    driven_df["adoption"] = [
+        0.0 if end_year <= PRE_ADOPTION_LAST_YEAR else adoption_by_year.get(end_year, np.nan) for end_year in driven_df["end_year"]
+    ]
+    return driven_df
+
+
+def stage2_input(driven_df: pd.DataFrame, include_excluded: bool = False) -> pd.DataFrame:
+    """Periods eligible for Stage 2: never COVID, excluded periods only on request, drivers present."""
+    eligible = ~driven_df["is_covid"].astype(bool)
+    if not include_excluded:
+        eligible &= driven_df["excluded_reason"].fillna("") == ""
+    eligible &= driven_df[["unemployment_change", "adoption", "slope", "std_error"]].notna().all(axis=1)
+    return driven_df[eligible].reset_index(drop=True)
+
+
+def _design_matrix(stage2_df: pd.DataFrame, terms) -> np.ndarray:
+    columns = {
+        "structural": np.ones(len(stage2_df)),
+        "cycle": stage2_df["unemployment_change"].to_numpy(float),
+        "ai": stage2_df["adoption"].to_numpy(float),
+    }
+    return np.column_stack([columns[term] for term in terms])
+
+
+def _weighted_least_squares(design_matrix: np.ndarray, slopes: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    root_weights = np.sqrt(weights)
+    coefficients, *_ = np.linalg.lstsq(design_matrix * root_weights[:, None], slopes * root_weights, rcond=None)
+    return coefficients
+
+
+def fit_coefficients(stage2_df: pd.DataFrame, terms=DECOMPOSITION_TERMS) -> dict[str, float] | None:
+    """Coefficients only, or None when the design is rank-deficient — the bootstrap's fast path."""
+    design_matrix = _design_matrix(stage2_df, terms)
+    if len(stage2_df) <= len(terms) or np.linalg.matrix_rank(design_matrix) < len(terms):
+        return None
+    weights = 1.0 / stage2_df["std_error"].to_numpy(float) ** 2
+    coefficients = _weighted_least_squares(design_matrix, stage2_df["slope"].to_numpy(float), weights)
+    return dict(zip(terms, coefficients))
+
+
+def decompose_slopes(stage2_df: pd.DataFrame) -> pd.DataFrame:
+    """Stage 2: WLS of β_t on (1, ΔU_t, A_t), weights 1/se². Drops the AI term with a warning if unidentified."""
+    nonpositive_periods = stage2_df.loc[stage2_df["std_error"] <= 0, "period"].tolist()
+    if nonpositive_periods:
+        raise ValueError(f"Period(s) {nonpositive_periods} have a non-positive standard error; their WLS weight would be infinite")
+    terms = list(DECOMPOSITION_TERMS)
+    if np.linalg.matrix_rank(_design_matrix(stage2_df, terms)) < len(terms):
+        warnings.warn(
+            "The AI term is not identified (no period with nonzero adoption, or adoption collinear with the "
+            "other terms); fitting structural + cycle only.",
+            stacklevel=2,
+        )
+        terms = terms[:2]
+
+    design_matrix = _design_matrix(stage2_df, terms)
+    slopes = stage2_df["slope"].to_numpy(float)
+    weights = 1.0 / stage2_df["std_error"].to_numpy(float) ** 2
+    degrees_of_freedom = len(stage2_df) - len(terms)
+    if degrees_of_freedom <= 0:
+        raise ValueError(f"Stage 2 needs more than {len(terms)} periods, got {len(stage2_df)}")
+
+    coefficients = _weighted_least_squares(design_matrix, slopes, weights)
+    residuals = slopes - design_matrix @ coefficients
+    residual_variance = np.sum(weights * residuals**2) / degrees_of_freedom
+    covariance = residual_variance * np.linalg.inv(design_matrix.T @ (design_matrix * weights[:, None]))
+    std_errors = np.sqrt(np.diag(covariance))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t_statistics = coefficients / std_errors
+    p_values = 2.0 * stats.t.sf(np.abs(t_statistics), degrees_of_freedom)
+    weighted_mean = np.average(slopes, weights=weights)
+    total_sum_of_squares = np.sum(weights * (slopes - weighted_mean) ** 2)
+    r_squared = 1.0 - np.sum(weights * residuals**2) / total_sum_of_squares if total_sum_of_squares > 0 else np.nan
+
+    return pd.DataFrame(
+        {
+            "term": terms,
+            "coefficient": coefficients,
+            "std_error": std_errors,
+            "t_statistic": t_statistics,
+            "p_value": p_values,
+            "r_squared": r_squared,
+            "n_periods": len(stage2_df),
+        },
+        columns=DECOMPOSITION_COLUMNS,
+    )
+
+
+def coefficients_from(decomposition_df: pd.DataFrame) -> dict[str, float]:
+    """{term: coefficient} with every term present; an omitted AI term contributes 0."""
+    coefficients = dict.fromkeys(DECOMPOSITION_TERMS, 0.0)
+    coefficients.update(dict(zip(decomposition_df["term"], decomposition_df["coefficient"])))
+    return coefficients

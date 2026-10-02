@@ -492,15 +492,107 @@ def project_both_instruments(estimates: dict[str, InstrumentEstimate], adoption_
     return pd.concat(path_frames, ignore_index=True), starts
 
 
+# ── Uncertainty ────────────────────────────────────────────────────────────────
+
+BOOTSTRAP_REPLICATES = 2000
+BOOTSTRAP_SEED = 20261002
+REFERENCE_SCENARIO = ("steady", "logistic")
+NINETY_PERCENT_Z = 1.645
+
+
+def bootstrap_coefficients(stage2_df: pd.DataFrame, replicates: int, rng: np.random.Generator, terms) -> tuple[pd.DataFrame, int]:
+    """Resample Stage 2 periods with replacement; a rank-deficient replicate is skipped and counted, never zero-filled."""
+    coefficient_draws, skipped = [], 0
+    for _ in range(replicates):
+        resampled_df = stage2_df.iloc[rng.integers(0, len(stage2_df), len(stage2_df))]
+        coefficients = fit_coefficients(resampled_df, terms)
+        if coefficients is None:
+            skipped += 1
+            continue
+        coefficient_draws.append(coefficients)
+    return pd.DataFrame(coefficient_draws, columns=list(terms)), skipped
+
+
+def bootstrap_bands(
+    estimate: InstrumentEstimate, start: tuple, adoption_fits: dict[str, AdoptionFit], coefficient_draws: pd.DataFrame
+) -> pd.DataFrame:
+    """5th–95th percentile of each sector's share path across bootstrap coefficient draws."""
+    draw_frames = []
+    for draw_index, draw in enumerate(coefficient_draws.to_dict("records")):
+        draw_coefficients = {**dict.fromkeys(DECOMPOSITION_TERMS, 0.0), **draw}
+        draw_frames.append(project_scenarios(estimate, *start, adoption_fits, coefficients=draw_coefficients).assign(draw=draw_index))
+    draws_df = pd.concat(draw_frames, ignore_index=True)
+    keys = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major"]
+    return (
+        draws_df.groupby(keys)["share"].quantile([0.05, 0.95]).unstack().rename(columns={0.05: "share_p5", 0.95: "share_p95"}).reset_index()
+    )
+
+
+def add_sector_noise(sector_paths_df: pd.DataFrame, estimates: dict[str, InstrumentEstimate], starts: dict) -> pd.DataFrame:
+    """Sector-noise interval: median Stage 1 residual SD per year, accumulated as a random walk in relative growth."""
+    noisy_frames = []
+    for instrument, instrument_df in sector_paths_df.groupby("instrument"):
+        residual_sd = float(estimates[instrument].stage2_df["residual_sd"].median())
+        _, _, steps = starts[instrument]
+        elapsed_years = dict(zip([step.as_of for step in steps], np.cumsum([step.year_fraction for step in steps])))
+        horizon = instrument_df["as_of"].map(elapsed_years).fillna(0.0)
+        half_width = NINETY_PERCENT_Z * residual_sd * np.sqrt(horizon)
+        noisy_frames.append(
+            instrument_df.assign(noise_low=instrument_df["share"] * (1 - half_width), noise_high=instrument_df["share"] * (1 + half_width))
+        )
+    return pd.concat(noisy_frames, ignore_index=True)
+
+
+def leave_one_period_out(estimate: InstrumentEstimate, start: tuple, adoption_fits: dict[str, AdoptionFit]) -> pd.DataFrame:
+    """Range of each sector's start→2030 share change when each Stage 2 period is dropped in turn (reference scenario)."""
+    scenario_name, fit_name = REFERENCE_SCENARIO
+    terms = tuple(estimate.decomposition_df["term"])
+    final_changes = []
+    for dropped_index in range(len(estimate.stage2_df)):
+        refit = fit_coefficients(estimate.stage2_df.drop(index=dropped_index), terms)
+        if refit is None:
+            continue
+        refit_coefficients = {**dict.fromkeys(DECOMPOSITION_TERMS, 0.0), **refit}
+        paths_df = project_scenarios(estimate, *start, {fit_name: adoption_fits[fit_name]}, coefficients=refit_coefficients)
+        paths_df = paths_df[paths_df["unemployment_scenario"] == scenario_name]
+        share_by_label = paths_df.pivot(index="as_of", columns="soc_major", values="share")
+        final_changes.append(share_by_label.iloc[-1] - share_by_label.iloc[0])
+    changes_df = pd.DataFrame(final_changes)
+    return pd.DataFrame(
+        {
+            "instrument": estimate.instrument,
+            "soc_major": changes_df.columns,
+            "change_min": changes_df.min().to_numpy(),
+            "change_max": changes_df.max().to_numpy(),
+            "n_refits": len(changes_df),
+        }
+    )
+
+
 def run_stage() -> None:
     """The `forecast` pipeline stage."""
     estimation = run_estimation()
     if estimation is None:
         return
     estimates, adoption_fits = estimation
-    sector_paths_df, _ = project_both_instruments(estimates, adoption_fits)
+    sector_paths_df, starts = project_both_instruments(estimates, adoption_fits)
+
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    band_frames, stability_frames = [], []
+    for instrument, estimate in estimates.items():
+        terms = tuple(estimate.decomposition_df["term"])
+        coefficient_draws, skipped = bootstrap_coefficients(estimate.stage2_df, BOOTSTRAP_REPLICATES, rng, terms)
+        print(f"  {instrument}: {len(coefficient_draws)} bootstrap replicates used, {skipped} skipped as rank-deficient")
+        band_frames.append(bootstrap_bands(estimate, starts[instrument], adoption_fits, coefficient_draws))
+        stability_frames.append(leave_one_period_out(estimate, starts[instrument], adoption_fits))
+
+    keys = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major"]
+    sector_paths_df = add_sector_noise(
+        sector_paths_df.merge(pd.concat(band_frames), on=keys, how="left", validate="one_to_one"), estimates, starts
+    )
     sector_paths_df.to_csv(SECTOR_PATHS_OUTPUT_PATH, index=False)
-    print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}")
+    pd.concat(stability_frames, ignore_index=True).to_csv(STABILITY_OUTPUT_PATH, index=False)
+    print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}\n  ✓ {STABILITY_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

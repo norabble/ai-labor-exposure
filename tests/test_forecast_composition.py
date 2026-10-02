@@ -17,6 +17,7 @@ from forecast_composition import (
     ProjectionStep,
     align_sectors,
     attach_drivers,
+    bootstrap_coefficients,
     coefficients_from,
     cps_start_shares,
     cps_steps,
@@ -257,3 +258,21 @@ class TestProjection:
         label, employment = cps_start_shares(a19_df)
         assert label == "2026-08"
         assert (employment == 100.0).all()
+
+
+class TestUncertainty:
+    def test_bootstrap_recovers_coefficients_on_noiseless_data(self):
+        draws, skipped = bootstrap_coefficients(
+            synthetic_period_slopes(noise=0.0, ai_periods=10), 50, np.random.default_rng(0), ("structural", "cycle", "ai")
+        )
+        assert skipped == 0
+        assert draws["ai"].to_numpy() == pytest.approx(0.08, abs=1e-9)
+
+    def test_bootstrap_skips_rank_deficient_replicates(self):
+        # Only two AI-era periods out of 25: many resamples draw neither and cannot identify β_AI.
+        draws, skipped = bootstrap_coefficients(
+            synthetic_period_slopes(noise=0.001, ai_periods=2), 200, np.random.default_rng(0), ("structural", "cycle", "ai")
+        )
+        assert skipped > 0
+        assert len(draws) + skipped == 200
+        assert draws["ai"].notna().all()

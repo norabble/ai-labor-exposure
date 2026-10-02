@@ -1619,7 +1619,7 @@ git commit -m "Project sector shares to 2030 under unemployment and adoption sce
 - Consumes: Tasks 5 and 7.
 - Produces: `BOOTSTRAP_REPLICATES = 2000`, `BOOTSTRAP_SEED = 20261002`, `REFERENCE_SCENARIO = ("steady", "logistic")`; `bootstrap_coefficients(stage2_df, replicates, rng, terms) -> tuple[pd.DataFrame, int]` (frame of coefficient dicts, skipped count); `bootstrap_bands(estimate, start, adoption_fits, coefficient_draws) -> pd.DataFrame` (columns `instrument, unemployment_scenario, adoption_fit, as_of, soc_major, share_p5, share_p95`); `add_sector_noise(sector_paths_df, estimates, starts) -> pd.DataFrame` (adds `noise_low`, `noise_high`); `leave_one_period_out(estimate, start, adoption_fits) -> pd.DataFrame` (columns `instrument, soc_major, change_min, change_max, n_refits`).
 
-- [ ] **Step 1: Write the failing tests** (append)
+- [x] **Step 1: Write the failing tests** (append)
 
 ```python
 from forecast_composition import bootstrap_coefficients
@@ -1643,12 +1643,12 @@ class TestUncertainty:
         assert draws["ai"].notna().all()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_forecast_composition.py::TestUncertainty -v`
 Expected: FAIL — `ImportError: cannot import name 'bootstrap_coefficients'`
 
-- [ ] **Step 3: Append the uncertainty layers**
+- [x] **Step 3: Append the uncertainty layers**
 
 ```python
 # ── Uncertainty ────────────────────────────────────────────────────────────────
@@ -1759,17 +1759,17 @@ def run_stage() -> None:
     print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}\n  ✓ {STABILITY_OUTPUT_PATH}")
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS (26 tests)
 
-- [ ] **Step 5: Run the stage on real data and time it**
+- [x] **Step 5: Run the stage on real data and time it**
 
 Run: `time uv run main.py forecast`
 Expected: both `✓` lines; bootstrap skip counts printed. If the stage takes over 5 minutes, record that in the Deviations log and reduce nothing without the human partner's agreement.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add forecast_composition.py tests/test_forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

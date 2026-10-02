@@ -459,8 +459,9 @@ def plot_model_signal_over_time(
                 p_series[score_col].append(None)
 
     # CPS year-over-year correlations for the span OEWS does not yet reach.
-    # Every pair covers the same 12 months from a different endpoint month, so
-    # these are repeated measurements of one period, not successive periods.
+    # Each endpoint is a 12-month window; consecutive endpoints produce overlapping
+    # windows starting at or after the OEWS reference month (May 2025).
+    # They are repeated measurements of nearly the same period, not successive periods.
     cps_month_pairs = (
         year_over_year_month_pairs(cps_panel_df, oews_reference_month(list(merged_validation_df.columns)))
         if cps_panel_df is not None
@@ -482,8 +483,9 @@ def plot_model_signal_over_time(
     has_cps_panel = any(cps_results[score_col] for score_col in cps_results)
 
     if has_cps_panel:
+        n_endpoints = len(cps_month_pairs)
         span_label = f"{cps_month_pairs[0][0][:4]}→{cps_month_pairs[-1][1][:4]}"
-        print(f"\n── CPS year-over-year signal, {span_label} (n=22 sectors; each endpoint is the same 12-month span) ──")
+        print(f"\n── CPS year-over-year signal, {span_label} (n=22 sectors; {n_endpoints} overlapping 12-month windows) ──")
         for score_col, label, _, _ in score_configs:
             if not cps_results[score_col]:
                 continue
@@ -561,8 +563,9 @@ def plot_model_signal_over_time(
     # ── CPS panel: the 2025→2026 span OEWS does not yet reach ────────────────
     # Drawn as a separate axes rather than as more points on the line above. The
     # y-scale is shared so the r values stay directly comparable, but the x-axis
-    # is the CPS endpoint month, not time — every point covers the same 12-month
-    # span, so their spread measures endpoint sensitivity rather than a trend.
+    # is the CPS endpoint month, not time — each endpoint is a 12-month window
+    # starting at or after the OEWS reference month; windows overlap, so their
+    # spread measures endpoint sensitivity rather than a trend.
     if cps_ax is not None:
         cps_months = sorted({month for entries in cps_results.values() for month, _, _ in entries})
         cps_x_by_month = {month: index for index, month in enumerate(cps_months)}
@@ -607,7 +610,7 @@ def plot_model_signal_over_time(
         cps_ax.set_xlim(-0.7, len(cps_months) - 0.3)
         cps_ax.set_xlabel("CPS A-19 endpoint month", fontsize=9)
         cps_ax.set_title(
-            "CPS 2025→2026\nsame span, 3 endpoints",
+            f"CPS 2025→2026\n{len(cps_months)} overlapping 12-month windows",
             fontsize=9,
             color="dimgrey",
         )

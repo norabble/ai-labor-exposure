@@ -40,6 +40,11 @@ REFERENCE_SCENARIO = ("steady", "logistic")
 PROJECTION_NOTE = "Conditional projection: dynamic-model score unchanged, total employment held at start level."
 
 
+def _instruments_present(instrument_frame: pd.DataFrame) -> list[str]:
+    """OEWS then CPS, keeping only those in the frame — CPS is withheld when gate G4 fails."""
+    return [instrument for instrument in ("oews", "cps") if instrument in set(instrument_frame["instrument"])]
+
+
 def _sector_label(soc_major: str) -> str:
     return SOC_MAJOR_GROUPS.get(str(soc_major).zfill(2), str(soc_major))
 
@@ -67,8 +72,10 @@ def _final_change(sector_paths_df: pd.DataFrame, instrument: str, scenario: str,
 
 
 def plot_slope_history(period_slopes_df, decomposition_df, output_dir):
-    figure, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
-    for axis, instrument in zip(axes, ("oews", "cps")):
+    instruments = _instruments_present(period_slopes_df)
+    figure, axes = plt.subplots(1, len(instruments), figsize=(7 * len(instruments), 5), sharey=True, squeeze=False)
+    axes = axes[0]
+    for axis, instrument in zip(axes, instruments):
         instrument_df = period_slopes_df[period_slopes_df["instrument"] == instrument].sort_values("end_year")
         included = ~instrument_df["is_covid"].astype(bool) & (instrument_df["excluded_reason"].fillna("") == "")
         axis.errorbar(
@@ -165,10 +172,12 @@ def plot_btos_adoption(btos_series_df, adoption_fits_df, output_dir):
 
 def plot_sector_change_2030(sector_paths_df, output_dir):
     scenario, fit = REFERENCE_SCENARIO
-    figure, axes = plt.subplots(1, 2, figsize=(14, 9), sharey=True)
+    instruments = _instruments_present(sector_paths_df)
+    figure, axes = plt.subplots(1, len(instruments), figsize=(7 * len(instruments), 9), sharey=True, squeeze=False)
+    axes = axes[0]
     order = _final_change(sector_paths_df, "oews", scenario, fit)["change"].sort_values().index
     positions = np.arange(len(order))
-    for axis, instrument in zip(axes, ("oews", "cps")):
+    for axis, instrument in zip(axes, instruments):
         change = _final_change(sector_paths_df, instrument, scenario, fit).reindex(order)
         axis.hlines(positions, change["noise_low"], change["noise_high"], color="#dddddd", linewidth=6, label="Sector-noise 90% interval")
         axis.hlines(

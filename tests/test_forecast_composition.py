@@ -333,3 +333,71 @@ class TestAllocation:
         final = shares_df[shares_df["as_of"] == "2030-05"].set_index("dominant_demand")["share"]
         assert final.sum() == pytest.approx(1.0)
         assert final["Unbounded"] == pytest.approx(55.0 / 100.0)
+
+
+class TestFailSoftInputs:
+    """Final-review fixes: the stage never crashes the release on a withheld input, and never drops data silently."""
+
+    def test_cps_withheld_when_g4_failed_this_run(self, monkeypatch, capsys):
+        import cps_detailed_validation
+
+        monkeypatch.setattr(cps_detailed_validation, "LAST_RUN_G4_PASSED", False)
+        assert forecast_composition.cps_rollup_usable() is False
+        assert "G4" in capsys.readouterr().out
+
+    def test_cps_withheld_when_rollup_absent(self, monkeypatch, tmp_path, capsys):
+        import cps_detailed_validation
+
+        monkeypatch.setattr(cps_detailed_validation, "LAST_RUN_G4_PASSED", True)
+        monkeypatch.setattr(forecast_composition, "CPS_SECTOR_TRENDS_PATH", str(tmp_path / "absent.csv"))
+        assert forecast_composition.cps_rollup_usable() is False
+        assert "absent" in capsys.readouterr().out
+
+    def test_cps_usable_when_g4_passed_and_rollup_present(self, monkeypatch, tmp_path):
+        import cps_detailed_validation
+
+        rollup_path = tmp_path / "rollup.csv"
+        rollup_path.write_text("soc_major,TOT_EMP_2024\n11,1\n")
+        monkeypatch.setattr(cps_detailed_validation, "LAST_RUN_G4_PASSED", True)
+        monkeypatch.setattr(forecast_composition, "CPS_SECTOR_TRENDS_PATH", str(rollup_path))
+        assert forecast_composition.cps_rollup_usable() is True
+
+    def test_projection_runs_oews_alone_without_reading_a19(self, monkeypatch, tmp_path, scores):
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(tmp_path / "absent_a19.csv"))
+        panel_df = synthetic_panel({}, scores, years=range(2020, 2026))
+        estimate = forecast_composition.InstrumentEstimate(
+            instrument="oews",
+            scores=scores,
+            panel_df=panel_df,
+            driven_df=pd.DataFrame(),
+            stage2_df=pd.DataFrame(),
+            decomposition_df=pd.DataFrame(),
+            coefficients={"structural": 0.01, "cycle": 0.0, "ai": 0.0},
+        )
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments({"oews": estimate}, fits)
+        assert set(sector_paths_df["instrument"]) == {"oews"}
+        assert set(starts) == {"oews"}
+
+    def test_eligible_period_missing_unemployment_raises(self, scores):
+        panel_df = synthetic_panel({}, scores, years=range(2000, 2026), noise=0.002)
+        period_keys = [f"{year}_{year + 1}" for year in range(2000, 2025) if year != 2012]  # 2012_2013 missing
+        unemployment_change = pd.Series(np.random.default_rng(1).normal(0, 1, len(period_keys)), index=period_keys)
+        fits = {"logistic": AdoptionFit("logistic", (0.6, 0.6, 5.0), 0.55, True)}
+        with pytest.raises(forecast_composition.MissingDriverError, match="2012_2013"):
+            estimate_instrument("oews", panel_df, scores, {}, unemployment_change, fits)
+
+    def test_run_estimation_skips_on_missing_driver(self, monkeypatch, capsys, scores):
+        panel_df = synthetic_panel({}, scores, years=range(2000, 2026))
+        report_df = pd.DataFrame(
+            {"OCC_CODE": [f"{code}-0000" for code in SECTORS], "TOT_EMP_2025": 1.0, "net_employment_change": scores.to_numpy()}
+        )
+        monkeypatch.setattr(forecast_composition, "_load_inputs", lambda: (report_df, {"oews": panel_df}))
+        monkeypatch.setattr(
+            forecast_composition,
+            "run_adoption",
+            lambda: (pd.DataFrame(), {"logistic": AdoptionFit("logistic", (0.6, 0.6, 5.0), 0.55, True)}),
+        )
+        monkeypatch.setattr(forecast_composition, "unemployment_change_by_period", lambda period_keys: pd.Series({"2000_2001": 0.1}))
+        assert forecast_composition.run_estimation() is None
+        assert "unemployment change missing" in capsys.readouterr().out

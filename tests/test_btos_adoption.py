@@ -180,3 +180,13 @@ class TestGrowthFits:
         monkeypatch.setattr(btos_adoption, "curve_fit", failing_curve_fit)
         fits = fit_adoption(synthetic_series())
         assert all(not fit.accepted and "did not converge" in fit.rejection_reason for fit in fits.values())
+
+
+def test_unparseable_workbook_falls_back_to_the_seed(monkeypatch, tmp_path, capsys):
+    corrupt_path = tmp_path / "btos_national.xlsx"
+    corrupt_path.write_bytes(b"not a workbook")
+    monkeypatch.setattr(btos_adoption, "RAW_WORKBOOK_PATH", str(corrupt_path))
+    series_df = btos_adoption.load_series()
+    seed_df = pd.read_csv(btos_adoption.SEED_PATH, dtype={"smpdt": str})
+    assert len(series_df) == len(seed_df)
+    assert "could not be parsed" in capsys.readouterr().out

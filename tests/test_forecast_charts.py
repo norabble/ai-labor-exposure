@@ -94,3 +94,10 @@ def test_draw_all_writes_every_chart(tmp_path):
     for chart_name in CHART_NAMES:
         assert (tmp_path / chart_name).stat().st_size > 0
     assert (tmp_path / "chart_manifest.json").exists()
+
+
+def test_draw_all_handles_oews_only(tmp_path):
+    periods, decomposition, btos_series, fits, sector_paths, demand_shares = synthetic_inputs()
+    oews_only = [frame[frame["instrument"] == "oews"] for frame in (periods, decomposition, sector_paths)]
+    written = draw_all(oews_only[0], oews_only[1], btos_series, fits, oews_only[2], demand_shares, output_dir=str(tmp_path))
+    assert sorted(written) == sorted(CHART_NAMES)

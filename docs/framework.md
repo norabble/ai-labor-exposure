@@ -1209,7 +1209,7 @@ What follows from these numbers:
 
 ### Adoption driver
 
-`btos_adoption.py` combines BTOS Question 7 across the two wordings, using a fitted multiplicative splice. Measured 2026-10-02 from `btos_adoption_fits.csv`:
+`btos_adoption.py` combines BTOS Question 7 across the two wordings, using a fitted multiplicative splice. No period carries both wordings: the old series ends 2025-08-10 and the new one begins 2025-11-16 (`btos_ai_use.csv`). The splice is therefore identified only by each growth form's continuity across that gap, and the multiplier's spread across forms (0.560 to 0.631) shows how much it depends on the form. This matters because the 2023–2025 values of `A_t`, which alone identify β_AI, come from the rescaled old-wording points. Measured 2026-10-02 from `btos_adoption_fits.csv`:
 
 | Fit | Splice multiplier | 2025-12 | 2030-12 | Status |
 |---|---:|---:|---:|---|

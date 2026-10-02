@@ -33,6 +33,7 @@ Outputs:
   • six charts via forecast_charts.py
 """
 
+import os
 import re
 import warnings
 from dataclasses import dataclass
@@ -266,6 +267,10 @@ def coefficients_from(decomposition_df: pd.DataFrame) -> dict[str, float]:
 STAGE2_ADOPTION_FIT = "logistic"
 
 
+class MissingDriverError(ValueError):
+    """An eligible Stage 2 period has no unemployment change, so n would shrink silently."""
+
+
 @dataclass
 class InstrumentEstimate:
     instrument: str
@@ -295,6 +300,12 @@ def estimate_instrument(
 
     main_adoption = annual_mean_adoption(adoption_fits[STAGE2_ADOPTION_FIT], adoption_years)
     driven_df = attach_drivers(period_slopes_df, unemployment_change, main_adoption)
+    # A partial BLS fetch returns a series with gaps; stage2_input would drop those
+    # periods without a word, and losing the AI-era ones silently removes β_AI.
+    is_eligible = ~driven_df["is_covid"].astype(bool) & (driven_df["excluded_reason"].fillna("") == "")
+    undriven_periods = driven_df.loc[is_eligible & driven_df["unemployment_change"].isna(), "period"].tolist()
+    if undriven_periods:
+        raise MissingDriverError(f"{instrument}: unemployment change missing for eligible period(s) {undriven_periods}")
     main_stage2_df = stage2_input(driven_df)
     main_decomposition_df = decompose_slopes(main_stage2_df)
 
@@ -321,14 +332,41 @@ def estimate_instrument(
     return estimate, pd.concat(decomposition_frames, ignore_index=True)
 
 
+def cps_rollup_usable() -> bool:
+    """Whether the CPS instrument may run: gate G4 passed and the rollup exists.
+
+    cps_detailed_validation writes the rollup only after G4 passes, so a rollup on
+    disk may be stale from an earlier run whose bridge has since been rejected.
+    Mirrors dws_detailed_validation.run: this run's in-process verdict wins; with no
+    verdict (the module never ran in this process) the on-disk bridge check decides.
+    """
+    import cps_detailed_validation
+
+    g4_this_run = cps_detailed_validation.LAST_RUN_G4_PASSED
+    if g4_this_run is False:
+        print("  ⚠ Gate G4 did not pass in this run; the CPS instrument is withheld and OEWS runs alone.")
+        return False
+    if g4_this_run is None:
+        bridge_check_path = cps_detailed_validation.BRIDGE_CHECK_OUTPUT_PATH
+        if not os.path.exists(bridge_check_path) or not cps_detailed_validation.g4_passed(pd.read_csv(bridge_check_path)):
+            print("  ⚠ Gate G4 has not passed; the CPS instrument is withheld and OEWS runs alone.")
+            return False
+    if not os.path.exists(CPS_SECTOR_TRENDS_PATH):
+        print(f"  ⚠ {CPS_SECTOR_TRENDS_PATH} absent; the CPS instrument is withheld and OEWS runs alone.")
+        return False
+    return True
+
+
+def _load_dynamic_report() -> pd.DataFrame:
+    return pd.read_csv(DYNAMIC_REPORT_PATH, dtype={"OCC_CODE": str})
+
+
 def _load_inputs() -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
-    """The dynamic report and each instrument's sector employment panel."""
-    dynamic_report_df = pd.read_csv(DYNAMIC_REPORT_PATH, dtype={"OCC_CODE": str})
-    panels = {
-        "oews": sector_employment_panel(pd.read_csv(OEWS_SECTOR_TRENDS_PATH)),
-        "cps": sector_employment_panel(pd.read_csv(CPS_SECTOR_TRENDS_PATH)),
-    }
-    return dynamic_report_df, panels
+    """The dynamic report and each usable instrument's sector employment panel (OEWS always; CPS when gated in)."""
+    panels = {"oews": sector_employment_panel(pd.read_csv(OEWS_SECTOR_TRENDS_PATH))}
+    if cps_rollup_usable():
+        panels["cps"] = sector_employment_panel(pd.read_csv(CPS_SECTOR_TRENDS_PATH))
+    return _load_dynamic_report(), panels
 
 
 EXCLUDED_PERIODS_BY_INSTRUMENT = {"oews": OEWS_EXCLUDED_PERIODS, "cps": CPS_EXCLUDED_PERIODS}
@@ -364,9 +402,13 @@ def run_estimation() -> tuple[dict[str, InstrumentEstimate], dict[str, AdoptionF
     scores = sector_scores(dynamic_report_df)
     estimates, slope_frames, decomposition_frames = {}, [], []
     for instrument, panel_df in panels.items():
-        estimate, decomposition_rows = estimate_instrument(
-            instrument, panel_df, scores, EXCLUDED_PERIODS_BY_INSTRUMENT[instrument], unemployment_change, usable_fits
-        )
+        try:
+            estimate, decomposition_rows = estimate_instrument(
+                instrument, panel_df, scores, EXCLUDED_PERIODS_BY_INSTRUMENT[instrument], unemployment_change, usable_fits
+            )
+        except MissingDriverError as missing_driver:
+            print(f"  ⚠ {missing_driver}; skipping the composition forecast.")
+            return None
         estimates[instrument] = estimate
         slope_frames.append(estimate.driven_df)
         decomposition_frames.append(decomposition_rows)
@@ -483,14 +525,15 @@ def project_scenarios(
 
 
 def project_both_instruments(estimates: dict[str, InstrumentEstimate], adoption_fits: dict[str, AdoptionFit]) -> tuple[pd.DataFrame, dict]:
-    """Point projections for OEWS and CPS; returns the paths and each instrument's (label, employment, steps)."""
-    oews_label, oews_year, oews_employment = oews_start(estimates["oews"].panel_df)
-    cps_label, cps_employment = cps_start_shares(pd.read_csv(CPS_A19_PANEL_PATH, dtype={"month": str}))
-    starts = {
-        "oews": (oews_label, oews_employment, oews_steps(oews_year)),
-        "cps": (cps_label, cps_employment, cps_steps(cps_label)),
-    }
-    path_frames = [project_scenarios(estimates[instrument], *starts[instrument], adoption_fits) for instrument in ("oews", "cps")]
+    """Point projections for each estimated instrument; returns the paths and each one's (label, employment, steps)."""
+    starts = {}
+    if "oews" in estimates:
+        oews_label, oews_year, oews_employment = oews_start(estimates["oews"].panel_df)
+        starts["oews"] = (oews_label, oews_employment, oews_steps(oews_year))
+    if "cps" in estimates:
+        cps_label, cps_employment = cps_start_shares(pd.read_csv(CPS_A19_PANEL_PATH, dtype={"month": str}))
+        starts["cps"] = (cps_label, cps_employment, cps_steps(cps_label))
+    path_frames = [project_scenarios(estimates[instrument], *starts[instrument], adoption_fits) for instrument in starts]
     return pd.concat(path_frames, ignore_index=True), starts
 
 
@@ -636,8 +679,7 @@ def run_stage() -> None:
     pd.concat(stability_frames, ignore_index=True).to_csv(STABILITY_OUTPUT_PATH, index=False)
     print(f"  ✓ {SECTOR_PATHS_OUTPUT_PATH}\n  ✓ {STABILITY_OUTPUT_PATH}")
 
-    dynamic_report_df, _ = _load_inputs()
-    allocation_df = allocate_to_occupations(dynamic_report_df, sector_paths_df)
+    allocation_df = allocate_to_occupations(_load_dynamic_report(), sector_paths_df)
     final_label = allocation_df["as_of"].max()
     allocation_df[allocation_df["as_of"] == final_label].to_csv(OCCUPATION_OUTPUT_PATH, index=False)
     print(f"  ✓ {OCCUPATION_OUTPUT_PATH}")

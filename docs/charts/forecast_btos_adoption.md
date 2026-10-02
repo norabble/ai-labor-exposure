@@ -11,7 +11,7 @@ This is the Census Business Trends and Outlook Survey (BTOS) share of firms that
 - **"…in producing goods or services"** — 51 biweekly points, 2023-09-10 to 2025-08-10, 3.7% to 9.7%. Shown raw (light grey) and divided by the logistic fit's splice multiplier (dark), which places them on the new wording's scale.
 - **"…in any of its business functions"** — 22 points, 2025-11-16 to 2026-09-06, 17.2% to 23.8% (squares).
 
-Each curve is fitted to both wordings at once. A fitted multiplicative splice parameter maps the old wording onto the new one, so the splice is estimated rather than assumed.
+Each curve is fitted to both wordings at once, with a fitted multiplicative splice parameter mapping the old wording onto the new one. **No period carries both wordings.** The old series ends 2025-08-10 and the new one begins 2025-11-16, so the splice is identified only by each growth form's continuity across that 14-week gap. The multiplier's spread across forms (0.560 to 0.631) shows how much it depends on the form. The 2023–2025 adoption values that identify β_AI come from these rescaled old-wording points.
 
 ## Reading
 

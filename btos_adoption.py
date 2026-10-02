@@ -18,7 +18,10 @@ release_2025_09_15/data/input/BTOS_National.xlsx. Every run merges the latest
 fetch onto the seed; promotion of new points back to seeds/ is by hand (cp).
 
 The growth fits place the old wording on the new wording's scale with a fitted
-multiplicative splice parameter, rather than assuming one.
+multiplicative splice parameter. No period carries both wordings (the old series
+ends 2025-08-10, the new begins 2025-11-16), so the splice is identified only by
+each growth form's continuity across that gap — the assumption has moved into the
+functional form, and the spread of the multiplier across forms shows how much.
 
 Inputs:
   • data/raw/btos_national.xlsx — fetched by `python btos_adoption.py`
@@ -30,6 +33,7 @@ Outputs:
 
 import os
 import sys
+import zipfile
 from dataclasses import dataclass
 
 import numpy as np
@@ -131,7 +135,14 @@ def load_series() -> pd.DataFrame:
     if not os.path.exists(RAW_WORKBOOK_PATH):
         print(f"  ⚠ {RAW_WORKBOOK_PATH} not found; using the committed BTOS seed alone.")
         return merge_with_seed(seed_df, seed_df.iloc[0:0])
-    return merge_with_seed(seed_df, parse_btos_workbook(RAW_WORKBOOK_PATH))
+    try:
+        fetched_df = parse_btos_workbook(RAW_WORKBOOK_PATH)
+    except (ValueError, KeyError, zipfile.BadZipFile) as parse_error:
+        # Census has changed this question's wording once already; a third wording,
+        # a renamed sheet or a corrupt download must not fail the release.
+        print(f"  ⚠ {RAW_WORKBOOK_PATH} could not be parsed ({parse_error}); using the committed BTOS seed alone.")
+        return merge_with_seed(seed_df, seed_df.iloc[0:0])
+    return merge_with_seed(seed_df, fetched_df)
 
 
 def write_seed(workbook_paths: list[str]) -> pd.DataFrame:

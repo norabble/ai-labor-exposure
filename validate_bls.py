@@ -356,8 +356,9 @@ def plot_model_signal_over_time(
     (major-group totals, not an employment-weighted mean of occupation growth
     rates), and no period exists where both surveys overlap, so the two cannot be
     calibrated against each other. Its x-axis is the endpoint month rather than
-    time: all three points measure the same 12-month span from endpoints two
-    months apart, so their spread is endpoint sensitivity, not a trend.
+    time: each point is a 12-month window ending in a later month, starting no
+    earlier than the OEWS reference month, so their spread is endpoint sensitivity,
+    not a trend.
     """
     latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
 
@@ -460,7 +461,11 @@ def plot_model_signal_over_time(
     # CPS year-over-year correlations for the span OEWS does not yet reach.
     # Every pair covers the same 12 months from a different endpoint month, so
     # these are repeated measurements of one period, not successive periods.
-    cps_month_pairs = year_over_year_month_pairs(cps_panel_df) if cps_panel_df is not None else []
+    cps_month_pairs = (
+        year_over_year_month_pairs(cps_panel_df, oews_reference_month(list(merged_validation_df.columns)))
+        if cps_panel_df is not None
+        else []
+    )
     cps_results: dict[str, list[tuple[str, float, float]]] = {cfg[0]: [] for cfg in score_configs}
     if cps_month_pairs:
         for score_col, _, _, _ in score_configs:

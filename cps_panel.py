@@ -365,15 +365,16 @@ def resolve_comparison_windows(panel_df: pd.DataFrame, oews_reference: str) -> C
     return CpsComparisonWindows(anchor_month=anchor_month, latest_month=latest_month, year_ago_month=year_ago_month)
 
 
-def year_over_year_month_pairs(panel_df: pd.DataFrame) -> list[tuple[str, str]]:
+def year_over_year_month_pairs(panel_df: pd.DataFrame, earliest_year_ago_month: str | None = None) -> list[tuple[str, str]]:
     """
     Every (year_ago_month, latest_month) pair the panel can support, oldest first.
 
-    A-19 hands over the latest month and the same month a year earlier in a single
-    release, so each fetch contributes exactly one such pair. With six months on
-    hand the panel yields three — all of them measuring the same 2025→2026 span
-    from endpoints two months apart, which is why they are the endpoint-sensitivity
-    check in model_signal_over_time.png rather than three periods of a time series.
+    With `earliest_year_ago_month` set to the OEWS reference month, only pairs whose
+    window starts at or after the OEWS handoff are kept — a window starting earlier
+    overlaps a period OEWS already covers. The surviving pairs measure overlapping
+    12-month spans from consecutive endpoints, which is why they are the
+    endpoint-sensitivity check in model_signal_over_time.png rather than periods of
+    a time series.
     """
     available_months = sorted(panel_df["month"].unique())
     available_month_set = set(available_months)
@@ -381,6 +382,7 @@ def year_over_year_month_pairs(panel_df: pd.DataFrame) -> list[tuple[str, str]]:
         (str(pd.Period(month, freq="M") - 12), month)
         for month in available_months
         if str(pd.Period(month, freq="M") - 12) in available_month_set
+        and (earliest_year_ago_month is None or str(pd.Period(month, freq="M") - 12) >= earliest_year_ago_month)
     ]
 
 

@@ -256,6 +256,12 @@ class TestYearOverYearMonthPairs:
         panel_df = _panel([("2025-04", "15", 100.0), ("2025-06", "15", 110.0)])
         assert year_over_year_month_pairs(panel_df) == []
 
+    def test_keeps_only_pairs_starting_at_or_after_the_oews_handoff(self):
+        rows = [(str(month), "15", 100) for month in pd.period_range("2025-01", "2026-09", freq="M")]
+        pairs = year_over_year_month_pairs(_panel(rows), earliest_year_ago_month="2025-05")
+        assert [latest for _, latest in pairs] == ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]
+        assert all(year_ago >= "2025-05" for year_ago, _ in pairs)
+
 
 class TestBuildYearOverYearGrowth:
     def test_computes_growth_for_the_requested_pair_only(self):

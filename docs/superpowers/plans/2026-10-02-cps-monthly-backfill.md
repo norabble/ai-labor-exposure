@@ -1266,7 +1266,7 @@ git commit -m "Chart the raw and seasonally adjusted CPS starts side by side"
 **Interfaces:**
 - Produces: `year_over_year_month_pairs(panel_df: pd.DataFrame, earliest_year_ago_month: str | None = None) -> list[tuple[str, str]]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `TestYearOverYearMonthPairs`:
 
@@ -1278,12 +1278,12 @@ Append to `TestYearOverYearMonthPairs`:
         assert all(year_ago >= "2025-05" for year_ago, _ in pairs)
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `uv run pytest tests/test_cps.py::TestYearOverYearMonthPairs -v`
 Expected: FAIL — unexpected keyword argument `earliest_year_ago_month`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace `year_over_year_month_pairs`:
 
@@ -1319,12 +1319,12 @@ cps_month_pairs = (
 
 and in its docstring replace "all three points measure the same 12-month span from endpoints two months apart" with "each point is a 12-month window ending in a later month, starting no earlier than the OEWS reference month, so their spread is endpoint sensitivity, not a trend".
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/test_cps.py tests/test_validate_bls.py -v` (skip the second path if that file does not exist).
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add cps_panel.py validate_bls.py tests/test_cps.py docs/superpowers/plans/2026-10-02-cps-monthly-backfill.md

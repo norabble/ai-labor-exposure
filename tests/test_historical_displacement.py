@@ -21,7 +21,7 @@ import json
 import os
 import time
 import warnings
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 import pytest
@@ -671,6 +671,27 @@ class TestFetchBlsSeriesCache:
         past_year = date.today().year - 2
         self._write_cache(cache_dir, past_year, past_year, "1", age_seconds=400 * 86400)
         monkeypatch.setattr(historical_displacement.requests, "post", lambda *args, **kwargs: pytest.fail("past cache was refetched"))
+        assert historical_displacement.fetch_bls_series("X", past_year, past_year)["value"].tolist() == [1.0]
+
+    def test_refetches_a_past_year_cache_written_during_its_own_end_year(self, cache_dir, monkeypatch):
+        """A file for year Y written in Y never saw December; once Y has passed it must be refreshed."""
+        past_year = date.today().year - 2
+        cache_path = cache_dir / f"X_{past_year}_{past_year}.json"
+        cache_path.write_text(json.dumps(_series_payload("1")), encoding="utf-8")
+        written_time = datetime(past_year, 6, 15).timestamp()
+        os.utime(cache_path, (written_time, written_time))
+        monkeypatch.setattr(historical_displacement.requests, "post", lambda *args, **kwargs: _FakeResponse(_series_payload("2")))
+        assert historical_displacement.fetch_bls_series("X", past_year, past_year)["value"].tolist() == [2.0]
+
+    def test_keeps_a_past_year_cache_written_after_its_range_closed(self, cache_dir, monkeypatch):
+        past_year = date.today().year - 2
+        cache_path = cache_dir / f"X_{past_year}_{past_year}.json"
+        cache_path.write_text(json.dumps(_series_payload("1")), encoding="utf-8")
+        written_time = datetime(past_year + 1, 6, 15).timestamp()
+        os.utime(cache_path, (written_time, written_time))
+        monkeypatch.setattr(
+            historical_displacement.requests, "post", lambda *args, **kwargs: pytest.fail("closed-range cache was refetched")
+        )
         assert historical_displacement.fetch_bls_series("X", past_year, past_year)["value"].tolist() == [1.0]
 
     def test_falls_back_to_a_stale_cache_when_the_request_fails(self, cache_dir, monkeypatch):

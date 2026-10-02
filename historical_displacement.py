@@ -74,7 +74,7 @@ import json
 import os
 import time
 import warnings
-from datetime import date
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -219,7 +219,9 @@ def _cache_path(series_id: str, start_year: int, end_year: int) -> str:
 
 
 # A cache file covering the current year goes stale as BLS publishes new months;
-# one covering only past years never changes. 24 hours is shorter than the gap
+# one covering only past years never changes -- provided it was written after
+# that range closed. A file for year Y written during Y never saw December, so
+# it stays on the 24-hour rule until a later year's refetch replaces it. 24 hours is shorter than the gap
 # between monthly releases and long enough that a day's re-runs stay offline.
 CURRENT_YEAR_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60
 
@@ -227,7 +229,7 @@ CURRENT_YEAR_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60
 def _cache_is_fresh(cache_path: str, end_year: int) -> bool:
     if not os.path.exists(cache_path):
         return False
-    if end_year < date.today().year:
+    if end_year < datetime.fromtimestamp(os.path.getmtime(cache_path)).year:
         return True
     return time.time() - os.path.getmtime(cache_path) < CURRENT_YEAR_CACHE_MAX_AGE_SECONDS
 

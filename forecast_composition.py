@@ -35,12 +35,14 @@ Outputs:
 
 import re
 import warnings
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
-from composition_era_validation import COVID_PERIODS
+from btos_adoption import AdoptionFit, accepted_fits, annual_mean_adoption, run_adoption
+from composition_era_validation import COVID_PERIODS, unemployment_change_by_period
 
 DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
 OEWS_SECTOR_TRENDS_PATH = "data/output/bls_sector_trends.csv"
@@ -255,3 +257,129 @@ def coefficients_from(decomposition_df: pd.DataFrame) -> dict[str, float]:
     coefficients = dict.fromkeys(DECOMPOSITION_TERMS, 0.0)
     coefficients.update(dict(zip(decomposition_df["term"], decomposition_df["coefficient"])))
     return coefficients
+
+
+# ── Estimation entry point ─────────────────────────────────────────────────────
+
+STAGE2_ADOPTION_FIT = "logistic"
+
+
+@dataclass
+class InstrumentEstimate:
+    instrument: str
+    scores: pd.Series
+    panel_df: pd.DataFrame
+    driven_df: pd.DataFrame
+    stage2_df: pd.DataFrame
+    decomposition_df: pd.DataFrame
+    coefficients: dict[str, float]
+
+
+def _labelled(decomposition_df: pd.DataFrame, instrument: str, specification: str) -> pd.DataFrame:
+    return decomposition_df.assign(instrument=instrument, specification=specification)
+
+
+def estimate_instrument(
+    instrument: str,
+    panel_df: pd.DataFrame,
+    scores: pd.Series,
+    excluded_periods: dict[str, str],
+    unemployment_change: pd.Series,
+    adoption_fits: dict[str, AdoptionFit],
+) -> tuple[InstrumentEstimate, pd.DataFrame]:
+    """Stages 1–2 for one instrument, plus the excluded-period and adoption-backcast sensitivity rows."""
+    period_slopes_df = estimate_period_slopes(panel_df, scores, instrument, excluded_periods)
+    adoption_years = sorted(period_slopes_df["end_year"].loc[lambda end_years: end_years > PRE_ADOPTION_LAST_YEAR])
+
+    main_adoption = annual_mean_adoption(adoption_fits[STAGE2_ADOPTION_FIT], adoption_years)
+    driven_df = attach_drivers(period_slopes_df, unemployment_change, main_adoption)
+    main_stage2_df = stage2_input(driven_df)
+    main_decomposition_df = decompose_slopes(main_stage2_df)
+
+    decomposition_frames = [_labelled(main_decomposition_df, instrument, "main")]
+    if excluded_periods:
+        decomposition_frames.append(
+            _labelled(decompose_slopes(stage2_input(driven_df, include_excluded=True)), instrument, "with_excluded_periods")
+        )
+    for fit_name, adoption_fit in adoption_fits.items():
+        if fit_name == STAGE2_ADOPTION_FIT:
+            continue
+        backcast_driven_df = attach_drivers(period_slopes_df, unemployment_change, annual_mean_adoption(adoption_fit, adoption_years))
+        decomposition_frames.append(_labelled(decompose_slopes(stage2_input(backcast_driven_df)), instrument, f"backcast_{fit_name}"))
+
+    estimate = InstrumentEstimate(
+        instrument=instrument,
+        scores=align_sectors(panel_df, scores),
+        panel_df=panel_df,
+        driven_df=driven_df,
+        stage2_df=main_stage2_df,
+        decomposition_df=main_decomposition_df,
+        coefficients=coefficients_from(main_decomposition_df),
+    )
+    return estimate, pd.concat(decomposition_frames, ignore_index=True)
+
+
+def _load_inputs() -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+    """The dynamic report and each instrument's sector employment panel."""
+    dynamic_report_df = pd.read_csv(DYNAMIC_REPORT_PATH, dtype={"OCC_CODE": str})
+    panels = {
+        "oews": sector_employment_panel(pd.read_csv(OEWS_SECTOR_TRENDS_PATH)),
+        "cps": sector_employment_panel(pd.read_csv(CPS_SECTOR_TRENDS_PATH)),
+    }
+    return dynamic_report_df, panels
+
+
+EXCLUDED_PERIODS_BY_INSTRUMENT = {"oews": OEWS_EXCLUDED_PERIODS, "cps": CPS_EXCLUDED_PERIODS}
+
+
+def print_checkpoint(estimates: dict[str, InstrumentEstimate]) -> None:
+    """The Stage 2 result the plan's checkpoint task reads: β_AI and its p-value per instrument."""
+    print("\n  Stage 2 — β_t = β_structural + β_cycle·ΔU + β_AI·A  (main specification)")
+    for instrument, estimate in estimates.items():
+        for row in estimate.decomposition_df.itertuples():
+            print(
+                f"    {instrument:<5} {row.term:<11} {row.coefficient:+.5f}  se {row.std_error:.5f}  "
+                f"p = {row.p_value:.4f}  (n = {row.n_periods}, R² = {row.r_squared:.3f})"
+            )
+
+
+def run_estimation() -> tuple[dict[str, InstrumentEstimate], dict[str, AdoptionFit]] | None:
+    """Stages 1–2 for both instruments; writes the period-slope and decomposition CSVs."""
+    _, adoption_fits = run_adoption()
+    dynamic_report_df, panels = _load_inputs()
+
+    all_period_keys = sorted({f"{year}_{year + 1}" for panel_df in panels.values() for year in panel_df.columns})
+    unemployment_change = unemployment_change_by_period(all_period_keys)
+    if unemployment_change is None:
+        print("  ⚠ No unemployment series available; skipping the composition forecast.")
+        return None
+
+    usable_fits = accepted_fits(adoption_fits)
+    if STAGE2_ADOPTION_FIT not in usable_fits:
+        print(f"  ⚠ The {STAGE2_ADOPTION_FIT} adoption fit was rejected; skipping the composition forecast.")
+        return None
+
+    scores = sector_scores(dynamic_report_df)
+    estimates, slope_frames, decomposition_frames = {}, [], []
+    for instrument, panel_df in panels.items():
+        estimate, decomposition_rows = estimate_instrument(
+            instrument, panel_df, scores, EXCLUDED_PERIODS_BY_INSTRUMENT[instrument], unemployment_change, usable_fits
+        )
+        estimates[instrument] = estimate
+        slope_frames.append(estimate.driven_df)
+        decomposition_frames.append(decomposition_rows)
+
+    pd.concat(slope_frames, ignore_index=True).to_csv(PERIOD_SLOPES_OUTPUT_PATH, index=False)
+    pd.concat(decomposition_frames, ignore_index=True).to_csv(DECOMPOSITION_OUTPUT_PATH, index=False)
+    print(f"  ✓ {PERIOD_SLOPES_OUTPUT_PATH}\n  ✓ {DECOMPOSITION_OUTPUT_PATH}")
+    print_checkpoint(estimates)
+    return estimates, usable_fits
+
+
+def run_stage() -> None:
+    """The `forecast` pipeline stage."""
+    run_estimation()
+
+
+if __name__ == "__main__":
+    run_stage()

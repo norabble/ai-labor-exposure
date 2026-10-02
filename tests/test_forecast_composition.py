@@ -11,11 +11,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import forecast_composition
+from btos_adoption import AdoptionFit
 from forecast_composition import (
     align_sectors,
     attach_drivers,
     coefficients_from,
     decompose_slopes,
+    estimate_instrument,
     estimate_period_slopes,
     fit_coefficients,
     report_employment_column,
@@ -164,3 +167,34 @@ class TestStageTwo:
 
     def test_fit_coefficients_returns_none_when_rank_deficient(self):
         assert fit_coefficients(synthetic_period_slopes(ai_periods=0)) is None
+
+
+class TestEstimationEntryPoint:
+    def test_estimate_instrument_writes_main_and_sensitivity_rows(self, scores):
+        # Noise keeps every Stage 1 standard error positive; WLS weights are 1/se².
+        panel_df = synthetic_panel({year: 0.01 for year in range(2001, 2026)}, scores, years=range(2000, 2026), noise=0.002)
+        period_keys = [f"{year}_{year + 1}" for year in range(2000, 2025)]
+        unemployment_change = pd.Series(np.random.default_rng(1).normal(0, 1, len(period_keys)), index=period_keys)
+        adoption_fits = {
+            "logistic": AdoptionFit("logistic", (0.6, 0.6, 5.0), 0.55, True),
+            "linear": AdoptionFit("linear", (0.0, 0.04), 0.55, True),
+        }
+        estimate, decomposition_rows = estimate_instrument(
+            "oews", panel_df, scores, {"2009_2010": "SOC 2010 revision level break"}, unemployment_change, adoption_fits
+        )
+        assert set(decomposition_rows["specification"]) == {"main", "with_excluded_periods", "backcast_linear"}
+        assert (decomposition_rows["instrument"] == "oews").all()
+        assert "2009_2010" not in set(estimate.stage2_df["period"])
+
+    def test_decompose_rejects_zero_standard_error(self):
+        zero_error_df = synthetic_period_slopes()
+        zero_error_df.loc[0, "std_error"] = 0.0
+        with pytest.raises(ValueError, match="non-positive standard error"):
+            decompose_slopes(zero_error_df)
+
+    def test_run_stage_skips_without_unemployment(self, monkeypatch, capsys):
+        monkeypatch.setattr(forecast_composition, "unemployment_change_by_period", lambda period_keys: None)
+        monkeypatch.setattr(forecast_composition, "_load_inputs", lambda: (pd.DataFrame(), {"oews": pd.DataFrame()}))
+        monkeypatch.setattr(forecast_composition, "run_adoption", lambda: (pd.DataFrame(), {}))
+        assert forecast_composition.run_estimation() is None
+        assert "No unemployment series available" in capsys.readouterr().out

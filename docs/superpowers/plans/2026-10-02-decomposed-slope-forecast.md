@@ -1142,7 +1142,7 @@ git commit -m "Add Stage 2 of the composition forecast: WLS slope decomposition"
 - Consumes: Tasks 2–4; `composition_era_validation.unemployment_change_by_period(period_keys) -> pd.Series | None`.
 - Produces: `@dataclass InstrumentEstimate(instrument: str, scores: pd.Series, panel_df: pd.DataFrame, driven_df: pd.DataFrame, stage2_df: pd.DataFrame, decomposition_df: pd.DataFrame, coefficients: dict[str, float])`; `estimate_instrument(instrument, panel_df, scores, excluded_periods, unemployment_change, adoption_fits) -> tuple[InstrumentEstimate, pd.DataFrame]` (second item: all decomposition rows incl. sensitivity, with `instrument` and `specification` columns); `run_estimation() -> tuple[dict[str, InstrumentEstimate], dict[str, AdoptionFit]] | None`; `run_stage() -> None`; constant `STAGE2_ADOPTION_FIT = "logistic"`.
 
-- [ ] **Step 1: Write the failing tests** (append)
+- [x] **Step 1: Write the failing tests** (append)
 
 ```python
 from btos_adoption import AdoptionFit
@@ -1182,12 +1182,12 @@ class TestEstimationEntryPoint:
 
 Delete the unused `constant_fit` helper before committing if nothing references it.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_forecast_composition.py::TestEstimationEntryPoint -v`
 Expected: FAIL — `ImportError: cannot import name 'estimate_instrument'`
 
-- [ ] **Step 3: Append the entry point to `forecast_composition.py`**
+- [x] **Step 3: Append the entry point to `forecast_composition.py`**
 
 Add to the imports: `from dataclasses import dataclass`, `from btos_adoption import AdoptionFit, accepted_fits, annual_mean_adoption, run_adoption`, and extend the `composition_era_validation` import to `from composition_era_validation import COVID_PERIODS, unemployment_change_by_period`. Then append:
 
@@ -1317,7 +1317,7 @@ if __name__ == "__main__":
     run_stage()
 ```
 
-- [ ] **Step 4: Wire the stage into `main.py`**
+- [x] **Step 4: Wire the stage into `main.py`**
 
 Add `from forecast_composition import run_stage as forecast_composition` to the imports. Change the stage list and its comment:
 
@@ -1330,12 +1330,12 @@ STAGES = ["analyze", "synthesize", "plot", "validate", "composition", "forecast"
 
 Add `"forecast": ("Composition Forecast to 2030", forecast_composition),` to `runners`, `  forecast    Decomposed-slope composition forecast to 2030` to the epilog, and `  forecast   — Project sector composition to 2030 → data/output/forecast_*.csv` to the module docstring.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS (16 tests)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add forecast_composition.py main.py tests/test_forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

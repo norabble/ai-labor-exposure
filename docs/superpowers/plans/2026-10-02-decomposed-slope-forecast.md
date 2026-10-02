@@ -2378,7 +2378,7 @@ Visualizations table:
 
 - [ ] **Step 2: Write the six chart docs**
 
-Each follows the existing chart-doc shape (`docs/charts/dynamic_model_winners_losers.md`): title, `**File:**`, image link `![…](images/<name>.png)`, "What this chart shows", the reading, and a limitations section. Every doc states that the projection is conditional and composition-only; `forecast_demand_type_shares.md` and any occupation reference state the allocation caveat. Measured figures in them go through Step 3's skill.
+Each follows the existing chart-doc shape (`docs/charts/dynamic_model_winners_losers.md`): title, `**File:**`, an image link to the chart under `images/`, "What this chart shows", the reading, and a limitations section. Every doc states that the projection is conditional and composition-only; `forecast_demand_type_shares.md` and any occupation reference state the allocation caveat. Measured figures in them go through Step 3's skill.
 
 - [ ] **Step 3: Record measured results**
 

@@ -1340,7 +1340,7 @@ git commit -m "Start the CPS signal endpoints at the OEWS handoff month"
 - Create: `docs/charts/forecast_cps_start_basis.md`
 - Modify: `docs/outputs.md` (row for `forecast_cps_start_basis.png`), `docs/charts/images/*` (stale images + `chart_manifest.json`)
 
-- [ ] **Step 1: Fetch** (outside the sandbox — network and headless Chrome)
+- [x] **Step 1: Fetch** (outside the sandbox — network and headless Chrome)
 
 ```bash
 uv run download_cps_history.py
@@ -1349,7 +1349,7 @@ node download_cps.js
 
 Expected: `80 months, 2020-01 → 2026-09`, then `Saved .../table_a19.html`.
 
-- [ ] **Step 2: Run the pipeline** (outside the sandbox)
+- [x] **Step 2: Run the pipeline** (outside the sandbox)
 
 ```bash
 uv run main.py 2>&1 | tee "$TMPDIR/pipeline_run.txt"
@@ -1357,7 +1357,7 @@ uv run main.py 2>&1 | tee "$TMPDIR/pipeline_run.txt"
 
 Expected: exit 0; the forecast stage prints the 22 × 12 factor table and writes `cps_seasonal_factors.csv`; no "A-19 page disagrees" error; no "seasonally adjusted start skipped".
 
-- [ ] **Step 3: Verify and promote the seed**
+- [x] **Step 3: Verify and promote the seed**
 
 ```bash
 uv run python - <<'EOF'
@@ -1374,12 +1374,12 @@ cp data/output/cps_a19_panel.csv seeds/
 
 Expected: `1760 2020-01 2026-09 False`, and no assertion error (every previously committed value unchanged).
 
-- [ ] **Step 4: Refresh charts**
+- [x] **Step 4: Refresh charts**
 
 Run: `uv run check_charts.py`. For each `stale image` it lists, and for `forecast_cps_start_basis.png`:
 `cp data/output/visualizations/<chart>.png docs/charts/images/` then `cp data/output/visualizations/chart_manifest.json docs/charts/images/`.
 
-- [ ] **Step 5: Write the chart page and outputs row**
+- [x] **Step 5: Write the chart page and outputs row**
 
 Use the `record-measured-result` skill for every figure. Create `docs/charts/forecast_cps_start_basis.md` following the structure of `docs/charts/forecast_sector_change_2030.md`: what it shows (two bars per sector, reference scenario, start month), how to read the factor in each label, the measured result (the largest raw-vs-adjusted gaps and whether any sector changes sign, from `forecast_sector_paths.csv` filtered to `as_of == "2030-12"`), and that the raw start remains primary. Add the `docs/outputs.md` row for `forecast_cps_start_basis.png`.
 
@@ -1529,3 +1529,5 @@ git commit -m "Add the monthly CPS update skill"
 **Task 1, Step 6 (fix round 1):** `uv run download_cps_history.py` placed LAST in the Makefile `download-data` recipe (after `uv run download_dws.py`) instead of before `node download_cps.js`. Reason: the plan's ordering caused a local API failure to abort later downloads (`node download_cps.js` and `uv run download_dws.py`), breaking the entire download-data target; moving it to the end preserves both fetchers' ability to run. The cross-check (A-19 page against API history) happens in the pipeline (`cps_panel.load_cps_panel`), not in the download stage, so download order is irrelevant.
 
 **Task 6 (note):** The brief's title was one centred `set_title` that clipped at the right edge once rendered (long y labels shift the axes). It is now four short lines, right-aligned, at fontsize 9. The byte-comparison test was deterministic, so the manifest-fingerprint fallback was not needed.
+
+**Task 8, Step 6 (note):** The claims-auditor dispatch moved to the controller's review; the box for it is unticked. The implementer instead listed every figure in `docs/charts/forecast_cps_start_basis.md` with its reproducing filter in the task report. Step 4 also copied `forecast_slope_history.png`, which check_charts reported stale after the backfill, in addition to `forecast_sector_change_2030.png` and the new chart.

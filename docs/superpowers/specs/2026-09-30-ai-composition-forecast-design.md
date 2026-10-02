@@ -1,6 +1,6 @@
 # AI Composition Forecast to 2030 — Design
 
-**Status: approved design, not yet planned.**
+**Status: superseded** by `docs/superpowers/specs/2026-10-02-decomposed-slope-forecast-design.md`. Prototyping showed the Economic Index coverage index is flat Jan 2025 → May 2026, so this design would forecast no change by construction; see that spec § Why the earlier design was dropped.
 
 **Goal:** project how occupational employment *composition* would shift from the
 most recent data to 2030 if the dynamic labor equilibrium model

@@ -62,7 +62,7 @@ class TestParseApiPayload:
     def test_raises_when_a_month_lacks_a_group(self):
         observations = _every_group([("2026", "M09", "100")])
         observations["15"] = [("2026", "M08", "100")]
-        with pytest.raises(ValueError, match="2026-08|2026-09"):
+        with pytest.raises(ValueError, match=r"2026-08.*2026-09"):
             parse_api_payload(_payload(observations))
 
     def test_raises_when_the_api_refuses_the_request(self):

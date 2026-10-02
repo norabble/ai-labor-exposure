@@ -1526,4 +1526,4 @@ git commit -m "Add the monthly CPS update skill"
 
 ## Deviations log
 
-(Record any step that was skipped or changed, with the reason.)
+**Task 1, Step 6 (fix round 1):** `uv run download_cps_history.py` placed LAST in the Makefile `download-data` recipe (after `uv run download_dws.py`) instead of before `node download_cps.js`. Reason: the plan's ordering caused a local API failure to abort later downloads (`node download_cps.js` and `uv run download_dws.py`), breaking the entire download-data target; moving it to the end preserves both fetchers' ability to run. The cross-check (A-19 page against API history) happens in the pipeline (`cps_panel.load_cps_panel`), not in the download stage, so download order is irrelevant.

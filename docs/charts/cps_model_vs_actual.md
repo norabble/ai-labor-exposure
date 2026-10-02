@@ -52,7 +52,7 @@ This is a material change from the previous model version. Before Adversarial sh
 
 **CPS monthly data has high sampling variance.** Smaller groups (Farming, Legal, Life Science) carry margins of error that can exceed the measured change itself.
 
-**The since-OEWS window is not seasonally adjusted.** It spans May→Sep and crosses a January population-control update. Farming, Fishing, and Forestry reads +16.6% over that window against +10.7% year-over-year (both measured 2026-10-02 from `cps_a19_panel.csv`), a 5.9 pp gap that part-seasonal agricultural hiring may explain; this is not tested here. This is one reason to weight the year-over-year row over the since-OEWS one, though for these four correlations the two windows give similar values for the dynamic model (+0.193 and +0.190).
+**Neither window is seasonally adjusted, and both cross the January 2026 population-control update.** Only the since-OEWS window also spans different calendar months (May→Sep). Farming, Fishing, and Forestry reads +16.6% over that window against +10.7% year-over-year (both measured 2026-10-02 from `cps_a19_panel.csv`), a 5.9 pp gap that part-seasonal agricultural hiring may explain; this is not tested here. This is one reason to weight the year-over-year row over the since-OEWS one. The similar dynamic-model r values (+0.193 and +0.190) are partly mechanical, since the year-over-year window is nested inside the since-OEWS window; they are not two independent confirmations.
 
 **The window is short.** Major-group employment is driven by sector-specific confounders (interest rates, post-pandemic normalization, policy changes) that dominate a roughly one-year AI signal.
 

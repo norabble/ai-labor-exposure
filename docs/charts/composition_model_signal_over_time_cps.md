@@ -88,7 +88,9 @@ is unpublished) and 2026 carries 9 (January–September), so `emp_growth_2025_20
 — one of only four CPS AI-era periods — compares two unequal, seasonally
 unbalanced month sets: an NSA series has a within-year seasonal shape, so
 averaging 9 months of one year against 11 of another is not the same
-comparison as averaging matched months of both. The panel now carries a
+comparison as averaging matched months of both. (The composition forecast's CPS
+rollup is a different panel, built from IPUMS, whose 2026 averages 8 months — see
+`docs/framework.md` § Composition Forecast.) The panel now carries a
 `months_observed` column recording how many months back each annual mean, so
 this is visible rather than silent.
 
@@ -98,10 +100,10 @@ significance. Measured 2026-10-02, recomputed on matched months (January–Septe
 of both 2025 and 2026; n = 10 groups), `emp_growth_2025_2026`'s Pearson r moves
 from **+0.233 (p = 0.517) to +0.337 (p = 0.341)** for `composition_net_change`
 and from **+0.093 (p = 0.798) to +0.253 (p = 0.480)** for `occupation_exposure`
-— both shifts point the same direction (stronger, not weaker) and neither
-crosses zero or the n=10 significance threshold (|r| ≈ 0.63). Treat the headline
-numbers below as an understatement of this period's fit, not a distortion of its
-sign. (Before September 2026 was published the same recomputation on
+— all four r values are non-significant at n = 10 (p ≥ 0.34, against |r| ≈ 0.63),
+and the shifts are within sampling noise at that n. The partial-year imbalance
+does not change the period's sign or its non-significance; these data do not
+show which way it biases the size. (Before September 2026 was published the same recomputation on
 January–August read +0.259 to +0.330 and +0.204 to +0.346.)
 
 ## The anachronism rule, and what the era result means under it
@@ -131,8 +133,10 @@ of aggregation and power).
 
 One divergence from the sector-level result is worth stating rather than
 burying: the business-cycle term is significant at sector level (+0.137,
-p = 0.002, n=24 periods) but vanishes at CPS level (+0.030, p = 0.691, n=41).
-Candidate explanations include the ten-group aggregation washing out cyclical
+p = 0.002, n=24 periods) and not significant at CPS level (+0.030, p = 0.691, n=41).
+The fit-strength r behind each period is computed at n = 22 at sector level and
+n = 10 here, so the sizes are not comparable, and the noisier n = 10 r is itself
+a candidate explanation. Others include the ten-group aggregation washing out cyclical
 sorting that survives at 22 sectors, genuinely different pre-1999 cyclical
 behaviour, and differences between the two instruments themselves. None of
 these is established by the data on hand — do not pick one.

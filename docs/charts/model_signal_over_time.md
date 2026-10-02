@@ -151,9 +151,10 @@ Measured 2026-10-02 from the validate stage's console output (`CPS year-over-yea
 
 None of the 15 values is significant (0 of 15; smallest p = 0.141).
 
-**The dynamic model does not reproduce on CPS.** All five endpoints are positive,
-the correct sign, but none is significant (largest +0.303, p = 0.171), and all
-sit well below its AI-era OEWS values (+0.53, +0.48). This changed when Adversarial share was added to absorption
+**The dynamic model does not reproduce on CPS.** Across the five endpoint months
+of the one 2025→2026 span, r ranges from +0.061 to +0.303 (the correct sign), and
+none is significant at n = 22 (smallest p = 0.171). The range is endpoint
+sensitivity, not five tests, and all five sit below its AI-era OEWS values (+0.53, +0.48). This changed when Adversarial share was added to absorption
 capacity: the previous model version read +0.24, +0.37 and +0.48 (p = 0.023)
 here, and the Adversarial-heavy sectors whose scores rose — Legal, Sales,
 Protective Service, Management — fit their 2022→2025 OEWS growth better but
@@ -161,16 +162,16 @@ their 2025→2026 CPS growth worse. See `cps_model_vs_actual.md` for the
 discussion. The cross-survey replication is an open question.
 
 **The rebound-adjusted model disagrees with itself across surveys.** Its OEWS
-AI-era values are clearly negative (−0.41 in 2023→24, −0.35 in 2024→25), which is
-the correct sign. All five CPS endpoints are positive, which is the wrong one.
-None of the CPS values approach significance (the largest, +0.173, p = 0.440, is
-far from it), so this is a failure to reproduce rather than a contradiction — but it is a
+AI-era values are negative, the correct sign (−0.428, p = 0.047, in 2023→24;
+−0.288, p = 0.193, in 2024→25; measured 2026-10-02, n = 22 sectors, occupation_exposure,
+major-group growth). Across the five CPS endpoint months r ranges from +0.038 to
++0.173, the wrong sign, and none is significant (smallest p = 0.440), so this is a failure to reproduce rather than a contradiction — but it is a
 caution against treating the OEWS-era negative signal as established. Which of the
 three explanations above accounts for the flip is not determinable from the data
 on hand.
 
-**Observed AI coverage is wrong-signed at all five endpoints** on employment
-(none significant; it falls from +0.324 in May to +0.011 in Sep),
+**Observed AI coverage is wrong-signed across the endpoint months** on employment
+(r from +0.011 to +0.324, none significant at n = 22; smallest p = 0.141),
 consistent with its weak employment showing throughout. (Its sector-level
 *wage* signal is a different matter — see
 `anthropic_observed_sector_level_wage_validation.md`.)

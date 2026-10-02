@@ -6,7 +6,7 @@
 
 ## What this chart shows
 
-**It tests whether starting the CPS projection in September, a month with its own seasonal pattern, changes the answer. The chart has two panels.** Table A-19 is not seasonally adjusted, so the latest month's sector shares carry that month's seasonality into the projection.
+**It bounds how much September's seasonal pattern moves the CPS projection's starting level. The chart has two panels.** Table A-19 is not seasonally adjusted, so the latest month's sector shares carry that month's seasonality into the projection. This is not a robustness test of the projection: only the start shares change, and the fitted slopes were estimated before either start existed (`forecast_slope_decomposition.csv` has no `start_basis` column), so near-identical projected changes follow by construction. It does not test whether seasonality affects the fitted slopes.
 
 **Left panel, "Change to 2030 from each start".** Each sector has two bars: its projected change in employment share, in percentage points, from 2026-09 to 2030-12, under the reference scenario (steady unemployment, logistic AI adoption). The blue bar starts from the raw 2026-09 shares. The orange bar starts from the same shares divided by each sector's September seasonal factor and renormalised to sum to one. Sectors are ordered by the raw projection.
 
@@ -20,7 +20,7 @@
 
 Measured 2026-10-02 from `forecast_sector_paths.csv` (filter `instrument == "cps"`, `unemployment_scenario == "steady"`, `adoption_fit == "logistic"`, n = 22 sectors). Change = (share at `as_of == "2030-12"` − share at `as_of == "2026-09"`) × 100, per `start_basis`.
 
-- **The two starts give nearly the same projection.** The absolute raw-versus-adjusted gap in projected change has median 0.002 pp and mean 0.004 pp across the 22 sectors.
+- **The two starts give nearly the same projected change, as they must when only the start shares differ.** The absolute raw-versus-adjusted gap in projected change has median 0.002 pp and mean 0.004 pp across the 22 sectors.
 - **The largest gaps are:**
 
 | Sector | Raw change | Adjusted change | Gap |
@@ -30,7 +30,7 @@ Measured 2026-10-02 from `forecast_sector_paths.csv` (filter `instrument == "cps
 | Architecture and Engineering | −0.292 | −0.303 | −0.012 |
 
 - **Sector order here is the raw projection's, as on the chart.**
-- **No sector changes sign** (0 of 22 have raw and adjusted changes of opposite sign).
+- **No sector changes sign** (0 of 22 have raw and adjusted changes of opposite sign), which follows from the shared slope path and is not independent evidence.
 - **The start shares themselves move more than the projections do.** The largest adjustment to a sector's 2026-09 share is 0.136 pp (Building and Grounds Cleaning and Maintenance, factor 1.042, whose share falls).
 
 **The 2030 share gap is larger than the change gap, and it carries the start-share adjustment through almost unchanged.** Same filter, adjusted minus raw share at `as_of == "2030-12"`, times 100, n = 22 sectors: median absolute gap 0.043 pp, mean 0.057 pp, maximum 0.139 pp. The start column is the same difference at `as_of == "2026-09"`.

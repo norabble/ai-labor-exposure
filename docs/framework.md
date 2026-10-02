@@ -801,10 +801,12 @@ this project's anachronism rule — 2025 O\*NET labels are strong evidence when
 they still produce a positive result, but uninformative rather than
 disconfirming when they do not — this null says nothing against the taxonomy.
 One divergence is worth flagging rather than burying: the business-cycle term
-that is significant at sector level (+0.137, p = 0.002) vanishes at CPS level
-(+0.030, p = 0.691), and the data on hand do not distinguish between candidate
-explanations (ten-group aggregation, genuinely different pre-1999 cyclical
-behaviour, and instrument differences). Full numbers, the two internal
+is significant at sector level (+0.137, p = 0.002) and not significant at CPS
+level (+0.030, p = 0.691). The fit-strength r behind it is computed at n = 22 at
+sector level and n = 10 at CPS level, so the sizes are not comparable, and the
+noisier n = 10 r is itself a candidate explanation alongside ten-group
+aggregation, genuinely different pre-1999 cyclical behaviour, and instrument
+differences; the data on hand do not distinguish between them. Full numbers, the two internal
 comparability breaks the CPS series carries, and the composition-stability
 sensitivity check are in `docs/charts/composition_model_signal_over_time_cps.md`.
 
@@ -1239,7 +1241,7 @@ Measured 2026-10-02 from `forecast_sector_paths.csv` and `forecast_sector_stabil
 | Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.71, +0.38; −1.36 to −0.24) | −1.09 |
 | Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.17, +0.61; +0.10 to +0.50) | +0.42 |
 
-All values are percentage points. OEWS runs May 2025 → May 2030 and CPS runs September 2026 → December 2030. The CPS raw start is the primary result; the seasonally adjusted start divides each sector's September 2026 share by its September seasonal factor (`cps_seasonal_factors.csv`) and renormalises. Bands and LOO ranges are given for the raw start only. The two starts differ little in projected change: across the 22 sectors the largest absolute raw-versus-adjusted gap is 0.018 pp (Office and Administrative Support, +3.414 raw against +3.432 adjusted), the median is 0.002 pp, and 0 of 22 sectors change sign. The 2030 share gap is larger, up to 0.139 pp (Building and Grounds Cleaning and Maintenance), because it carries the start-share adjustment through almost unchanged (see `docs/charts/forecast_cps_start_basis.md`). Measured 2026-10-02 from `forecast_sector_paths.csv` (`instrument == "cps"`, steady, logistic, `as_of` 2026-09 and 2030-12, both `start_basis` values, n = 22 sectors). Because the horizons, employment bases and sector mapping differ, **only the signs are comparable across instruments, not the magnitudes.**
+All values are percentage points. OEWS runs May 2025 → May 2030 and CPS runs September 2026 → December 2030. The CPS raw start is the primary result; the seasonally adjusted start divides each sector's September 2026 share by its September seasonal factor (`cps_seasonal_factors.csv`) and renormalises. Bands and LOO ranges are given for the raw start only. The comparison bounds the seasonal effect on the start level; it is not a robustness test, because only the start shares change and the slopes are fitted before either start exists, so similar projected changes follow by construction. Across the 22 sectors the largest absolute raw-versus-adjusted gap in projected change is 0.018 pp (Office and Administrative Support, +3.414 raw against +3.432 adjusted) and the median is 0.002 pp. The 2030 share gap is larger, up to 0.139 pp (Building and Grounds Cleaning and Maintenance), because it carries the start-share adjustment through almost unchanged (see `docs/charts/forecast_cps_start_basis.md`). Measured 2026-10-02 from `forecast_sector_paths.csv` (`instrument == "cps"`, steady, logistic, `as_of` 2026-09 and 2030-12, both `start_basis` values, n = 22 sectors). Because the horizons, employment bases and sector mapping differ, **only the signs are comparable across instruments, not the magnitudes.**
 
 - **The bands describe one result, not 22.** Every sector's projection is the same slope path multiplied by its fixed score, then renormalised. On OEWS the band excludes zero for 21 of 22 sectors; the exception is Farming, Fishing, and Forestry, whose score sits at the employment-weighted mean (projected change +0.001 pp). On CPS (raw start) it excludes zero for 0 of 22. The bands exclude sector noise and specification uncertainty. They do not cover the disagreement between instruments.
 - **Leave-one-period-out keeps each sector's sign on OEWS (22 of 22) and on CPS for 20 of 22, but not CPS's size.** The two CPS exceptions, Business and Financial Operations (−0.027 pp point estimate, range −0.043 to +0.0002) and Farming, Fishing, and Forestry (range −0.0016 to +0.0006), sit within 0.03 pp of zero. Dropping a single period moves CPS's Office and Administrative Support projection anywhere from +0.70 to +4.28 pp, against a point estimate of +3.41. No leave-one-period-out range was computed for β_AI itself.

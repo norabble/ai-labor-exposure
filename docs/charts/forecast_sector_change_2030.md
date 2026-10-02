@@ -31,15 +31,16 @@ Measured 2026-10-02 from `forecast_sector_paths.csv` (filter `unemployment_scena
 | Management | +0.69 (+0.56, +1.34; +0.62 to +0.98) | −1.10 (−1.71, +0.38; −1.36 to −0.24) |
 | Sales and Related | −0.40 (−0.89, −0.32; −0.61 to −0.36) | +0.42 (−0.17, +0.61; +0.10 to +0.50) |
 
-LOO is the range across leave-one-period-out refits. CPS rows use the raw start (`start_basis == "raw"`). From the seasonally adjusted start the same four sectors read +3.43, −0.88, −1.09 and +0.42; across all 22 sectors the largest raw-versus-adjusted gap in projected change is 0.018 pp and 0 of 22 change sign.
+LOO is the range across leave-one-period-out refits. CPS rows use the raw start (`start_basis == "raw"`). From the seasonally adjusted start the same four sectors read +3.43, −0.88, −1.09 and +0.42; across all 22 sectors the largest raw-versus-adjusted gap in projected change is 0.018 pp. That small gap follows from the shared slope path, since only the start shares differ; it bounds the seasonal effect on the start level and is not a robustness test.
 
 **Only the signs are comparable across the panels, not the magnitudes.** The horizons differ (60 against 51 months), the employment bases differ, and CPS reaches SOC sectors through a crosswalk.
 
 **The bands show one result repeated, not 22 independent ones.** Every sector's projection is the same slope path multiplied by that sector's fixed score. The OEWS band excludes zero for 21 of 22 sectors; the exception, Farming, Fishing, and Forestry, has a score at the employment-weighted mean. The CPS band excludes zero for 0 of 22. OEWS's narrower bands reflect its smaller β_AI standard error (0.18 against 0.50). They do not show that OEWS is the right instrument, and neither band covers the disagreement between instruments.
 
-**Leave-one-period-out refits keep every tabled sector's sign, but CPS sizes depend on single periods.** Office and Administrative Support's CPS projection ranges from +0.70 to +4.28 pp when one period is dropped. Across all 22 sectors the refits keep the point estimate's sign for 22 of 22 on OEWS and 20 of 22 on CPS; the two exceptions (Business and Financial Operations, Farming, Fishing, and Forestry) project changes within 0.03 pp of zero.
+**Leave-one-period-out refits keep every tabled sector's sign, but CPS sizes depend on single periods.** Office and Administrative Support's CPS projection ranges from +0.70 to +4.28 pp when one period is dropped. Across all 22 sectors the refits keep the point estimate's sign for 22 of 22 on OEWS and 20 of 22 on CPS; the two exceptions (Business and Financial Operations, Farming, Fishing, and Forestry) project changes within 0.03 pp of zero. Like the bands, this is one slope path repeated across 22 sectors, and it measures stability, not accuracy. No leave-one-period-out range was computed for β_AI itself, which rests on three periods.
 
 ## Limitations
 
 - The AI term rests on three periods per instrument and is extrapolated well beyond its adoption range (see `forecast_btos_adoption.md`). The projected 2030 slopes lie outside the historical range on both instruments.
 - The bands exclude model-specification uncertainty.
+- The CPS slope history crosses the 1991→92, 1993→94, 2002→03 and 2010→11 classification seams, kept in Stage 2 without a sensitivity row. The OEWS history excludes the 2009→10 and 2018→19 SOC level breaks (see `framework.md` § Composition Forecast, Method).

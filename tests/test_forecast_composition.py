@@ -7,19 +7,24 @@ Every statistic is tested against synthetic sectors with a known answer, so a
 change in the real data cannot make a broken estimator look right.
 """
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 import pytest
 
 import forecast_composition
 from btos_adoption import AdoptionFit
+from cps_panel import seasonal_factors
 from forecast_composition import (
     ProjectionStep,
+    add_sector_noise,
     align_sectors,
     allocate_to_occupations,
     attach_drivers,
     bootstrap_coefficients,
     coefficients_from,
+    cps_excluded_periods,
     cps_start_shares,
     cps_steps,
     decompose_slopes,
@@ -377,7 +382,8 @@ class TestFailSoftInputs:
         fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
         sector_paths_df, starts = forecast_composition.project_both_instruments({"oews": estimate}, fits)
         assert set(sector_paths_df["instrument"]) == {"oews"}
-        assert set(starts) == {"oews"}
+        assert set(starts) == {("oews", "raw")}
+        assert set(sector_paths_df["start_basis"]) == {"raw"}
 
     def test_eligible_period_missing_unemployment_raises(self, scores):
         panel_df = synthetic_panel({}, scores, years=range(2000, 2026), noise=0.002)
@@ -401,3 +407,106 @@ class TestFailSoftInputs:
         monkeypatch.setattr(forecast_composition, "unemployment_change_by_period", lambda period_keys: pd.Series({"2000_2001": 0.1}))
         assert forecast_composition.run_estimation() is None
         assert "unemployment change missing" in capsys.readouterr().out
+
+
+SEASONAL_PATTERN = np.array([0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03, 1.02, 1.01, 1.00, 0.99, 0.98])
+
+
+def synthetic_a19_panel(first_month="2020-01", last_month="2026-09") -> pd.DataFrame:
+    """22 sectors, level rising with sector index, × a seasonal pattern that differs by sector parity."""
+    rows = []
+    for month in pd.period_range(first_month, last_month, freq="M"):
+        for index, sector in enumerate(SECTORS):
+            pattern = SEASONAL_PATTERN if index % 2 == 0 else SEASONAL_PATTERN[::-1]
+            employed_thousands = (100.0 + index) * pattern[month.month - 1] / pattern.mean()
+            rows.append(
+                {
+                    "month": str(month),
+                    "soc_major": sector,
+                    "occupation": sector,
+                    "employed_thousands": employed_thousands,
+                    "source_reference_month": last_month,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def cps_estimate(scores) -> "forecast_composition.InstrumentEstimate":
+    return forecast_composition.InstrumentEstimate(
+        instrument="cps",
+        scores=scores,
+        panel_df=synthetic_panel({}, scores, years=range(2020, 2026)),
+        driven_df=pd.DataFrame(),
+        stage2_df=pd.DataFrame({"residual_sd": [0.01, 0.01]}),
+        decomposition_df=pd.DataFrame(),
+        coefficients={"structural": 0.01, "cycle": 0.0, "ai": 0.0},
+    )
+
+
+class TestStartBasis:
+    def test_seasonally_adjusted_start_divides_by_the_month_factor_and_keeps_the_total(self):
+        a19_df = synthetic_a19_panel()
+        factors_df = seasonal_factors(a19_df)
+        _, raw_employment = cps_start_shares(a19_df)
+        label, adjusted_employment = cps_start_shares(a19_df, factors_df)
+        september = factors_df[factors_df["calendar_month"] == 9].set_index("soc_major")["factor"]
+        expected = raw_employment / september.reindex(raw_employment.index)
+        expected = expected * raw_employment.sum() / expected.sum()
+        assert label == "2026-09"
+        assert adjusted_employment.to_numpy() == pytest.approx(expected.to_numpy())
+        assert adjusted_employment.sum() == pytest.approx(raw_employment.sum())
+        # the synthetic levels are trend-free, so adjustment removes all seasonal distortion
+        assert (adjusted_employment / adjusted_employment.sum()).to_numpy() == pytest.approx(
+            (np.arange(22) + 100.0) / (np.arange(22) + 100.0).sum(), abs=1e-6
+        )
+
+    def test_seasonally_adjusted_start_raises_without_a_factor_for_every_sector(self):
+        a19_df = synthetic_a19_panel()
+        factors_df = seasonal_factors(a19_df)
+        with pytest.raises(ValueError, match="seasonal factor"):
+            cps_start_shares(a19_df, factors_df[factors_df["soc_major"] != SECTORS[0]])
+
+    def test_cps_projects_both_bases_and_oews_raw_only(self, monkeypatch, tmp_path, scores):
+        a19_path = tmp_path / "a19.csv"
+        synthetic_a19_panel().to_csv(a19_path, index=False)
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
+        monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        oews = dataclasses.replace(cps_estimate(scores), instrument="oews")
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments({"oews": oews, "cps": cps_estimate(scores)}, fits)
+        bases = sector_paths_df.groupby("instrument")["start_basis"].unique().map(set).to_dict()
+        assert bases == {"oews": {"raw"}, "cps": {"raw", "seasonally_adjusted"}}
+        assert set(starts) == {("oews", "raw"), ("cps", "raw"), ("cps", "seasonally_adjusted")}
+        assert (tmp_path / "factors.csv").exists()
+
+    def test_short_panel_projects_raw_only(self, monkeypatch, tmp_path, scores, capsys):
+        a19_path = tmp_path / "a19.csv"
+        synthetic_a19_panel(first_month="2025-04").to_csv(a19_path, index=False)
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
+        monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments({"cps": cps_estimate(scores)}, fits)
+        assert set(sector_paths_df["start_basis"]) == {"raw"}
+        assert set(starts) == {("cps", "raw")}
+        assert "seasonally adjusted start skipped" in capsys.readouterr().out
+
+    def test_sector_noise_handles_both_bases(self, monkeypatch, tmp_path, scores):
+        a19_path = tmp_path / "a19.csv"
+        synthetic_a19_panel().to_csv(a19_path, index=False)
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
+        monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        estimates = {"cps": cps_estimate(scores)}
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments(estimates, fits)
+        noisy_df = add_sector_noise(sector_paths_df, estimates, starts)
+        assert noisy_df[["noise_low", "noise_high"]].notna().all().all()
+        assert len(noisy_df) == len(sector_paths_df)
+
+
+class TestCpsExcludedPeriods:
+    def test_excludes_a_partial_terminal_year_with_its_month_count(self):
+        detailed_df = pd.DataFrame({"year": [2025, 2026, 2026], "months_observed": [11, 8, 8]})
+        assert cps_excluded_periods(detailed_df) == {"2025_2026": "partial year (2026 averages 8 months)"}
+
+    def test_excludes_nothing_when_the_terminal_year_is_complete(self):
+        assert cps_excluded_periods(pd.DataFrame({"year": [2025, 2026], "months_observed": [11, 12]})) == {}

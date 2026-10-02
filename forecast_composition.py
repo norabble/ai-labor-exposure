@@ -30,7 +30,9 @@ Outputs:
   • data/output/forecast_sector_paths.csv
   • data/output/forecast_sector_stability.csv
   • data/output/forecast_occupation_allocation_2030.csv
+  • data/output/cps_seasonal_factors.csv
   • six charts via forecast_charts.py
+CPS projects from a raw and a seasonally adjusted latest-month start (`start_basis`).
 """
 
 import os
@@ -46,6 +48,8 @@ import btos_adoption
 import forecast_charts
 from btos_adoption import AdoptionFit, accepted_fits, annual_mean_adoption, run_adoption
 from composition_era_validation import COVID_PERIODS, unemployment_change_by_period
+from cps_detailed_panel import SEED_PATH as CPS_DETAILED_PANEL_PATH
+from cps_panel import seasonal_factors
 
 DYNAMIC_REPORT_PATH = "data/output/occupation_dynamic_model_report.csv"
 OEWS_SECTOR_TRENDS_PATH = "data/output/bls_sector_trends.csv"
@@ -62,8 +66,22 @@ OCCUPATION_OUTPUT_PATH = "data/output/forecast_occupation_allocation_2030.csv"
 # growth the score did not cause. Excluded from the main Stage 2 fit, kept in a
 # sensitivity row. decompose_fit_strength keeps them — a deliberate departure.
 OEWS_EXCLUDED_PERIODS = {"2009_2010": "SOC 2010 revision level break", "2018_2019": "SOC 2018 revision level break"}
-# cps_major_rollup_trends.csv's 2026 averages Jan–Aug only.
-CPS_EXCLUDED_PERIODS = {"2025_2026": "partial year (2026 averages Jan–Aug)"}
+COMPLETE_YEAR_MONTHS = 12
+
+
+def cps_excluded_periods(detailed_panel_df: pd.DataFrame) -> dict[str, str]:
+    """Exclude the CPS rollup's terminal period when its last year averages fewer than 12 months.
+
+    The rollup (cps_major_rollup_trends.csv) is built from the IPUMS detailed panel,
+    not from A-19, so its month count comes from that panel's months_observed.
+    """
+    months_by_year = detailed_panel_df.groupby("year")["months_observed"].max()
+    terminal_year = int(months_by_year.index.max())
+    months_observed = int(months_by_year[terminal_year])
+    if months_observed >= COMPLETE_YEAR_MONTHS:
+        return {}
+    return {f"{terminal_year - 1}_{terminal_year}": f"partial year ({terminal_year} averages {months_observed} months)"}
+
 
 PERIOD_SLOPE_COLUMNS = [
     "instrument",
@@ -369,9 +387,6 @@ def _load_inputs() -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     return _load_dynamic_report(), panels
 
 
-EXCLUDED_PERIODS_BY_INSTRUMENT = {"oews": OEWS_EXCLUDED_PERIODS, "cps": CPS_EXCLUDED_PERIODS}
-
-
 def print_checkpoint(estimates: dict[str, InstrumentEstimate]) -> None:
     """The Stage 2 result the plan's checkpoint task reads: β_AI and its p-value per instrument."""
     print("\n  Stage 2 — β_t = β_structural + β_cycle·ΔU + β_AI·A  (main specification)")
@@ -399,12 +414,18 @@ def run_estimation() -> tuple[dict[str, InstrumentEstimate], dict[str, AdoptionF
         print(f"  ⚠ The {STAGE2_ADOPTION_FIT} adoption fit was rejected; skipping the composition forecast.")
         return None
 
+    excluded_periods_by_instrument = {"oews": OEWS_EXCLUDED_PERIODS}
+    if "cps" in panels:
+        excluded_periods_by_instrument["cps"] = cps_excluded_periods(
+            pd.read_csv(CPS_DETAILED_PANEL_PATH, usecols=["year", "months_observed"])
+        )
+
     scores = sector_scores(dynamic_report_df)
     estimates, slope_frames, decomposition_frames = {}, [], []
     for instrument, panel_df in panels.items():
         try:
             estimate, decomposition_rows = estimate_instrument(
-                instrument, panel_df, scores, EXCLUDED_PERIODS_BY_INSTRUMENT[instrument], unemployment_change, usable_fits
+                instrument, panel_df, scores, excluded_periods_by_instrument[instrument], unemployment_change, usable_fits
             )
         except MissingDriverError as missing_driver:
             print(f"  ⚠ {missing_driver}; skipping the composition forecast.")
@@ -428,7 +449,9 @@ UNEMPLOYMENT_SCENARIOS = {
     "steady": {},
     "mild_recession": {2027: 1.5, 2028: -0.75, 2029: -0.75},
 }
-SECTOR_PATH_COLUMNS = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major", "share", "employment"]
+START_BASES = ("raw", "seasonally_adjusted")
+SEASONAL_FACTORS_OUTPUT_PATH = "data/output/cps_seasonal_factors.csv"
+SECTOR_PATH_COLUMNS = ["instrument", "start_basis", "unemployment_scenario", "adoption_fit", "as_of", "soc_major", "share", "employment"]
 REQUIRED_SECTOR_COUNT = 22
 
 
@@ -490,14 +513,38 @@ def oews_start(panel_df: pd.DataFrame) -> tuple[str, int, pd.Series]:
     return f"{start_year}-05", start_year, panel_df[start_year].dropna()
 
 
-def cps_start_shares(a19_panel_df: pd.DataFrame) -> tuple[str, pd.Series]:
-    """Latest A-19 month's sector levels; every one of the 22 sectors must be present."""
+def cps_start_shares(a19_panel_df: pd.DataFrame, factors_df: pd.DataFrame | None = None) -> tuple[str, pd.Series]:
+    """Latest A-19 month's sector levels, raw or divided by that calendar month's seasonal factor.
+
+    The adjusted levels are rescaled to the raw month's total, so both starts describe
+    the same workforce and differ only in how it is split across sectors.
+    """
     latest_month = str(a19_panel_df["month"].max())
     month_df = a19_panel_df[a19_panel_df["month"].astype(str) == latest_month]
     employment = month_df.set_index(month_df["soc_major"].map(sector_code))["employed_thousands"].astype(float)
     if employment.index.nunique() != REQUIRED_SECTOR_COUNT:
         raise ValueError(f"A-19 {latest_month} has {employment.index.nunique()} sectors; a missing sector would distort every share")
-    return latest_month, employment.sort_index()
+    if factors_df is None:
+        return latest_month, employment.sort_index()
+    month_factors_df = factors_df[factors_df["calendar_month"] == int(latest_month[5:7])]
+    month_factors = month_factors_df.set_index(month_factors_df["soc_major"].map(sector_code))["factor"].reindex(employment.index)
+    if month_factors.isna().any():
+        raise ValueError(f"No seasonal factor for sector(s) {sorted(month_factors[month_factors.isna()].index)}")
+    adjusted_employment = employment / month_factors
+    return latest_month, (adjusted_employment * employment.sum() / adjusted_employment.sum()).sort_index()
+
+
+def cps_seasonal_factors_or_none(a19_panel_df: pd.DataFrame) -> pd.DataFrame | None:
+    """Seasonal factors, written and printed; None (with a warning) when the panel cannot support them."""
+    try:
+        factors_df = seasonal_factors(a19_panel_df)
+    except ValueError as factor_error:
+        print(f"  ⚠ {factor_error}; seasonally adjusted start skipped, CPS projects from the raw start only.")
+        return None
+    factors_df.to_csv(SEASONAL_FACTORS_OUTPUT_PATH, index=False)
+    print(f"  ✓ {SEASONAL_FACTORS_OUTPUT_PATH}")
+    print(factors_df.pivot(index="soc_major", columns="calendar_month", values="factor").round(3).to_string())
+    return factors_df
 
 
 def project_scenarios(
@@ -507,6 +554,7 @@ def project_scenarios(
     steps: list[ProjectionStep],
     adoption_fits: dict[str, AdoptionFit],
     coefficients: dict[str, float] | None = None,
+    start_basis: str = "raw",
 ) -> pd.DataFrame:
     """Every ΔU scenario × adoption fit for one instrument, as long-form share and employment paths."""
     coefficients = coefficients or estimate.coefficients
@@ -520,20 +568,32 @@ def project_scenarios(
             share_path = project_shares(start_employment, scores, start_label, steps, slope_by_year)
             long_df = share_path.rename_axis("as_of").reset_index().melt(id_vars="as_of", var_name="soc_major", value_name="share")
             long_df["employment"] = long_df["share"] * total_employment
-            path_frames.append(long_df.assign(instrument=estimate.instrument, unemployment_scenario=scenario_name, adoption_fit=fit_name))
+            path_frames.append(
+                long_df.assign(
+                    instrument=estimate.instrument, start_basis=start_basis, unemployment_scenario=scenario_name, adoption_fit=fit_name
+                )
+            )
     return pd.concat(path_frames, ignore_index=True)[SECTOR_PATH_COLUMNS]
 
 
 def project_both_instruments(estimates: dict[str, InstrumentEstimate], adoption_fits: dict[str, AdoptionFit]) -> tuple[pd.DataFrame, dict]:
-    """Point projections for each estimated instrument; returns the paths and each one's (label, employment, steps)."""
+    """Point projections per (instrument, start_basis); returns the paths and each start's (label, employment, steps)."""
     starts = {}
     if "oews" in estimates:
         oews_label, oews_year, oews_employment = oews_start(estimates["oews"].panel_df)
-        starts["oews"] = (oews_label, oews_employment, oews_steps(oews_year))
+        starts[("oews", "raw")] = (oews_label, oews_employment, oews_steps(oews_year))
     if "cps" in estimates:
-        cps_label, cps_employment = cps_start_shares(pd.read_csv(CPS_A19_PANEL_PATH, dtype={"month": str}))
-        starts["cps"] = (cps_label, cps_employment, cps_steps(cps_label))
-    path_frames = [project_scenarios(estimates[instrument], *starts[instrument], adoption_fits) for instrument in starts]
+        a19_panel_df = pd.read_csv(CPS_A19_PANEL_PATH, dtype={"month": str, "soc_major": str})
+        cps_label, cps_employment = cps_start_shares(a19_panel_df)
+        starts[("cps", "raw")] = (cps_label, cps_employment, cps_steps(cps_label))
+        factors_df = cps_seasonal_factors_or_none(a19_panel_df)
+        if factors_df is not None:
+            _, adjusted_employment = cps_start_shares(a19_panel_df, factors_df)
+            starts[("cps", "seasonally_adjusted")] = (cps_label, adjusted_employment, cps_steps(cps_label))
+    path_frames = [
+        project_scenarios(estimates[instrument], *starts[(instrument, start_basis)], adoption_fits, start_basis=start_basis)
+        for instrument, start_basis in starts
+    ]
     return pd.concat(path_frames, ignore_index=True), starts
 
 
@@ -559,15 +619,23 @@ def bootstrap_coefficients(stage2_df: pd.DataFrame, replicates: int, rng: np.ran
 
 
 def bootstrap_bands(
-    estimate: InstrumentEstimate, start: tuple, adoption_fits: dict[str, AdoptionFit], coefficient_draws: pd.DataFrame
+    estimate: InstrumentEstimate,
+    start: tuple,
+    adoption_fits: dict[str, AdoptionFit],
+    coefficient_draws: pd.DataFrame,
+    start_basis: str = "raw",
 ) -> pd.DataFrame:
     """5th–95th percentile of each sector's share path across bootstrap coefficient draws."""
     draw_frames = []
     for draw_index, draw in enumerate(coefficient_draws.to_dict("records")):
         draw_coefficients = {**dict.fromkeys(DECOMPOSITION_TERMS, 0.0), **draw}
-        draw_frames.append(project_scenarios(estimate, *start, adoption_fits, coefficients=draw_coefficients).assign(draw=draw_index))
+        draw_frames.append(
+            project_scenarios(estimate, *start, adoption_fits, coefficients=draw_coefficients, start_basis=start_basis).assign(
+                draw=draw_index
+            )
+        )
     draws_df = pd.concat(draw_frames, ignore_index=True)
-    keys = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major"]
+    keys = ["instrument", "start_basis", "unemployment_scenario", "adoption_fit", "as_of", "soc_major"]
     return (
         draws_df.groupby(keys)["share"].quantile([0.05, 0.95]).unstack().rename(columns={0.05: "share_p5", 0.95: "share_p95"}).reset_index()
     )
@@ -576,9 +644,9 @@ def bootstrap_bands(
 def add_sector_noise(sector_paths_df: pd.DataFrame, estimates: dict[str, InstrumentEstimate], starts: dict) -> pd.DataFrame:
     """Sector-noise interval: median Stage 1 residual SD per year, accumulated as a random walk in relative growth."""
     noisy_frames = []
-    for instrument, instrument_df in sector_paths_df.groupby("instrument"):
+    for (instrument, start_basis), instrument_df in sector_paths_df.groupby(["instrument", "start_basis"]):
         residual_sd = float(estimates[instrument].stage2_df["residual_sd"].median())
-        _, _, steps = starts[instrument]
+        _, _, steps = starts[(instrument, start_basis)]
         elapsed_years = dict(zip([step.as_of for step in steps], np.cumsum([step.year_fraction for step in steps])))
         horizon = instrument_df["as_of"].map(elapsed_years).fillna(0.0)
         half_width = NINETY_PERCENT_Z * residual_sd * np.sqrt(horizon)
@@ -588,7 +656,9 @@ def add_sector_noise(sector_paths_df: pd.DataFrame, estimates: dict[str, Instrum
     return pd.concat(noisy_frames, ignore_index=True)
 
 
-def leave_one_period_out(estimate: InstrumentEstimate, start: tuple, adoption_fits: dict[str, AdoptionFit]) -> pd.DataFrame:
+def leave_one_period_out(
+    estimate: InstrumentEstimate, start: tuple, adoption_fits: dict[str, AdoptionFit], start_basis: str = "raw"
+) -> pd.DataFrame:
     """Range of each sector's start→2030 share change when each Stage 2 period is dropped in turn (reference scenario)."""
     scenario_name, fit_name = REFERENCE_SCENARIO
     terms = tuple(estimate.decomposition_df["term"])
@@ -598,7 +668,9 @@ def leave_one_period_out(estimate: InstrumentEstimate, start: tuple, adoption_fi
         if refit is None:
             continue
         refit_coefficients = {**dict.fromkeys(DECOMPOSITION_TERMS, 0.0), **refit}
-        paths_df = project_scenarios(estimate, *start, {fit_name: adoption_fits[fit_name]}, coefficients=refit_coefficients)
+        paths_df = project_scenarios(
+            estimate, *start, {fit_name: adoption_fits[fit_name]}, coefficients=refit_coefficients, start_basis=start_basis
+        )
         paths_df = paths_df[paths_df["unemployment_scenario"] == scenario_name]
         share_by_label = paths_df.pivot(index="as_of", columns="soc_major", values="share")
         final_changes.append(share_by_label.iloc[-1] - share_by_label.iloc[0])
@@ -606,6 +678,7 @@ def leave_one_period_out(estimate: InstrumentEstimate, start: tuple, adoption_fi
     return pd.DataFrame(
         {
             "instrument": estimate.instrument,
+            "start_basis": start_basis,
             "soc_major": changes_df.columns,
             "change_min": changes_df.min().to_numpy(),
             "change_max": changes_df.max().to_numpy(),
@@ -668,10 +741,12 @@ def run_stage() -> None:
         terms = tuple(estimate.decomposition_df["term"])
         coefficient_draws, skipped = bootstrap_coefficients(estimate.stage2_df, BOOTSTRAP_REPLICATES, rng, terms)
         print(f"  {instrument}: {len(coefficient_draws)} bootstrap replicates used, {skipped} skipped as rank-deficient")
-        band_frames.append(bootstrap_bands(estimate, starts[instrument], adoption_fits, coefficient_draws))
-        stability_frames.append(leave_one_period_out(estimate, starts[instrument], adoption_fits))
+        # Both CPS starts share one set of draws, so their bands differ only by start shares.
+        for start_key in [key for key in starts if key[0] == instrument]:
+            band_frames.append(bootstrap_bands(estimate, starts[start_key], adoption_fits, coefficient_draws, start_basis=start_key[1]))
+            stability_frames.append(leave_one_period_out(estimate, starts[start_key], adoption_fits, start_basis=start_key[1]))
 
-    keys = ["instrument", "unemployment_scenario", "adoption_fit", "as_of", "soc_major"]
+    keys = ["instrument", "start_basis", "unemployment_scenario", "adoption_fit", "as_of", "soc_major"]
     sector_paths_df = add_sector_noise(
         sector_paths_df.merge(pd.concat(band_frames), on=keys, how="left", validate="one_to_one"), estimates, starts
     )

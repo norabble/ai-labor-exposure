@@ -802,7 +802,7 @@ git commit -m "Derive A-19 seasonal factors by ratio to a centred moving average
 - Consumes: `cps_panel.seasonal_factors` (Task 4); `cps_detailed_panel.SEED_PATH`.
 - Produces: `START_BASES = ("raw", "seasonally_adjusted")`; `SEASONAL_FACTORS_OUTPUT_PATH = "data/output/cps_seasonal_factors.csv"`; `SECTOR_PATH_COLUMNS = ["instrument", "start_basis", "unemployment_scenario", "adoption_fit", "as_of", "soc_major", "share", "employment"]`; `cps_excluded_periods(detailed_panel_df: pd.DataFrame) -> dict[str, str]`; `cps_start_shares(a19_panel_df, factors_df: pd.DataFrame | None = None) -> tuple[str, pd.Series]`; `project_scenarios(..., coefficients=None, start_basis: str = "raw")`; `project_both_instruments(...) -> tuple[pd.DataFrame, dict[tuple[str, str], tuple]]` — starts keyed by `(instrument, start_basis)`; `bootstrap_bands(estimate, start, adoption_fits, coefficient_draws, start_basis="raw")`; `leave_one_period_out(estimate, start, adoption_fits, start_basis="raw")` output gains `start_basis`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/test_forecast_composition.py` add `cps_excluded_periods` and `add_sector_noise` to the import block, and `from cps_panel import seasonal_factors`. Update `test_projection_runs_oews_alone_without_reading_a19`'s last assertion to `assert set(starts) == {("oews", "raw")}` and add `assert set(sector_paths_df["start_basis"]) == {"raw"}`. Then add:
 
@@ -912,12 +912,12 @@ class TestCpsExcludedPeriods:
 
 Add `import dataclasses` to the test file's imports (`InstrumentEstimate` is a plain `@dataclass`).
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: the new tests FAIL (`ImportError: cannot import name 'cps_excluded_periods'`).
 
-- [ ] **Step 3: Derive the CPS exclusion**
+- [x] **Step 3: Derive the CPS exclusion**
 
 Add `from cps_detailed_panel import SEED_PATH as CPS_DETAILED_PANEL_PATH` and `from cps_panel import seasonal_factors` to the imports. Replace the `CPS_EXCLUDED_PERIODS` constant and its comment with:
 
@@ -949,7 +949,7 @@ Delete `EXCLUDED_PERIODS_BY_INSTRUMENT`. In `run_estimation`, before the `for in
 
 and pass `excluded_periods_by_instrument[instrument]` in place of `EXCLUDED_PERIODS_BY_INSTRUMENT[instrument]`.
 
-- [ ] **Step 4: Add the seasonally adjusted start and `start_basis`**
+- [x] **Step 4: Add the seasonally adjusted start and `start_basis`**
 
 Constants: add `START_BASES = ("raw", "seasonally_adjusted")` and `SEASONAL_FACTORS_OUTPUT_PATH = "data/output/cps_seasonal_factors.csv"`; set `SECTOR_PATH_COLUMNS` to the list in Interfaces.
 
@@ -1041,16 +1041,16 @@ def project_both_instruments(estimates: dict[str, InstrumentEstimate], adoption_
 
 Module docstring Outputs: add `• data/output/cps_seasonal_factors.csv`, and a sentence that CPS projects from a raw and a seasonally adjusted latest-month start (`start_basis`).
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS.
 
-- [ ] **Step 6: Document the outputs**
+- [x] **Step 6: Document the outputs**
 
 In `docs/outputs.md`: add a row for `cps_seasonal_factors.csv` (`forecast_composition.py`, `cps_seasonal_factors_or_none` via `cps_panel.seasonal_factors`) — one row per SOC major group × calendar month with `factor` and `n_years`; ratio to a centred 2×12 moving average over 2022 onward, scaled to average 1; absent when any factor rests on fewer than 3 years, in which case CPS projects from the raw start only. In the `forecast_sector_paths.csv` and `forecast_sector_stability.csv` rows, add that a `start_basis` column distinguishes CPS's `raw` latest-month start from its `seasonally_adjusted` one (OEWS is always `raw`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 uv run ruff check . && uv run ruff format --check .

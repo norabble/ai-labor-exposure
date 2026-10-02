@@ -46,6 +46,11 @@ jobs:
       - name: Download O*NET, Anthropic, and Eloundou source data
         run: uv run download_data.py
 
+      # Census BTOS AI-use series for the forecast stage. Warns rather than fails
+      # under CI; seeds/btos_ai_use.csv still carries both question wordings.
+      - name: Download Census BTOS AI-use estimates
+        run: uv run btos_adoption.py
+
       - name: Download BLS data via Puppeteer
         if: steps.bls-cache.outputs.cache-hit != 'true'
         run: node download_bls.js

@@ -17,6 +17,7 @@ lint:
 download-data:
 	node download_bls.js
 	uv run download_data.py
+	uv run btos_adoption.py
 	node download_cps.js
 	uv run download_dws.py
 

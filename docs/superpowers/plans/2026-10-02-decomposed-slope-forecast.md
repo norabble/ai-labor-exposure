@@ -49,7 +49,7 @@
 **Interfaces:**
 - Produces: `parse_percent(cell) -> float`, `wording_of(question_text: str) -> str`, `parse_btos_workbook(workbook_path) -> pd.DataFrame` (columns `SERIES_COLUMNS = ["smpdt", "ref_end", "wording", "ai_use", "std_error"]`; `ai_use`/`std_error` are fractions), `merge_with_seed(seed_df, fetched_df) -> pd.DataFrame`, `load_series() -> pd.DataFrame`, `write_seed(workbook_paths: list[str]) -> pd.DataFrame`, `download_workbook() -> None`; constants `WORDING_PRODUCTION = "production"`, `WORDING_ANY_FUNCTION = "any_function"`, `SEED_PATH`, `RAW_WORKBOOK_PATH`, `SERIES_OUTPUT_PATH`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """
@@ -169,12 +169,12 @@ class TestMerge:
         assert seed_df["ai_use"].between(0, 1).all()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_btos_adoption.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'btos_adoption'`
 
-- [ ] **Step 3: Write `btos_adoption.py` (parsing, merge, fetch)**
+- [x] **Step 3: Write `btos_adoption.py` (parsing, merge, fetch)**
 
 ```python
 """
@@ -343,7 +343,7 @@ if __name__ == "__main__":
     download_workbook()
 ```
 
-- [ ] **Step 4: Build the seed from both workbooks**
+- [x] **Step 4: Build the seed from both workbooks**
 
 ```bash
 uv run btos_adoption.py
@@ -353,12 +353,12 @@ uv run python -c "import btos_adoption as b; s = b.write_seed(['$TMPDIR/btos_pro
 
 Expected: two wordings — `production` ≈ 51 rows, 0.038–0.097; `any_function` ≥ 22 rows, 0.172 upward.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_btos_adoption.py -v`
 Expected: PASS (7 tests)
 
-- [ ] **Step 6: Wire the fetch into `make download-data` and `release.yml`**
+- [x] **Step 6: Wire the fetch into `make download-data` and `release.yml`**
 
 In `Makefile`, add the line after `uv run download_data.py`:
 
@@ -375,7 +375,7 @@ In `.github/workflows/release.yml`, add after the "Download O*NET, Anthropic, an
         run: uv run btos_adoption.py
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add btos_adoption.py seeds/btos_ai_use.csv tests/test_btos_adoption.py Makefile .github/workflows/release.yml docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

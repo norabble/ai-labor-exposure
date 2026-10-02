@@ -28,11 +28,15 @@ The since-anchor window spans different calendar months, and A-19 is not
 seasonally adjusted, so it carries seasonal noise that the year-over-year window
 does not. It also crosses each January, when CPS introduces updated population
 controls without revising prior months. Both caveats are surfaced on the charts.
+
+Seasonal factors are derived from the panel by `seasonal_factors` for the forecast
+stage's seasonally adjusted start; the comparison windows remain unadjusted.
 """
 
 import os
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 # CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
@@ -83,6 +87,12 @@ API_HISTORY_PATH = "data/raw/cps/a19_api_history.csv"
 
 PANEL_COLUMNS = ["month", "soc_major", "occupation", "employed_thousands", "source_reference_month"]
 PANEL_DTYPES = {"month": str, "soc_major": str, "source_reference_month": str}
+
+SEASONAL_FACTOR_FIRST_YEAR = 2022  # excludes the 2020–21 COVID swings
+MINIMUM_SEASONAL_YEARS = 3
+# Centred 2×12 moving average: the two months six away share one weight, so each
+# calendar month counts exactly once and a pure seasonal pattern averages to 1.
+CENTRED_MOVING_AVERAGE_WEIGHTS = np.array([0.5, *[1.0] * 11, 0.5]) / 12
 
 # BLS LN series carrying A-19's employment level for each SOC major group, verified
 # equal to every published A-19 value on 2026-10-02. 11–39 are a contiguous block;
@@ -422,3 +432,43 @@ def build_growth_frame(panel_df: pd.DataFrame, windows: CpsComparisonWindows) ->
         ]
 
     return growth_df.dropna(subset=["emp_growth_since_anchor"]).reset_index()
+
+
+def seasonal_factors(panel_df: pd.DataFrame, first_year: int = SEASONAL_FACTOR_FIRST_YEAR) -> pd.DataFrame:
+    """
+    Classical ratio-to-moving-average seasonal factors per SOC major group and calendar month.
+
+    A-19 is not seasonally adjusted. Each group's level is divided by its centred
+    2×12 moving average; the factor is the mean of those ratios for one calendar
+    month across years from `first_year`, scaled so the twelve average exactly 1.
+    A moving-average window touching a missing month (October 2025 was never
+    collected) yields no ratio rather than a filled one. Raises when any factor
+    rests on fewer than MINIMUM_SEASONAL_YEARS years.
+    """
+    factor_frames = []
+    for soc_major, group_df in panel_df.groupby("soc_major"):
+        levels = group_df.set_index(pd.PeriodIndex(group_df["month"], freq="M"))["employed_thousands"].astype(float).sort_index()
+        levels = levels.reindex(pd.period_range(levels.index.min(), levels.index.max(), freq="M"))
+        moving_average = levels.rolling(len(CENTRED_MOVING_AVERAGE_WEIGHTS), center=True).apply(
+            lambda window: float(np.dot(window, CENTRED_MOVING_AVERAGE_WEIGHTS)), raw=True
+        )
+        ratios = (levels / moving_average).dropna()
+        ratios = ratios[ratios.index.year >= first_year]
+        by_calendar_month = ratios.groupby(ratios.index.month).agg(["mean", "count"]).reindex(range(1, 13))
+        thin_months = by_calendar_month.index[by_calendar_month["count"].fillna(0) < MINIMUM_SEASONAL_YEARS].tolist()
+        if thin_months:
+            raise ValueError(
+                f"Seasonal factor for SOC {soc_major} calendar month(s) {thin_months} rests on fewer than "
+                f"{MINIMUM_SEASONAL_YEARS} years from {first_year}"
+            )
+        factor_frames.append(
+            pd.DataFrame(
+                {
+                    "soc_major": str(soc_major),
+                    "calendar_month": range(1, 13),
+                    "factor": (by_calendar_month["mean"] / by_calendar_month["mean"].mean()).to_numpy(),
+                    "n_years": by_calendar_month["count"].astype(int).to_numpy(),
+                }
+            )
+        )
+    return pd.concat(factor_frames, ignore_index=True)

@@ -14,6 +14,7 @@ passing silently.
 
 import os
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -30,6 +31,7 @@ from cps_panel import (
     parse_a19_release,
     parse_month_label,
     resolve_comparison_windows,
+    seasonal_factors,
     year_over_year_month_pairs,
 )
 
@@ -364,3 +366,53 @@ class TestCheckReleaseAgainstHistory:
     def test_ignores_months_the_api_history_lacks(self):
         release_df = parse_a19_release(FIXTURE_PATH)
         check_release_against_history(release_df, release_df[release_df["month"] == "2025-04"])
+
+
+SEASONAL_PATTERN = np.array([0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03, 1.02, 1.01, 1.00, 0.99, 0.98])
+SEASONAL_PATTERN = SEASONAL_PATTERN / SEASONAL_PATTERN.mean()
+
+
+def _seasonal_panel(first_month="2020-01", last_month="2026-09", missing_months=(), groups=("11", "25")):
+    """Constant level × a known seasonal pattern, so each true factor is SEASONAL_PATTERN[month - 1]."""
+    rows = [
+        (str(month), soc_major, 1000.0 * (index + 1) * SEASONAL_PATTERN[month.month - 1])
+        for month in pd.period_range(first_month, last_month, freq="M")
+        if str(month) not in missing_months
+        for index, soc_major in enumerate(groups)
+    ]
+    return _panel(rows)
+
+
+class TestSeasonalFactors:
+    def test_recovers_a_known_pattern(self):
+        factors_df = seasonal_factors(_seasonal_panel())
+        for row in factors_df.itertuples():
+            assert row.factor == pytest.approx(SEASONAL_PATTERN[row.calendar_month - 1], abs=1e-9)
+
+    def test_factors_average_one_per_group(self):
+        factors_df = seasonal_factors(_seasonal_panel())
+        assert factors_df.groupby("soc_major")["factor"].mean().tolist() == pytest.approx([1.0, 1.0])
+        assert len(factors_df) == 24
+
+    def test_a_missing_month_removes_only_the_ratios_whose_window_touches_it(self):
+        """October 2025's gap removes April 2025 – April 2026; the pattern is still recovered."""
+        factors_df = seasonal_factors(_seasonal_panel(missing_months=("2025-10",)))
+        years_by_month = factors_df[factors_df["soc_major"] == "11"].set_index("calendar_month")["n_years"]
+        assert years_by_month[1] == 4  # 2022–2025
+        assert years_by_month[10] == 3  # 2022–2024
+        assert years_by_month[9] == 3  # 2025-09's window reaches the gap; 2026-09 has no forward window
+        for row in factors_df.itertuples():
+            assert row.factor == pytest.approx(SEASONAL_PATTERN[row.calendar_month - 1], abs=1e-9)
+
+    def test_raises_when_a_factor_rests_on_too_few_years(self):
+        with pytest.raises(ValueError, match="fewer than 3"):
+            seasonal_factors(_seasonal_panel(first_month="2021-01", last_month="2024-06"))
+
+    def test_ignores_ratios_before_the_first_year(self):
+        """Unbroken 2020-01 → 2026-09: January ratios exist 2022–2026, so moving first_year drops one."""
+
+        def january_years(factors_df):
+            return factors_df.set_index(["soc_major", "calendar_month"]).loc[("11", 1), "n_years"]
+
+        assert january_years(seasonal_factors(_seasonal_panel())) == 5
+        assert january_years(seasonal_factors(_seasonal_panel(), first_year=2023)) == 4

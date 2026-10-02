@@ -662,7 +662,7 @@ git commit -m "Expire BLS API cache entries that cover the current year after a 
 - Consumes: panel frames in `PANEL_COLUMNS` schema.
 - Produces: `cps_panel.seasonal_factors(panel_df: pd.DataFrame, first_year: int = SEASONAL_FACTOR_FIRST_YEAR) -> pd.DataFrame` with columns `soc_major` (str), `calendar_month` (int 1–12), `factor` (float), `n_years` (int); `SEASONAL_FACTOR_FIRST_YEAR = 2022`; `MINIMUM_SEASONAL_YEARS = 3`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add `seasonal_factors` to the `from cps_panel import (...)` block and `import numpy as np` to the top of `tests/test_cps.py`, then append:
 
@@ -714,12 +714,12 @@ class TestSeasonalFactors:
         assert january_years(seasonal_factors(_seasonal_panel(), first_year=2023)) == 4
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `uv run pytest tests/test_cps.py::TestSeasonalFactors -v`
 Expected: FAIL — `ImportError: cannot import name 'seasonal_factors'`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add `import numpy as np` to `cps_panel.py`'s imports. Add after `PANEL_COLUMNS`:
 
@@ -776,12 +776,12 @@ def seasonal_factors(panel_df: pd.DataFrame, first_year: int = SEASONAL_FACTOR_F
 
 Add a paragraph to the module docstring: seasonal factors are derived from the panel by `seasonal_factors` for the forecast stage's seasonally adjusted start; the comparison windows remain unadjusted.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/test_cps.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add cps_panel.py tests/test_cps.py docs/superpowers/plans/2026-10-02-cps-monthly-backfill.md

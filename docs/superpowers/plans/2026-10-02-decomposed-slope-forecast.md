@@ -1351,20 +1351,20 @@ git commit -m "Add the forecast stage's estimation entry point and wire it into 
 
 No code in this task. **Nothing after this task starts until the human partner's decision is recorded.**
 
-- [ ] **Step 1: Run the estimation on real data**
+- [x] **Step 1: Run the estimation on real data**
 
 Run: `uv run main.py forecast`
 Expected: the BTOS fit lines, two `✓` CSV lines, and the Stage 2 table printed by `print_checkpoint` — three terms per instrument.
 
-- [ ] **Step 2: Report to the human partner**
+- [x] **Step 2: Report to the human partner**
 
 Report, for each instrument: `β_structural`, `β_cycle`, `β_AI` with standard errors, p-values, n and R²; the `with_excluded_periods` and every `backcast_*` row's `β_AI` from `data/output/forecast_slope_decomposition.csv`; the four splice multipliers. State plainly whether `β_AI` is positive with p < 0.10 on at least one instrument.
 
-- [ ] **Step 3: Stop and wait for the decision**
+- [x] **Step 3: Stop and wait for the decision**
 
 Options to offer: continue as specified; continue with structural + cycle only; change the specification; stop.
 
-- [ ] **Step 4: Record the decision**
+- [x] **Step 4: Record the decision**
 
 Add a Deviations log entry (even if the decision is "continue as specified") with the Stage 2 numbers and the decision, then commit:
 
@@ -2430,3 +2430,14 @@ git commit -m "Document the composition forecast, its measured results and chart
 ## Deviations log
 
 *(Entries added during execution: what changed from the plan, why, and which task.)*
+
+- **Task 6 checkpoint (2026-10-02) — instruments disagree on β_AI; decision: continue, show both.**
+  Main specification, logistic adoption backcast:
+
+  | Instrument | β_structural | β_cycle | β_AI | n | R² |
+  |---|---|---|---|---|---|
+  | OEWS 1999–2025 | +0.0652 (se 0.0068, p < 0.0001) | +0.0523 (se 0.0079, p < 0.0001) | **+0.6666** (se 0.1812, p = 0.0016) | 22 | 0.797 |
+  | CPS rollup 1983–2025 | +0.0918 (se 0.0134, p < 0.0001) | +0.0127 (se 0.0182, p = 0.49) | **−1.0684** (se 0.5001, p = 0.039) | 40 | 0.112 |
+
+  β_AI sensitivity: OEWS +0.598 to +0.672 across `with_excluded_periods` and the linear/Gompertz backcasts (all p ≤ 0.002); CPS −1.020 to −1.065 across backcasts (p ≤ 0.04), but −0.341 (p = 0.19) with the partial-year 2025→26 period included. Mean period slope pre-2023 vs AI era: OEWS 0.064 → 0.153; CPS 0.091 → 0.003. Splice multipliers: linear 0.560, logistic 0.631, Gompertz 0.613; exponential rejected (159% by 2030-12).
+  The spec's continue condition (β_AI positive, p < 0.10, on at least one instrument) holds for OEWS, while CPS is significant in the opposite direction. The human partner chose to continue as specified, with each instrument driving its own forecast and the disagreement shown side by side. Docs must lead with the disagreement and with the extrapolation caveat: adoption reaches 0.14 in the estimation periods but 0.58 (logistic) by 2030.

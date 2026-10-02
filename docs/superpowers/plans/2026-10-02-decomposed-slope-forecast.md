@@ -638,7 +638,7 @@ git commit -m "Fit spliced growth curves to the BTOS AI-use series"
 **Interfaces:**
 - Produces: `sector_code(value) -> str`; `report_employment_column(dynamic_report_df) -> str`; `sector_scores(dynamic_report_df) -> pd.Series` (index 2-char sector code, name `"score"`); `sector_employment_panel(sector_trends_df) -> pd.DataFrame` (index sector code, int year columns); `align_sectors(panel_df, scores) -> pd.Series`; `estimate_period_slopes(panel_df, scores, instrument: str, excluded_periods: dict[str, str]) -> pd.DataFrame` with columns `PERIOD_SLOPE_COLUMNS = ["instrument", "period", "start_year", "end_year", "slope", "std_error", "residual_sd", "n_sectors", "is_covid", "excluded_reason"]`; constants `OEWS_EXCLUDED_PERIODS`, `CPS_EXCLUDED_PERIODS`, path constants.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```python
 """
@@ -747,12 +747,12 @@ class TestPeriodSlopes:
         assert estimate_period_slopes(panel_df, scores, "oews", {}).empty
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'forecast_composition'`
 
-- [ ] **Step 3: Write `forecast_composition.py` (Stage 1)**
+- [x] **Step 3: Write `forecast_composition.py` (Stage 1)**
 
 ```python
 """
@@ -908,12 +908,12 @@ def estimate_period_slopes(panel_df: pd.DataFrame, scores: pd.Series, instrument
     return pd.DataFrame(slope_rows, columns=PERIOD_SLOPE_COLUMNS)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `uv run pytest tests/test_forecast_composition.py -v`
 Expected: PASS (8 tests)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add forecast_composition.py tests/test_forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

@@ -283,8 +283,11 @@ before commit.
   exponential that exceeds 1 by 2030 is rejected.
 - Projection: shares sum to 1 every year and stay positive; `β_y = 0` reproduces the
   start shares exactly; a sector with above-average score gains share when `β_y > 0`.
-- CPS partial first year: a start in December gives a first step of 1/12 of a year.
-- Occupation allocation sums to the sector total in every sector.
+- CPS partial first year: the first step covers `(12 − start month) / 12` of a year
+  — a June start gives a half-year step, a December start gives no partial step.
+- Occupation allocation: every occupation in a sector receives that sector's
+  projected growth rate, so allocated change sums to the sector's projected change
+  applied to its scored occupations.
 
 ---
 

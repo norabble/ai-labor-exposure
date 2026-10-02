@@ -54,27 +54,33 @@ def synthetic_inputs():
         ]
     )
     path_rows = []
-    for instrument, labels in (("oews", ["2025-05", "2030-05"]), ("cps", ["2026-08", "2030-12"])):
-        for scenario in ("steady", "mild_recession"):
-            for fit in ("linear", "logistic"):
-                for label_index, label in enumerate(labels):
-                    for sector_index, sector in enumerate(SECTORS):
-                        share = 0.25 + label_index * (sector_index - 1.5) * 0.01
-                        path_rows.append(
-                            {
-                                "instrument": instrument,
-                                "unemployment_scenario": scenario,
-                                "adoption_fit": fit,
-                                "as_of": label,
-                                "soc_major": sector,
-                                "share": share,
-                                "employment": share * 1000,
-                                "share_p5": share - 0.005,
-                                "share_p95": share + 0.005,
-                                "noise_low": share - 0.01,
-                                "noise_high": share + 0.01,
-                            }
-                        )
+    for instrument, labels, bases in (
+        ("oews", ["2025-05", "2030-05"], ("raw",)),
+        ("cps", ["2026-09", "2030-12"], ("raw", "seasonally_adjusted")),
+    ):
+        for start_basis in bases:
+            basis_shift = 0.002 if start_basis == "seasonally_adjusted" else 0.0
+            for scenario in ("steady", "mild_recession"):
+                for fit in ("linear", "logistic"):
+                    for label_index, label in enumerate(labels):
+                        for sector_index, sector in enumerate(SECTORS):
+                            share = 0.25 + (label_index * 0.01 + basis_shift) * (sector_index - 1.5)
+                            path_rows.append(
+                                {
+                                    "instrument": instrument,
+                                    "start_basis": start_basis,
+                                    "unemployment_scenario": scenario,
+                                    "adoption_fit": fit,
+                                    "as_of": label,
+                                    "soc_major": sector,
+                                    "share": share,
+                                    "employment": share * 1000,
+                                    "share_p5": share - 0.005,
+                                    "share_p95": share + 0.005,
+                                    "noise_low": share - 0.01,
+                                    "noise_high": share + 0.01,
+                                }
+                            )
     sector_paths = pd.DataFrame(path_rows)
     demand_shares = pd.DataFrame(
         [
@@ -85,7 +91,14 @@ def synthetic_inputs():
             for d, v in (("Bounded", 0.7 - shift), ("Unbounded", 0.2 + shift), ("Adversarial", 0.1))
         ]
     )
-    return periods, decomposition, btos_series, fits, sector_paths, demand_shares
+    seasonal_factors = pd.DataFrame(
+        [
+            {"soc_major": sector, "calendar_month": month, "factor": 1.0 + 0.01 * (month - 6.5) / 6, "n_years": 3}
+            for sector in SECTORS
+            for month in range(1, 13)
+        ]
+    )
+    return periods, decomposition, btos_series, fits, sector_paths, demand_shares, seasonal_factors
 
 
 def test_draw_all_writes_every_chart(tmp_path):
@@ -97,7 +110,18 @@ def test_draw_all_writes_every_chart(tmp_path):
 
 
 def test_draw_all_handles_oews_only(tmp_path):
-    periods, decomposition, btos_series, fits, sector_paths, demand_shares = synthetic_inputs()
+    periods, decomposition, btos_series, fits, sector_paths, demand_shares, seasonal_factors = synthetic_inputs()
     oews_only = [frame[frame["instrument"] == "oews"] for frame in (periods, decomposition, sector_paths)]
-    written = draw_all(oews_only[0], oews_only[1], btos_series, fits, oews_only[2], demand_shares, output_dir=str(tmp_path))
-    assert sorted(written) == sorted(CHART_NAMES)
+    written = draw_all(oews_only[0], oews_only[1], btos_series, fits, oews_only[2], demand_shares, None, output_dir=str(tmp_path))
+    assert sorted(written) == sorted(name for name in CHART_NAMES if name != "forecast_cps_start_basis.png")
+
+
+def test_existing_charts_ignore_the_adjusted_start(tmp_path):
+    """Dropping the adjusted rows must not change any of the six original charts."""
+    inputs = list(synthetic_inputs())
+    with_adjusted = draw_all(*inputs, output_dir=str(tmp_path / "with"))
+    inputs[4] = inputs[4][inputs[4]["start_basis"] == "raw"]
+    without_adjusted = draw_all(*inputs[:6], None, output_dir=str(tmp_path / "without"))
+    for chart_name in without_adjusted:
+        assert (tmp_path / "with" / chart_name).read_bytes() == (tmp_path / "without" / chart_name).read_bytes()
+    assert "forecast_cps_start_basis.png" in with_adjusted

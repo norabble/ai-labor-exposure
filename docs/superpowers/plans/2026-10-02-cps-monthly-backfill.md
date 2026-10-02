@@ -1071,7 +1071,7 @@ git commit -m "Project CPS from both a raw and a seasonally adjusted latest-mont
 - Consumes: `start_basis` column (Task 5); `cps_seasonal_factors.csv` schema (Task 4/5).
 - Produces: `CHART_NAMES` gains `"forecast_cps_start_basis.png"` (7 entries); `draw_all(period_slopes_df, decomposition_df, btos_series_df, adoption_fits_df, sector_paths_df, demand_shares_df, seasonal_factors_df=None, output_dir=...) -> list[str]` — returns only charts actually written.
 
-- [ ] **Step 1: Update and add tests**
+- [x] **Step 1: Update and add tests**
 
 In `tests/test_forecast_charts.py`, inside `synthetic_inputs`, replace the whole `path_rows = []` loop (through `sector_paths = pd.DataFrame(path_rows)`) so CPS gets both bases and OEWS only raw:
 
@@ -1151,12 +1151,12 @@ def test_existing_charts_ignore_the_adjusted_start(tmp_path):
 
 If the byte comparison is flaky because matplotlib embeds a timestamp, compare `chart_manifest.json` fingerprints for the six names instead (read both manifests with `json.load` and compare the entries).
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `uv run pytest tests/test_forecast_charts.py -v`
 Expected: FAIL — `draw_all` takes no `seasonal_factors_df`; `CHART_NAMES` lacks the new chart.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `forecast_charts.py`: append `"forecast_cps_start_basis.png"` to `CHART_NAMES`; add
 
@@ -1240,12 +1240,12 @@ In `forecast_composition.run_stage`, pass the factors to `draw_all` after `deman
 (pd.read_csv(SEASONAL_FACTORS_OUTPUT_PATH, dtype={"soc_major": str}) if ("cps", "seasonally_adjusted") in starts else None,)
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/test_forecast_charts.py tests/test_forecast_composition.py -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 The chart's docs page and committed image land in Task 8 together, because the link gate fails on a documented chart with no image.
 
@@ -1527,3 +1527,5 @@ git commit -m "Add the monthly CPS update skill"
 ## Deviations log
 
 **Task 1, Step 6 (fix round 1):** `uv run download_cps_history.py` placed LAST in the Makefile `download-data` recipe (after `uv run download_dws.py`) instead of before `node download_cps.js`. Reason: the plan's ordering caused a local API failure to abort later downloads (`node download_cps.js` and `uv run download_dws.py`), breaking the entire download-data target; moving it to the end preserves both fetchers' ability to run. The cross-check (A-19 page against API history) happens in the pipeline (`cps_panel.load_cps_panel`), not in the download stage, so download order is irrelevant.
+
+**Task 6 (note):** The brief's title was one centred `set_title` that clipped at the right edge once rendered (long y labels shift the axes). It is now four short lines, right-aligned, at fontsize 9. The byte-comparison test was deterministic, so the manifest-fingerprint fallback was not needed.

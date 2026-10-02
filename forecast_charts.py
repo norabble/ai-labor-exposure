@@ -1,12 +1,14 @@
 """
 forecast_charts.py
 ──────────────────
-The six charts of the decomposed-slope composition forecast
+The seven charts of the decomposed-slope composition forecast
 (docs/superpowers/specs/2026-10-02-decomposed-slope-forecast-design.md § Component 5).
 
-Every chart is saved through chart_manifest.save_figure. The sector-change and
-occupation views are labelled as conditional projections; occupation numbers are
-an allocation of sector change, never an occupation-level forecast.
+The first six show the raw start only; the seventh compares the raw and the
+seasonally adjusted CPS starts. Every chart is saved through
+chart_manifest.save_figure. The sector-change and occupation views are labelled as
+conditional projections; occupation numbers are an allocation of sector change,
+never an occupation-level forecast.
 
 Inputs:  frames produced by forecast_composition.py and btos_adoption.py
 Outputs: data/output/visualizations/forecast_*.png
@@ -28,6 +30,7 @@ CHART_NAMES = (
     "forecast_sector_paths.png",
     "forecast_demand_type_shares.png",
     "forecast_scenario_comparison.png",
+    "forecast_cps_start_basis.png",
 )
 INSTRUMENT_LABELS = {"oews": "OEWS (start May 2025)", "cps": "CPS A-19 (start latest month)"}
 # The slope history is each instrument's own estimation history; for CPS that is the 22-sector rollup, not A-19.
@@ -37,6 +40,8 @@ FIT_COLORS = {"linear": "#2a78d6", "logistic": "#eb6834", "gompertz": "#1baf7a",
 GAIN_COLOR, LOSS_COLOR = "#2a78d6", "#e34948"  # blue/red, not red/green: sign stays legible under deuteranopia
 SCENARIO_LABELS = {"steady": "Steady unemployment", "mild_recession": "Mild recession (+1.5 pp in 2027)"}
 REFERENCE_SCENARIO = ("steady", "logistic")
+START_BASIS_LABELS = {"raw": "Raw latest month", "seasonally_adjusted": "Seasonally adjusted latest month"}
+START_BASIS_COLORS = {"raw": "#2a78d6", "seasonally_adjusted": "#eb6834"}  # categorical slots 1 and 2
 PROJECTION_NOTE = "Conditional projection: dynamic-model score unchanged, total employment held at start level."
 
 
@@ -280,6 +285,44 @@ def plot_scenario_comparison(sector_paths_df, output_dir):
     plt.close(figure)
 
 
+def plot_cps_start_basis(sector_paths_df, seasonal_factors_df, output_dir):
+    """Per sector, the 2030 change from the raw and from the seasonally adjusted CPS start."""
+    scenario, fit = REFERENCE_SCENARIO
+    cps_df = sector_paths_df[sector_paths_df["instrument"] == "cps"]
+    changes = {basis: _final_change(cps_df[cps_df["start_basis"] == basis], "cps", scenario, fit)["change"] for basis in START_BASIS_LABELS}
+    order = changes["raw"].sort_values().index
+    positions = np.arange(len(order))
+    start_label, end_label = _start_and_end(cps_df)
+    month_factors_df = seasonal_factors_df[seasonal_factors_df["calendar_month"] == int(start_label[5:7])]
+    month_factors = month_factors_df.set_index(month_factors_df["soc_major"].astype(str).str.zfill(2))["factor"]
+
+    figure, axis = plt.subplots(figsize=(10, 9))
+    for basis, offset in (("raw", -0.18), ("seasonally_adjusted", 0.18)):
+        axis.barh(
+            positions + offset,
+            changes[basis].reindex(order),
+            height=0.34,
+            color=START_BASIS_COLORS[basis],
+            label=START_BASIS_LABELS[basis],
+        )
+    axis.set_yticks(positions, [f"{_sector_label(code)}  (factor {month_factors.get(code, np.nan):.3f})" for code in order])
+    axis.axvline(0, color="#999999", linewidth=0.8)
+    axis.set_xlabel(f"Change in employment share, {start_label} → {end_label} (percentage points)")
+    axis.legend(fontsize=8, loc="lower right")
+    start_month_name = pd.Period(start_label, freq="M").strftime("%B")
+    axis.set_title(
+        f"CPS projection: raw vs seasonally adjusted {start_label} start\n"
+        f"Steady unemployment, logistic adoption\n"
+        f"Factor = the sector's {start_month_name} seasonal factor; above 1 means {start_month_name} runs seasonally high.\n"
+        f"{PROJECTION_NOTE}",
+        fontsize=9,
+        loc="right",
+    )
+    figure.tight_layout()
+    save_figure(figure, os.path.join(output_dir, CHART_NAMES[6]), dpi=150)
+    plt.close(figure)
+
+
 def draw_all(
     period_slopes_df,
     decomposition_df,
@@ -287,14 +330,24 @@ def draw_all(
     adoption_fits_df,
     sector_paths_df,
     demand_shares_df,
+    seasonal_factors_df=None,
     output_dir="data/output/visualizations",
 ) -> list[str]:
-    """Draw every forecast chart; returns the file names written."""
+    """Draw every forecast chart; returns the file names written.
+
+    The six original charts show the raw start only. The start-basis comparison is
+    drawn only when a seasonally adjusted CPS start exists.
+    """
     os.makedirs(output_dir, exist_ok=True)
+    raw_paths_df = sector_paths_df[sector_paths_df["start_basis"] == "raw"]
     plot_slope_history(period_slopes_df, decomposition_df, output_dir)
     plot_btos_adoption(btos_series_df, adoption_fits_df, output_dir)
-    plot_sector_change_2030(sector_paths_df, output_dir)
-    plot_sector_paths(sector_paths_df, output_dir)
+    plot_sector_change_2030(raw_paths_df, output_dir)
+    plot_sector_paths(raw_paths_df, output_dir)
     plot_demand_type_shares(demand_shares_df, output_dir)
-    plot_scenario_comparison(sector_paths_df, output_dir)
-    return list(CHART_NAMES)
+    plot_scenario_comparison(raw_paths_df, output_dir)
+    written = list(CHART_NAMES[:6])
+    if seasonal_factors_df is not None and (sector_paths_df["start_basis"] == "seasonally_adjusted").any():
+        plot_cps_start_basis(sector_paths_df, seasonal_factors_df, output_dir)
+        written.append(CHART_NAMES[6])
+    return written

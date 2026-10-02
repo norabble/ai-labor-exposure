@@ -766,6 +766,7 @@ def run_stage() -> None:
         pd.read_csv(btos_adoption.FITS_OUTPUT_PATH, parse_dates=["month"]),
         pd.read_csv(SECTOR_PATHS_OUTPUT_PATH, dtype={"soc_major": str}),
         demand_type_shares(allocation_df),
+        pd.read_csv(SEASONAL_FACTORS_OUTPUT_PATH, dtype={"soc_major": str}) if ("cps", "seasonally_adjusted") in starts else None,
     )
     for chart_name in written_charts:
         print(f"  ✓ data/output/visualizations/{chart_name}")

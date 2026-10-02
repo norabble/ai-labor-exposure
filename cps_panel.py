@@ -6,18 +6,17 @@ month-keyed employment panel, and derives the comparison windows used by the CPS
 charts in validate_bls.py.
 
 A-19 is a rolling web table: it always shows the latest reference month and the
-same month one year earlier, and BLS replaces it in place each month. A single
-fetch therefore yields only two months. This module accumulates those months into
-a tidy panel so that history survives across runs, and so that the release
-workflow — which starts with an empty, gitignored data/ — still has real months
-to work with.
+same month one year earlier, and BLS replaces it in place each month. The API
+history supplies every month from 2020-01 onward via the BLS LN series; the A-19
+page is a cross-check.
 
 Inputs:
-  • seeds/cps_a19_panel.csv       (committed panel; the accumulated history)
-  • data/raw/cps/table_a19.html   (optional — latest release, from download_cps.js)
+  • seeds/cps_a19_panel.csv                  (committed panel; the accumulated history)
+  • data/raw/cps/a19_api_history.csv         (optional — monthly history from download_cps_history.py; the panel's source)
+  • data/raw/cps/table_a19.html              (optional — latest release, from download_cps.js; cross-check only)
 
 Outputs:
-  • data/output/cps_a19_panel.csv (seed panel merged with the latest release)
+  • data/output/cps_a19_panel.csv            (seed panel merged with the API history and the latest release)
 
 Two comparison windows are derived from the panel:
   • since-anchor — from the last panel month at or before the OEWS reference
@@ -248,36 +247,63 @@ def merge_panel(existing_panel_df: pd.DataFrame, new_release_df: pd.DataFrame) -
     return deduplicated_df.sort_values(["month", "soc_major"], kind="stable").reset_index(drop=True)
 
 
+def check_release_against_history(release_df: pd.DataFrame, api_history_df: pd.DataFrame) -> None:
+    """
+    Raise if the A-19 page and the API history disagree on any month they share.
+
+    The API is the panel's source and the page is the check on it: a disagreement
+    means a series ID now points at a different group, or BLS revised one product
+    and not the other. Either way a silent merge would mislabel a sector.
+    """
+    keys = ["month", "soc_major"]
+    compared_df = release_df.merge(api_history_df, on=keys, suffixes=("_release", "_api"))
+    differing_df = compared_df[
+        compared_df["employed_thousands_release"].astype(float) != compared_df["employed_thousands_api"].astype(float)
+    ]
+    if not differing_df.empty:
+        examples = differing_df[[*keys, "employed_thousands_release", "employed_thousands_api"]].head(5).to_dict("records")
+        raise ValueError(f"The A-19 page disagrees with the BLS API on {len(differing_df)} row(s), e.g. {examples}")
+
+
 def load_cps_panel(
     seed_path: str = SEED_PANEL_PATH,
     release_html_path: str = LATEST_RELEASE_HTML_PATH,
     output_path: str | None = OUTPUT_PANEL_PATH,
+    api_history_path: str = API_HISTORY_PATH,
 ) -> pd.DataFrame | None:
     """
-    Build the working panel from the committed seed plus the latest fetched release.
+    Build the working panel: the committed seed, then the API history, then the A-19 page.
 
-    Returns None only when neither source is available. Neither a missing release
-    HTML nor an unparseable one is fatal: the seed alone still yields correctly
-    labelled charts from real months, which is what keeps a blocked download or a
-    BLS layout change from silently republishing stale ones. The parse error is
-    still surfaced loudly — it just does not take the rest of the pipeline with it.
+    The API history (download_cps_history.py) is the source and wins over the seed.
+    The A-19 page is a cross-check: a month it shares with the API history must
+    agree exactly or this raises; a month only the page has is merged. Returns None
+    only when no source is available. A missing or unparseable page is not fatal —
+    the parse error is surfaced loudly, but the seed and API history still yield
+    correctly labelled charts.
     """
     panel_df = pd.DataFrame(columns=PANEL_COLUMNS)
     if os.path.exists(seed_path):
-        panel_df = pd.read_csv(seed_path, dtype={"month": str, "soc_major": str, "source_reference_month": str})
+        panel_df = pd.read_csv(seed_path, dtype=PANEL_DTYPES)
 
+    api_history_df = None
+    if os.path.exists(api_history_path):
+        api_history_df = pd.read_csv(api_history_path, dtype=PANEL_DTYPES)
+        panel_df = merge_panel(panel_df, api_history_df)
+
+    release_df = None
     if os.path.exists(release_html_path):
         try:
-            panel_df = merge_panel(panel_df, parse_a19_release(release_html_path))
+            release_df = parse_a19_release(release_html_path)
         except (ValueError, IndexError) as parse_error:
             print(f"  WARNING: could not parse {release_html_path} — {parse_error}")
-            if panel_df.empty:
-                return None
-            print("  Falling back to the committed CPS panel seed; charts will use older months.")
-    elif panel_df.empty:
-        return None
+            print("  Falling back to the committed CPS panel seed and API history; the A-19 cross-check did not run.")
     else:
-        print(f"  Note: {release_html_path} not found — using the committed CPS panel seed only.")
+        print(f"  Note: {release_html_path} not found — the A-19 cross-check did not run.")
+
+    if release_df is not None:
+        if api_history_df is not None:
+            check_release_against_history(release_df, api_history_df)
+        panel_df = merge_panel(panel_df, release_df)
 
     if panel_df.empty:
         return None

@@ -345,7 +345,7 @@ git commit -m "Fetch the A-19 monthly history for all 22 groups from the BLS API
 - Consumes: `API_HISTORY_PATH`, `PANEL_DTYPES` (Task 1).
 - Produces: `load_cps_panel(seed_path=SEED_PANEL_PATH, release_html_path=LATEST_RELEASE_HTML_PATH, output_path=OUTPUT_PANEL_PATH, api_history_path=API_HISTORY_PATH) -> pd.DataFrame | None`; `check_release_against_history(release_df: pd.DataFrame, api_history_df: pd.DataFrame) -> None` (raises `ValueError`).
 
-- [ ] **Step 1: Make the existing tests hermetic**
+- [x] **Step 1: Make the existing tests hermetic**
 
 Every existing call in `TestLoadCpsPanel` passes three positional arguments. Add a fourth, an absent API history path, to each — e.g.:
 
@@ -355,7 +355,7 @@ panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, s
 
 Apply the same change to all six existing tests in the class. Run `uv run pytest tests/test_cps.py -v` — expected: FAIL with `TypeError: load_cps_panel() takes from 0 to 3 positional arguments` (the parameter does not exist yet).
 
-- [ ] **Step 2: Write the new failing tests**
+- [x] **Step 2: Write the new failing tests**
 
 Add `check_release_against_history` and `parse_a19_release` to the `from cps_panel import (...)` block if not already present, then append to `TestLoadCpsPanel`:
 
@@ -404,7 +404,7 @@ class TestCheckReleaseAgainstHistory:
         check_release_against_history(release_df, release_df[release_df["month"] == "2025-04"])
 ```
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `cps_panel.py`, add above `load_cps_panel`:
 
@@ -482,12 +482,12 @@ def load_cps_panel(
 
 Update the module docstring's Inputs block to list `data/raw/cps/a19_api_history.csv (optional — monthly history from download_cps_history.py; the panel's source)` above the A-19 line, and rewrite the second paragraph to say the API history now supplies every month from 2020-01 and the page is a cross-check.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `uv run pytest tests/test_cps.py -v`
 Expected: PASS, including the six updated and six new tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add cps_panel.py tests/test_cps.py docs/superpowers/plans/2026-10-02-cps-monthly-backfill.md

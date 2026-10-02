@@ -21,6 +21,7 @@ from cps_panel import (
     CpsComparisonWindows,
     build_growth_frame,
     build_year_over_year_growth,
+    check_release_against_history,
     extract_total_month_columns,
     format_month,
     load_cps_panel,
@@ -285,14 +286,14 @@ class TestLoadCpsPanel:
         """The CI degradation path: a blocked download still yields real, correctly labelled months."""
         seed_path = tmp_path / "seed.csv"
         _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(seed_path, index=False)
-        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(tmp_path / "absent_api.csv"))
         assert sorted(panel_df["month"].unique()) == ["2025-04", "2026-04"]
 
     def test_merges_the_fetched_release_over_the_seed(self, tmp_path):
         seed_path = tmp_path / "seed.csv"
         output_path = tmp_path / "out" / "panel.csv"
         _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(seed_path, index=False)
-        panel_df = load_cps_panel(str(seed_path), FIXTURE_PATH, str(output_path))
+        panel_df = load_cps_panel(str(seed_path), FIXTURE_PATH, str(output_path), str(tmp_path / "absent_api.csv"))
         assert sorted(panel_df["month"].unique()) == ["2025-04", "2025-06", "2026-04", "2026-06"]
         assert output_path.exists()
 
@@ -302,20 +303,64 @@ class TestLoadCpsPanel:
         _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(seed_path, index=False)
         broken_release = tmp_path / "broken.html"
         broken_release.write_text(open(FIXTURE_PATH, encoding="utf-8").read().replace(">Total<", ">Grand total<"), encoding="utf-8")
-        panel_df = load_cps_panel(str(seed_path), str(broken_release), None)
+        panel_df = load_cps_panel(str(seed_path), str(broken_release), None, str(tmp_path / "absent_api.csv"))
         assert sorted(panel_df["month"].unique()) == ["2025-04", "2026-04"]
 
     def test_returns_none_when_the_release_is_unparseable_and_no_seed_exists(self, tmp_path):
         broken_release = tmp_path / "broken.html"
         broken_release.write_text(open(FIXTURE_PATH, encoding="utf-8").read().replace(">Total<", ">Grand total<"), encoding="utf-8")
-        assert load_cps_panel(str(tmp_path / "absent.csv"), str(broken_release), None) is None
+        assert load_cps_panel(str(tmp_path / "absent.csv"), str(broken_release), None, str(tmp_path / "absent_api.csv")) is None
 
     def test_returns_none_when_neither_source_exists(self, tmp_path):
-        assert load_cps_panel(str(tmp_path / "absent.csv"), str(tmp_path / "absent.html"), None) is None
+        assert load_cps_panel(str(tmp_path / "absent.csv"), str(tmp_path / "absent.html"), None, str(tmp_path / "absent_api.csv")) is None
 
     def test_preserves_leading_zero_soc_codes_from_the_seed(self, tmp_path):
         """soc_major must stay a string — read as int, '11' would become 11 and break the merge."""
         seed_path = tmp_path / "seed.csv"
         _panel([("2025-04", "11", 21016), ("2026-04", "11", 20526)]).to_csv(seed_path, index=False)
-        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(tmp_path / "absent_api.csv"))
         assert panel_df["soc_major"].tolist() == ["11", "11"]
+
+    def test_api_history_wins_over_the_seed(self, tmp_path):
+        seed_path, api_path = tmp_path / "seed.csv", tmp_path / "api.csv"
+        _panel([("2025-04", "15", 1)]).to_csv(seed_path, index=False)
+        _panel([("2025-04", "15", 6643), ("2025-05", "15", 6700)]).to_csv(api_path, index=False)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(api_path))
+        by_month = panel_df.set_index("month")["employed_thousands"]
+        assert by_month["2025-04"] == 6643
+        assert by_month["2025-05"] == 6700
+
+    def test_release_matching_the_api_merges_its_extra_months(self, tmp_path):
+        """Months only the page has (a run where the API was blocked earlier) still arrive."""
+        api_path = tmp_path / "api.csv"
+        # Create API history with April months
+        _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(api_path, index=False)
+        # Release (FIXTURE_PATH) has June months; result should have all four
+        panel_df = load_cps_panel(str(tmp_path / "absent.csv"), FIXTURE_PATH, None, str(api_path))
+        assert sorted(panel_df["month"].unique()) == ["2025-04", "2025-06", "2026-04", "2026-06"]
+
+    def test_release_disagreeing_with_the_api_raises(self, tmp_path):
+        api_path = tmp_path / "api.csv"
+        api_history_df = parse_a19_release(FIXTURE_PATH)
+        api_history_df.loc[0, "employed_thousands"] += 1
+        api_history_df.to_csv(api_path, index=False)
+        with pytest.raises(ValueError, match="disagrees with the BLS API"):
+            load_cps_panel(str(tmp_path / "absent.csv"), FIXTURE_PATH, None, str(api_path))
+
+    def test_unparseable_release_keeps_the_api_history(self, tmp_path):
+        api_path = tmp_path / "api.csv"
+        _panel([("2025-05", "15", 6700), ("2026-05", "15", 6900)]).to_csv(api_path, index=False)
+        broken_release = tmp_path / "broken.html"
+        broken_release.write_text(open(FIXTURE_PATH, encoding="utf-8").read().replace(">Total<", ">Grand total<"), encoding="utf-8")
+        panel_df = load_cps_panel(str(tmp_path / "absent.csv"), str(broken_release), None, str(api_path))
+        assert sorted(panel_df["month"].unique()) == ["2025-05", "2026-05"]
+
+
+class TestCheckReleaseAgainstHistory:
+    def test_passes_when_shared_months_agree(self):
+        release_df = parse_a19_release(FIXTURE_PATH)
+        check_release_against_history(release_df, release_df.copy())
+
+    def test_ignores_months_the_api_history_lacks(self):
+        release_df = parse_a19_release(FIXTURE_PATH)
+        check_release_against_history(release_df, release_df[release_df["month"] == "2025-04"])

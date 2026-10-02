@@ -41,6 +41,8 @@ import numpy as np
 import pandas as pd
 import scipy.stats as stats
 
+import btos_adoption
+import forecast_charts
 from btos_adoption import AdoptionFit, accepted_fits, annual_mean_adoption, run_adoption
 from composition_era_validation import COVID_PERIODS, unemployment_change_by_period
 
@@ -639,6 +641,17 @@ def run_stage() -> None:
     final_label = allocation_df["as_of"].max()
     allocation_df[allocation_df["as_of"] == final_label].to_csv(OCCUPATION_OUTPUT_PATH, index=False)
     print(f"  ✓ {OCCUPATION_OUTPUT_PATH}")
+
+    written_charts = forecast_charts.draw_all(
+        pd.read_csv(PERIOD_SLOPES_OUTPUT_PATH),
+        pd.read_csv(DECOMPOSITION_OUTPUT_PATH),
+        pd.read_csv(btos_adoption.SERIES_OUTPUT_PATH, parse_dates=["ref_end"]),
+        pd.read_csv(btos_adoption.FITS_OUTPUT_PATH, parse_dates=["month"]),
+        pd.read_csv(SECTOR_PATHS_OUTPUT_PATH, dtype={"soc_major": str}),
+        demand_type_shares(allocation_df),
+    )
+    for chart_name in written_charts:
+        print(f"  ✓ data/output/visualizations/{chart_name}")
 
 
 if __name__ == "__main__":

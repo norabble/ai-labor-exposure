@@ -1934,7 +1934,7 @@ git commit -m "Allocate projected sector change to occupations and roll up by de
 
 Load the `dataviz` skill before writing this task's code; follow its colour and mark guidance within the repo's existing `DEMAND_PALETTE` and `SOC_MAJOR_GROUPS`.
 
-- [ ] **Step 1: Write the failing smoke test**
+- [x] **Step 1: Write the failing smoke test**
 
 ```python
 """
@@ -2035,12 +2035,12 @@ def test_draw_all_writes_every_chart(tmp_path):
     assert (tmp_path / "chart_manifest.json").exists()
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `uv run pytest tests/test_forecast_charts.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'forecast_charts'`
 
-- [ ] **Step 3: Write `forecast_charts.py`**
+- [x] **Step 3: Write `forecast_charts.py`**
 
 ```python
 """
@@ -2308,7 +2308,7 @@ def draw_all(
     return list(CHART_NAMES)
 ```
 
-- [ ] **Step 4: Call the charts from `run_stage`**
+- [x] **Step 4: Call the charts from `run_stage`**
 
 Add `import btos_adoption` and `import forecast_charts` to the module imports of `forecast_composition.py`, then append to `run_stage`:
 
@@ -2325,13 +2325,13 @@ Add `import btos_adoption` and `import forecast_charts` to the module imports of
         print(f"  ✓ data/output/visualizations/{chart_name}")
 ```
 
-- [ ] **Step 5: Run the tests, then the stage, and look at every chart**
+- [x] **Step 5: Run the tests, then the stage, and look at every chart**
 
 Run: `uv run pytest tests/test_forecast_charts.py tests/test_forecast_composition.py -v` — Expected: PASS.
 Run: `uv run main.py forecast` — Expected: six chart `✓` lines.
 Open each PNG with the Read tool and check: labels legible, no overlapping tick text, both instruments present, the conditional-projection note visible. Fix layout problems before committing.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add forecast_charts.py tests/test_forecast_charts.py forecast_composition.py docs/superpowers/plans/2026-10-02-decomposed-slope-forecast.md

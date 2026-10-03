@@ -42,6 +42,7 @@ SCENARIO_LABELS = {"steady": "Steady unemployment", "mild_recession": "Mild rece
 REFERENCE_SCENARIO = ("steady", "logistic")
 START_BASIS_LABELS = {"raw": "Raw latest month", "seasonally_adjusted": "Seasonally adjusted latest month"}
 START_BASIS_COLORS = {"raw": "#2a78d6", "seasonally_adjusted": "#eb6834"}  # categorical slots 1 and 2
+GAP_COLOR = "#8a8a8a"  # neutral grey: the gap panel must not reuse the raw/adjusted start-basis colours or gain/loss blue
 PROJECTION_NOTE = "Conditional projection: dynamic-model score unchanged, total employment held at start level."
 
 
@@ -321,7 +322,7 @@ def plot_cps_start_basis(sector_paths_df, seasonal_factors_df, output_dir):
     axis.set_xlabel(f"Change {start_label} to {end_label} (pp)")
     axis.legend(fontsize=8, loc="lower right")
     axis.set_title("Change to 2030 from each start", fontsize=10)
-    gap_axis.barh(positions, share_gap, height=0.6, color=np.where(share_gap >= 0, GAIN_COLOR, LOSS_COLOR))
+    gap_axis.barh(positions, share_gap, height=0.6, color=GAP_COLOR)
     gap_axis.axvline(0, color="#999999", linewidth=0.8)
     gap_axis.set_xlabel(f"{end_label} share, adjusted minus raw (pp)")
     gap_axis.set_title("2030 share: adjusted − raw", fontsize=10)

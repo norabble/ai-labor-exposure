@@ -14,7 +14,7 @@
 
 **The raw start stays primary.** The other six forecast charts, and the CPS panel of `forecast_sector_change_2030.png`, use the raw start. This chart is the only place the adjusted start appears.
 
-**Right panel, "2030 share: adjusted − raw".** One bar per sector, in the left panel's order: the adjusted start's projected 2030-12 share minus the raw start's, in percentage points (blue positive, red negative). The left panel compares changes, which hide the seasonal effect because it sits in the start level and cancels out of a change. The right panel compares the levels where it shows.
+**Right panel, "2030 share: adjusted − raw".** One bar per sector, in the left panel's order: the adjusted start's projected 2030-12 share minus the raw start's, in percentage points (grey bars either side of a zero line; sign is read from direction, not colour). The left panel compares changes, which hide the seasonal effect because it sits in the start level and cancels out of a change. The right panel compares the levels where it shows.
 
 ## Reading
 

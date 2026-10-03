@@ -643,7 +643,7 @@ Update the docstring line `data/raw/bls_api/<series_id>_<start>_<end>.json  (fet
 Run: `uv run pytest tests/test_historical_displacement.py -v`
 Expected: PASS, all classes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add historical_displacement.py tests/test_historical_displacement.py docs/superpowers/plans/2026-10-02-cps-monthly-backfill.md
@@ -1541,3 +1541,7 @@ git commit -m "Add the monthly CPS update skill"
 **Task 9, Step 1 (hits left unchanged):** `docs/cps_data_expansion.md` lines 7, 9, 11, 12, 13 and 19 are the proposal's analysis of the state before the backfill ("six months", "Apr 2025", "three so far", "verified 2026-08-02"); the brief says to leave the analysis intact and only the status line changed. `docs/framework.md` § Composition Forecast states "2026 averages 8 months" on purpose, because it describes the IPUMS detailed panel (still eight 2026 months). The `docs/outputs.md` `cps_occupation_panel.csv` hit was updated to 9 months, since that panel is fetched inline from the BLS API, not built from IPUMS. `docs/seeds.md` "two months" describes the A-19 page itself, which still carries two.
 
 **Task 10 (note):** The skill text was amended with implementation findings: (1) sandbox note, with `.venv/bin/python` as the `uv run` equivalent and BLS-reaching commands run outside the sandbox; (2) step 1 notes that `parse_api_payload` raising on a missing group means "not out yet or incomplete"; (3) step 3's cache note is conditional, since current-year cache files now expire after 24 hours; (4) step 3 names the seasonal-factor table, `cps_seasonal_factors.csv` and the "seasonally adjusted start skipped" warning; (5) step 4 verifies the A-19 diff adds exactly 22 rows with earlier values unchanged; (6) step 5 also copies images for every page updated in step 6; (7) step 6 lists the figures that move monthly; (8) "What does not move" adds that seasonal factors change only slightly.
+
+**Final review (controller ruling, departs from spec §1):** API-history rows no longer all take the pull's latest month as `source_reference_month` in the working panel. `cps_panel.merge_api_history` keeps the seed's existing stamp wherever the incoming `employed_thousands` equals the seed's value; only new or changed rows take the new stamp. Reason: stamping every row rewrote all ~1,760 seed rows on each monthly promotion, burying the 22 genuinely new rows. `download_cps_history.py` still writes the latest month on every row to `data/output/`; the preservation happens at the merge, in a helper beside `merge_panel` rather than inside it, because the page merge relies on the later release winning stamp included. `seeds/cps_a19_panel.csv` was not rewritten (its stamps are all 2026-09, consistent with the rule going forward). The update-cps-monthly skill's step 4 now gives a value comparison against `git show HEAD:seeds/cps_a19_panel.csv`.
+
+**Final review (year rollover):** `_cache_is_fresh` treats a past-only range as fresh only if the file was written after the range closed, and `fetch_cps_group_employment` defaults `end_year` to the current year, so a file written in December of year Y is refreshed in January of Y+1.

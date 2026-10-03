@@ -58,9 +58,23 @@ report it; do not carry on as if the adjusted start were current.
     cp data/output/cps_a19_panel.csv seeds/
 
 Verify the A-19 seed diff adds exactly 22 rows, one per group, for the one new
-month, and that every earlier value is unchanged. `source_reference_month` is
-expected to move to the new month on all rows — that is normal, since API rows are
-stamped with the pull's latest month.
+month. Existing rows keep their `source_reference_month` stamp and change only if
+BLS revised a value; a revised row takes the new stamp. Compare the values, not
+the line diff:
+
+    import subprocess, io
+    import pandas as pd
+    keys = ["month", "soc_major"]
+    old = pd.read_csv(io.StringIO(subprocess.run(
+        ["git", "show", "HEAD:seeds/cps_a19_panel.csv"], capture_output=True, text=True, check=True).stdout),
+        dtype={"soc_major": str})
+    new = pd.read_csv("seeds/cps_a19_panel.csv", dtype={"soc_major": str})
+    both = old.merge(new, on=keys, how="outer", suffixes=("_old", "_new"), indicator=True)
+    print(both["_merge"].value_counts())  # expect 22 right_only, 0 left_only
+    shared = both[both["_merge"] == "both"]
+    print(shared[shared["employed_thousands_old"] != shared["employed_thousands_new"]])  # expect empty unless BLS revised
+
+Any row in the second print is a BLS revision: report it.
 
 `seeds/cps_occupation_panel.csv` is three columns (`year, cps_group,
 employed_thousands`); `data/output/cps_occupation_panel.csv` adds

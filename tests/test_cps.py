@@ -338,6 +338,27 @@ class TestLoadCpsPanel:
         assert by_month["2025-04"] == 6643
         assert by_month["2025-05"] == 6700
 
+    def test_api_history_keeps_the_seed_stamp_on_unchanged_rows(self, tmp_path):
+        """Only new or changed rows take the new source_reference_month, so a monthly promotion does not rewrite the seed."""
+        seed_path, api_path = tmp_path / "seed.csv", tmp_path / "api.csv"
+        seed_df = _panel([("2026-07", "15", 100.0), ("2026-08", "15", 110.0)])
+        seed_df["source_reference_month"] = "2026-08"
+        seed_df.to_csv(seed_path, index=False)
+        api_df = _panel([("2026-07", "15", 100.0), ("2026-08", "15", 111.0), ("2026-09", "15", 120.0)])
+        api_df["source_reference_month"] = "2026-09"
+        api_df.to_csv(api_path, index=False)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(api_path)).set_index("month")
+        assert panel_df.loc["2026-07", "source_reference_month"] == "2026-08"
+        assert panel_df.loc["2026-08", "employed_thousands"] == 111.0
+        assert panel_df.loc["2026-08", "source_reference_month"] == "2026-09"
+        assert panel_df.loc["2026-09", "employed_thousands"] == 120.0
+        assert panel_df.loc["2026-09", "source_reference_month"] == "2026-09"
+
+    def test_notes_when_the_page_parsed_but_no_api_history_exists(self, tmp_path, capsys):
+        api_path = tmp_path / "absent_api.csv"
+        load_cps_panel(str(tmp_path / "absent.csv"), FIXTURE_PATH, None, str(api_path))
+        assert f"Note: {api_path} absent — the A-19 cross-check did not run." in capsys.readouterr().out
+
     def test_release_matching_the_api_merges_its_extra_months(self, tmp_path):
         """Months only the page has (a run where the API was blocked earlier) still arrive."""
         api_path = tmp_path / "api.csv"

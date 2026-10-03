@@ -257,6 +257,30 @@ def merge_panel(existing_panel_df: pd.DataFrame, new_release_df: pd.DataFrame) -
     return deduplicated_df.sort_values(["month", "soc_major"], kind="stable").reset_index(drop=True)
 
 
+def merge_api_history(seed_panel_df: pd.DataFrame, api_history_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge the API history over the seed, keeping the seed's stamp on rows it did not change.
+
+    Every API-history row carries the pull's latest month as source_reference_month,
+    so a plain merge_panel would restamp the whole seed on each monthly promotion
+    and bury the real change (22 new rows) in a ~1,760-row diff. A row whose
+    employed_thousands equals the seed's keeps the seed's stamp; new and changed
+    rows take the API's. This is kept out of merge_panel because the page merge
+    there relies on the later release always winning, stamp included.
+    """
+    merged_df = merge_panel(seed_panel_df, api_history_df)
+    keys = ["month", "soc_major"]
+    seed_values_df = seed_panel_df[[*keys, "employed_thousands", "source_reference_month"]].rename(
+        columns={"employed_thousands": "seed_employed", "source_reference_month": "seed_stamp"}
+    )
+    merged_df = merged_df.merge(seed_values_df, on=keys, how="left")
+    unchanged = merged_df["seed_employed"].notna() & (
+        merged_df["employed_thousands"].astype(float) == merged_df["seed_employed"].astype(float)
+    )
+    merged_df.loc[unchanged, "source_reference_month"] = merged_df.loc[unchanged, "seed_stamp"]
+    return merged_df.drop(columns=["seed_employed", "seed_stamp"])
+
+
 def check_release_against_history(release_df: pd.DataFrame, api_history_df: pd.DataFrame) -> None:
     """
     Raise if the A-19 page and the API history disagree on any month they share.
@@ -298,7 +322,7 @@ def load_cps_panel(
     api_history_df = None
     if os.path.exists(api_history_path):
         api_history_df = pd.read_csv(api_history_path, dtype=PANEL_DTYPES)
-        panel_df = merge_panel(panel_df, api_history_df)
+        panel_df = merge_api_history(panel_df, api_history_df)
 
     release_df = None
     if os.path.exists(release_html_path):
@@ -313,6 +337,8 @@ def load_cps_panel(
     if release_df is not None:
         if api_history_df is not None:
             check_release_against_history(release_df, api_history_df)
+        else:
+            print(f"  Note: {api_history_path} absent — the A-19 cross-check did not run.")
         panel_df = merge_panel(panel_df, release_df)
 
     if panel_df.empty:

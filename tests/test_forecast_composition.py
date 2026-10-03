@@ -484,8 +484,10 @@ class TestStartBasis:
         synthetic_a19_panel(first_month="2025-04").to_csv(a19_path, index=False)
         monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
         monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        (tmp_path / "factors.csv").write_text("stale from an earlier run\n", encoding="utf-8")
         fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
         sector_paths_df, starts = forecast_composition.project_both_instruments({"cps": cps_estimate(scores)}, fits)
+        assert not (tmp_path / "factors.csv").exists()
         assert set(sector_paths_df["start_basis"]) == {"raw"}
         assert set(starts) == {("cps", "raw")}
         assert "seasonally adjusted start skipped" in capsys.readouterr().out

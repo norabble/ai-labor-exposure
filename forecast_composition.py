@@ -31,7 +31,7 @@ Outputs:
   • data/output/forecast_sector_stability.csv
   • data/output/forecast_occupation_allocation_2030.csv
   • data/output/cps_seasonal_factors.csv
-  • six charts via forecast_charts.py
+  • seven charts via forecast_charts.py
 CPS projects from a raw and a seasonally adjusted latest-month start (`start_basis`).
 """
 
@@ -449,7 +449,6 @@ UNEMPLOYMENT_SCENARIOS = {
     "steady": {},
     "mild_recession": {2027: 1.5, 2028: -0.75, 2029: -0.75},
 }
-START_BASES = ("raw", "seasonally_adjusted")
 SEASONAL_FACTORS_OUTPUT_PATH = "data/output/cps_seasonal_factors.csv"
 SECTOR_PATH_COLUMNS = ["instrument", "start_basis", "unemployment_scenario", "adoption_fit", "as_of", "soc_major", "share", "employment"]
 REQUIRED_SECTOR_COUNT = 22
@@ -540,6 +539,8 @@ def cps_seasonal_factors_or_none(a19_panel_df: pd.DataFrame) -> pd.DataFrame | N
         factors_df = seasonal_factors(a19_panel_df)
     except ValueError as factor_error:
         print(f"  ⚠ {factor_error}; seasonally adjusted start skipped, CPS projects from the raw start only.")
+        if os.path.exists(SEASONAL_FACTORS_OUTPUT_PATH):
+            os.remove(SEASONAL_FACTORS_OUTPUT_PATH)  # a stale file would contradict "absent" in docs/outputs.md
         return None
     factors_df.to_csv(SEASONAL_FACTORS_OUTPUT_PATH, index=False)
     print(f"  ✓ {SEASONAL_FACTORS_OUTPUT_PATH}")

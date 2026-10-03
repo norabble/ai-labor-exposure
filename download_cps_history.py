@@ -46,6 +46,9 @@ ANNUAL_AVERAGE_PERIOD = "M13"
 
 def fetch_history_payload(start_year: int = HISTORY_START_YEAR, end_year: int | None = None) -> dict:
     """One POST for all 22 series; raises on an HTTP or JSON failure."""
+    # Unregistered requests are limited to 10 years. 2020 through the current year
+    # exceeds that from 2030 on: chunk the range then, or rely on BLS_API_KEY
+    # (registered: 20 years).
     request_body: dict[str, object] = {
         "seriesid": list(A19_SERIES_BY_SOC_MAJOR.values()),
         "startyear": str(start_year),

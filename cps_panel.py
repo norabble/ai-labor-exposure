@@ -296,7 +296,11 @@ def check_release_against_history(release_df: pd.DataFrame, api_history_df: pd.D
     ]
     if not differing_df.empty:
         examples = differing_df[[*keys, "employed_thousands_release", "employed_thousands_api"]].head(5).to_dict("records")
-        raise ValueError(f"The A-19 page disagrees with the BLS API on {len(differing_df)} row(s), e.g. {examples}")
+        raise ValueError(
+            f"The A-19 page disagrees with the BLS API on {len(differing_df)} row(s), e.g. {examples}. "
+            "Check cps_panel.A19_SERIES_BY_SOC_MAJOR against the series IDs BLS now publishes, "
+            "and see the update-cps-monthly skill."
+        )
 
 
 def load_cps_panel(

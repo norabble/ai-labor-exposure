@@ -12,6 +12,7 @@ Inputs:
   • data/output/bls_trends.csv          (from analyze_bls.py)
   • data/output/occupation_exposure_report.csv
   • seeds/cps_a19_panel.csv             (committed CPS month panel)
+  • data/raw/cps/a19_api_history.csv      (optional — from download_cps_history.py)
   • data/raw/cps/table_a19.html         (optional — from download_cps.js)
 
 Outputs (saved to data/output/visualizations/):
@@ -853,9 +854,10 @@ def _load_cps_growth() -> tuple[pd.DataFrame, CpsComparisonWindows] | None:
     Load the CPS month panel and derive both comparison windows.
 
     Returns (growth_df, windows), or None when no usable panel is available. A
-    panel too thin to define a window is reported and skipped rather than raised:
-    the CPS charts are a supplementary indicator and must not take down the rest
-    of the validation stage.
+    panel too thin to define a window is reported and skipped rather than raised.
+    A disagreement between the A-19 page and the BLS API history is the exception:
+    load_cps_panel raises it deliberately, because merging two sources that
+    disagree would mislabel a sector, and it propagates out of the validation stage.
     """
     cps_panel_df = load_cps_panel()
     if cps_panel_df is None:
@@ -2237,7 +2239,10 @@ def main():
         )
     else:
         print("  Skipping CPS charts — no CPS panel available.")
-        print("  Expected seeds/cps_a19_panel.csv, or run: node download_cps.js (or make download-data).")
+        print(
+            "  Expected seeds/cps_a19_panel.csv, or run: uv run download_cps_history.py (the source) "
+            "and node download_cps.js (the page cross-check), or make download-data."
+        )
 
 
 if __name__ == "__main__":

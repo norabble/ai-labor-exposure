@@ -143,9 +143,10 @@ jobs:
 
       # The release runs from a detached tag ref, and the two artifacts below
       # live only in git: docs/charts/images/ is what the docs render, and
-      # seeds/cps_a19_panel.csv is the ONLY place CPS history exists, because
-      # A-19 is a rolling table and data/ is gitignored. A run that fetches a
-      # new month and then exits therefore loses it. Open a pull request against
+      # seeds/cps_a19_panel.csv is the committed CPS history. The BLS API can
+      # rebuild A-19 history from 2020-01, but data/ is gitignored, so a run
+      # that fetches a new month and then exits loses it until the seed is
+      # promoted. Open a pull request against
       # main rather than pushing, so this works under branch protection and the
       # diff gets a look before it lands.
       - name: Open a pull request with refreshed charts and CPS panel
@@ -196,8 +197,8 @@ jobs:
 
           Contains the regenerated \`docs/charts/images/\` PNGs, and any DWS or CPS Table A-19
           months this run picked up. A-19 is a rolling page that carries only two
-          months at a time, so \`seeds/cps_a19_panel.csv\` is the only record of those
-          months — merging this is what preserves them.
+          months at a time; the BLS API can rebuild that history from 2020-01, but
+          \`seeds/cps_a19_panel.csv\` is the committed copy, so merging this keeps it current.
           EOF
 
           gh pr create \

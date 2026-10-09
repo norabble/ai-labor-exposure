@@ -14,6 +14,7 @@ passing silently.
 
 import os
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -21,6 +22,7 @@ from cps_panel import (
     CpsComparisonWindows,
     build_growth_frame,
     build_year_over_year_growth,
+    check_release_against_history,
     extract_total_month_columns,
     format_month,
     load_cps_panel,
@@ -29,6 +31,7 @@ from cps_panel import (
     parse_a19_release,
     parse_month_label,
     resolve_comparison_windows,
+    seasonal_factors,
     year_over_year_month_pairs,
 )
 
@@ -253,6 +256,12 @@ class TestYearOverYearMonthPairs:
         panel_df = _panel([("2025-04", "15", 100.0), ("2025-06", "15", 110.0)])
         assert year_over_year_month_pairs(panel_df) == []
 
+    def test_keeps_only_pairs_starting_at_or_after_the_oews_handoff(self):
+        rows = [(str(month), "15", 100) for month in pd.period_range("2025-01", "2026-09", freq="M")]
+        pairs = year_over_year_month_pairs(_panel(rows), earliest_year_ago_month="2025-05")
+        assert [latest for _, latest in pairs] == ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]
+        assert all(year_ago >= "2025-05" for year_ago, _ in pairs)
+
 
 class TestBuildYearOverYearGrowth:
     def test_computes_growth_for_the_requested_pair_only(self):
@@ -285,14 +294,14 @@ class TestLoadCpsPanel:
         """The CI degradation path: a blocked download still yields real, correctly labelled months."""
         seed_path = tmp_path / "seed.csv"
         _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(seed_path, index=False)
-        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(tmp_path / "absent_api.csv"))
         assert sorted(panel_df["month"].unique()) == ["2025-04", "2026-04"]
 
     def test_merges_the_fetched_release_over_the_seed(self, tmp_path):
         seed_path = tmp_path / "seed.csv"
         output_path = tmp_path / "out" / "panel.csv"
         _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(seed_path, index=False)
-        panel_df = load_cps_panel(str(seed_path), FIXTURE_PATH, str(output_path))
+        panel_df = load_cps_panel(str(seed_path), FIXTURE_PATH, str(output_path), str(tmp_path / "absent_api.csv"))
         assert sorted(panel_df["month"].unique()) == ["2025-04", "2025-06", "2026-04", "2026-06"]
         assert output_path.exists()
 
@@ -302,20 +311,135 @@ class TestLoadCpsPanel:
         _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(seed_path, index=False)
         broken_release = tmp_path / "broken.html"
         broken_release.write_text(open(FIXTURE_PATH, encoding="utf-8").read().replace(">Total<", ">Grand total<"), encoding="utf-8")
-        panel_df = load_cps_panel(str(seed_path), str(broken_release), None)
+        panel_df = load_cps_panel(str(seed_path), str(broken_release), None, str(tmp_path / "absent_api.csv"))
         assert sorted(panel_df["month"].unique()) == ["2025-04", "2026-04"]
 
     def test_returns_none_when_the_release_is_unparseable_and_no_seed_exists(self, tmp_path):
         broken_release = tmp_path / "broken.html"
         broken_release.write_text(open(FIXTURE_PATH, encoding="utf-8").read().replace(">Total<", ">Grand total<"), encoding="utf-8")
-        assert load_cps_panel(str(tmp_path / "absent.csv"), str(broken_release), None) is None
+        assert load_cps_panel(str(tmp_path / "absent.csv"), str(broken_release), None, str(tmp_path / "absent_api.csv")) is None
 
     def test_returns_none_when_neither_source_exists(self, tmp_path):
-        assert load_cps_panel(str(tmp_path / "absent.csv"), str(tmp_path / "absent.html"), None) is None
+        assert load_cps_panel(str(tmp_path / "absent.csv"), str(tmp_path / "absent.html"), None, str(tmp_path / "absent_api.csv")) is None
 
     def test_preserves_leading_zero_soc_codes_from_the_seed(self, tmp_path):
         """soc_major must stay a string — read as int, '11' would become 11 and break the merge."""
         seed_path = tmp_path / "seed.csv"
         _panel([("2025-04", "11", 21016), ("2026-04", "11", 20526)]).to_csv(seed_path, index=False)
-        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(tmp_path / "absent_api.csv"))
         assert panel_df["soc_major"].tolist() == ["11", "11"]
+
+    def test_api_history_wins_over_the_seed(self, tmp_path):
+        seed_path, api_path = tmp_path / "seed.csv", tmp_path / "api.csv"
+        _panel([("2025-04", "15", 1)]).to_csv(seed_path, index=False)
+        _panel([("2025-04", "15", 6643), ("2025-05", "15", 6700)]).to_csv(api_path, index=False)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(api_path))
+        by_month = panel_df.set_index("month")["employed_thousands"]
+        assert by_month["2025-04"] == 6643
+        assert by_month["2025-05"] == 6700
+
+    def test_api_history_keeps_the_seed_stamp_on_unchanged_rows(self, tmp_path):
+        """Only new or changed rows take the new source_reference_month, so a monthly promotion does not rewrite the seed."""
+        seed_path, api_path = tmp_path / "seed.csv", tmp_path / "api.csv"
+        seed_df = _panel([("2026-07", "15", 100.0), ("2026-08", "15", 110.0)])
+        seed_df["source_reference_month"] = "2026-08"
+        seed_df.to_csv(seed_path, index=False)
+        api_df = _panel([("2026-07", "15", 100.0), ("2026-08", "15", 111.0), ("2026-09", "15", 120.0)])
+        api_df["source_reference_month"] = "2026-09"
+        api_df.to_csv(api_path, index=False)
+        panel_df = load_cps_panel(str(seed_path), str(tmp_path / "absent.html"), None, str(api_path)).set_index("month")
+        assert panel_df.loc["2026-07", "source_reference_month"] == "2026-08"
+        assert panel_df.loc["2026-08", "employed_thousands"] == 111.0
+        assert panel_df.loc["2026-08", "source_reference_month"] == "2026-09"
+        assert panel_df.loc["2026-09", "employed_thousands"] == 120.0
+        assert panel_df.loc["2026-09", "source_reference_month"] == "2026-09"
+
+    def test_notes_when_the_page_parsed_but_no_api_history_exists(self, tmp_path, capsys):
+        api_path = tmp_path / "absent_api.csv"
+        load_cps_panel(str(tmp_path / "absent.csv"), FIXTURE_PATH, None, str(api_path))
+        assert f"Note: {api_path} absent — the A-19 cross-check did not run." in capsys.readouterr().out
+
+    def test_release_matching_the_api_merges_its_extra_months(self, tmp_path):
+        """Months only the page has (a run where the API was blocked earlier) still arrive."""
+        api_path = tmp_path / "api.csv"
+        # Create API history with April months
+        _panel([("2025-04", "15", 6643), ("2026-04", "15", 6834)]).to_csv(api_path, index=False)
+        # Release (FIXTURE_PATH) has June months; result should have all four
+        panel_df = load_cps_panel(str(tmp_path / "absent.csv"), FIXTURE_PATH, None, str(api_path))
+        assert sorted(panel_df["month"].unique()) == ["2025-04", "2025-06", "2026-04", "2026-06"]
+
+    def test_release_disagreeing_with_the_api_raises(self, tmp_path):
+        api_path = tmp_path / "api.csv"
+        api_history_df = parse_a19_release(FIXTURE_PATH)
+        api_history_df.loc[0, "employed_thousands"] += 1
+        api_history_df.to_csv(api_path, index=False)
+        with pytest.raises(ValueError, match="disagrees with the BLS API"):
+            load_cps_panel(str(tmp_path / "absent.csv"), FIXTURE_PATH, None, str(api_path))
+
+    def test_unparseable_release_keeps_the_api_history(self, tmp_path):
+        api_path = tmp_path / "api.csv"
+        _panel([("2025-05", "15", 6700), ("2026-05", "15", 6900)]).to_csv(api_path, index=False)
+        broken_release = tmp_path / "broken.html"
+        broken_release.write_text(open(FIXTURE_PATH, encoding="utf-8").read().replace(">Total<", ">Grand total<"), encoding="utf-8")
+        panel_df = load_cps_panel(str(tmp_path / "absent.csv"), str(broken_release), None, str(api_path))
+        assert sorted(panel_df["month"].unique()) == ["2025-05", "2026-05"]
+
+
+class TestCheckReleaseAgainstHistory:
+    def test_passes_when_shared_months_agree(self):
+        release_df = parse_a19_release(FIXTURE_PATH)
+        check_release_against_history(release_df, release_df.copy())
+
+    def test_ignores_months_the_api_history_lacks(self):
+        release_df = parse_a19_release(FIXTURE_PATH)
+        check_release_against_history(release_df, release_df[release_df["month"] == "2025-04"])
+
+
+SEASONAL_PATTERN = np.array([0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03, 1.02, 1.01, 1.00, 0.99, 0.98])
+SEASONAL_PATTERN = SEASONAL_PATTERN / SEASONAL_PATTERN.mean()
+
+
+def _seasonal_panel(first_month="2020-01", last_month="2026-09", missing_months=(), groups=("11", "25")):
+    """Constant level × a known seasonal pattern, so each true factor is SEASONAL_PATTERN[month - 1]."""
+    rows = [
+        (str(month), soc_major, 1000.0 * (index + 1) * SEASONAL_PATTERN[month.month - 1])
+        for month in pd.period_range(first_month, last_month, freq="M")
+        if str(month) not in missing_months
+        for index, soc_major in enumerate(groups)
+    ]
+    return _panel(rows)
+
+
+class TestSeasonalFactors:
+    def test_recovers_a_known_pattern(self):
+        factors_df = seasonal_factors(_seasonal_panel())
+        for row in factors_df.itertuples():
+            assert row.factor == pytest.approx(SEASONAL_PATTERN[row.calendar_month - 1], abs=1e-9)
+
+    def test_factors_average_one_per_group(self):
+        factors_df = seasonal_factors(_seasonal_panel())
+        assert factors_df.groupby("soc_major")["factor"].mean().tolist() == pytest.approx([1.0, 1.0])
+        assert len(factors_df) == 24
+
+    def test_a_missing_month_removes_only_the_ratios_whose_window_touches_it(self):
+        """October 2025's gap removes April 2025 – April 2026; the pattern is still recovered."""
+        factors_df = seasonal_factors(_seasonal_panel(missing_months=("2025-10",)))
+        years_by_month = factors_df[factors_df["soc_major"] == "11"].set_index("calendar_month")["n_years"]
+        assert years_by_month[1] == 4  # 2022–2025
+        assert years_by_month[10] == 3  # 2022–2024
+        assert years_by_month[9] == 3  # 2025-09's window reaches the gap; 2026-09 has no forward window
+        for row in factors_df.itertuples():
+            assert row.factor == pytest.approx(SEASONAL_PATTERN[row.calendar_month - 1], abs=1e-9)
+
+    def test_raises_when_a_factor_rests_on_too_few_years(self):
+        with pytest.raises(ValueError, match="fewer than 3"):
+            seasonal_factors(_seasonal_panel(first_month="2021-01", last_month="2024-06"))
+
+    def test_ignores_ratios_before_the_first_year(self):
+        """Unbroken 2020-01 → 2026-09: January ratios exist 2022–2026, so moving first_year drops one."""
+
+        def january_years(factors_df):
+            return factors_df.set_index(["soc_major", "calendar_month"]).loc[("11", 1), "n_years"]
+
+        assert january_years(seasonal_factors(_seasonal_panel())) == 5
+        assert january_years(seasonal_factors(_seasonal_panel(), first_year=2023)) == 4

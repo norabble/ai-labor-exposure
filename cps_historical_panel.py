@@ -36,6 +36,7 @@ that effect on the 2025-2026 period.
 
 import os
 import warnings
+from datetime import date
 
 import pandas as pd
 
@@ -118,8 +119,11 @@ def _count_observed_months(series_id: str, start_year: int, end_year: int) -> di
     return observation_df.groupby("year")["period"].count().astype(int).to_dict()
 
 
-def fetch_cps_group_employment(start_year: int = 1983, end_year: int = 2026, seed_path: str = SEED_PATH) -> pd.DataFrame:
+def fetch_cps_group_employment(start_year: int = 1983, end_year: int | None = None, seed_path: str = SEED_PATH) -> pd.DataFrame:
     """Annual mean employment per occupation group, in long form.
+
+    `end_year` defaults to the current calendar year, so a run after New Year
+    reaches the new year's first months without a code change.
 
     The published series are monthly and not seasonally adjusted;
     fetch_annual_means collapses them to annual means, which is what BLS's own
@@ -141,6 +145,8 @@ def fetch_cps_group_employment(start_year: int = 1983, end_year: int = 2026, see
     which mirrors this same fetch and reads the identical on-disk cache, so it
     adds no further requests of its own.
     """
+    if end_year is None:
+        end_year = date.today().year
     seed_year_bounds = _seed_year_bounds(seed_path)
     if seed_year_bounds is not None and seed_year_bounds[0] <= start_year:
         fetch_start_year = max(start_year, min(seed_year_bounds[1], end_year))

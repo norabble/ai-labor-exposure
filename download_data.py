@@ -3,8 +3,9 @@ download_data.py
 ────────────────
 Fetches the third-party source datasets the pipeline joins against, and writes
 each one to data/raw/ as a flat CSV. BLS data is *not* handled here — BLS blocks
-plain HTTP clients, so the OEWS zips come from download_bls.js and CPS Table A-19
-from download_cps.js, both via Puppeteer.
+plain HTTP clients, so the OEWS zips come from download_bls.js, CPS Table A-19
+from download_cps.js, both via Puppeteer, and the A-19 monthly history from
+download_cps_history.py via the BLS API.
 
 Outputs (all under data/raw/):
   • onet_tasks.csv                      — O*NET task statements, keyed by Task ID

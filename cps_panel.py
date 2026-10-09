@@ -6,18 +6,17 @@ month-keyed employment panel, and derives the comparison windows used by the CPS
 charts in validate_bls.py.
 
 A-19 is a rolling web table: it always shows the latest reference month and the
-same month one year earlier, and BLS replaces it in place each month. A single
-fetch therefore yields only two months. This module accumulates those months into
-a tidy panel so that history survives across runs, and so that the release
-workflow — which starts with an empty, gitignored data/ — still has real months
-to work with.
+same month one year earlier, and BLS replaces it in place each month. The API
+history supplies every month from 2020-01 onward via the BLS LN series; the A-19
+page is a cross-check.
 
 Inputs:
-  • seeds/cps_a19_panel.csv       (committed panel; the accumulated history)
-  • data/raw/cps/table_a19.html   (optional — latest release, from download_cps.js)
+  • seeds/cps_a19_panel.csv                  (committed panel; the accumulated history)
+  • data/raw/cps/a19_api_history.csv         (optional — monthly history from download_cps_history.py; the panel's source)
+  • data/raw/cps/table_a19.html              (optional — latest release, from download_cps.js; cross-check only)
 
 Outputs:
-  • data/output/cps_a19_panel.csv (seed panel merged with the latest release)
+  • data/output/cps_a19_panel.csv            (seed panel merged with the API history and the latest release)
 
 Two comparison windows are derived from the panel:
   • since-anchor — from the last panel month at or before the OEWS reference
@@ -29,11 +28,15 @@ The since-anchor window spans different calendar months, and A-19 is not
 seasonally adjusted, so it carries seasonal noise that the year-over-year window
 does not. It also crosses each January, when CPS introduces updated population
 controls without revising prior months. Both caveats are surfaced on the charts.
+
+Seasonal factors are derived from the panel by `seasonal_factors` for the forecast
+stage's seasonally adjusted start; the comparison windows remain unadjusted.
 """
 
 import os
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 # CPS Table A-19 group name (lowercased) → SOC 2-digit major group code
@@ -80,8 +83,35 @@ MONTH_NUMBER_BY_ABBREVIATION: dict[str, int] = {
 SEED_PANEL_PATH = "seeds/cps_a19_panel.csv"
 LATEST_RELEASE_HTML_PATH = "data/raw/cps/table_a19.html"
 OUTPUT_PANEL_PATH = "data/output/cps_a19_panel.csv"
+API_HISTORY_PATH = "data/raw/cps/a19_api_history.csv"
 
 PANEL_COLUMNS = ["month", "soc_major", "occupation", "employed_thousands", "source_reference_month"]
+PANEL_DTYPES = {"month": str, "soc_major": str, "source_reference_month": str}
+
+SEASONAL_FACTOR_FIRST_YEAR = 2022  # excludes the 2020–21 COVID swings
+MINIMUM_SEASONAL_YEARS = 3
+# Centred 2×12 moving average: the two months six away share one weight, so each
+# calendar month counts exactly once and a pure seasonal pattern averages to 1.
+CENTRED_MOVING_AVERAGE_WEIGHTS = np.array([0.5, *[1.0] * 11, 0.5]) / 12
+
+# BLS LN series carrying A-19's employment level for each SOC major group, verified
+# equal to every published A-19 value on 2026-10-02. 11–39 are a contiguous block;
+# 41–53 are the leaf series cps_historical_panel.py already uses.
+A19_SERIES_BY_SOC_MAJOR: dict[str, str] = {
+    **{
+        soc_major: f"LNU02032{453 + offset}"
+        for offset, soc_major in enumerate(["11", "13", "15", "17", "19", "21", "23", "25", "27", "29", "31", "33", "35", "37", "39"])
+    },
+    "41": "LNU02032206",
+    "43": "LNU02032207",
+    "45": "LNU02032209",
+    "47": "LNU02032210",
+    "49": "LNU02032211",
+    "51": "LNU02032213",
+    "53": "LNU02032214",
+}
+# A-19 writes group names in sentence case; CPS_TO_SOC_MAJOR's keys are those names lowercased.
+OCCUPATION_BY_SOC_MAJOR: dict[str, str] = {soc_major: name.capitalize() for name, soc_major in CPS_TO_SOC_MAJOR.items()}
 
 # A-19 reports the "Total" column group for a single age band; the Men and Women
 # column groups repeat the same months for two age bands each.
@@ -227,36 +257,93 @@ def merge_panel(existing_panel_df: pd.DataFrame, new_release_df: pd.DataFrame) -
     return deduplicated_df.sort_values(["month", "soc_major"], kind="stable").reset_index(drop=True)
 
 
+def merge_api_history(seed_panel_df: pd.DataFrame, api_history_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merge the API history over the seed, keeping the seed's stamp on rows it did not change.
+
+    Every API-history row carries the pull's latest month as source_reference_month,
+    so a plain merge_panel would restamp the whole seed on each monthly promotion
+    and bury the real change (22 new rows) in a ~1,760-row diff. A row whose
+    employed_thousands equals the seed's keeps the seed's stamp; new and changed
+    rows take the API's. This is kept out of merge_panel because the page merge
+    there relies on the later release always winning, stamp included.
+    """
+    merged_df = merge_panel(seed_panel_df, api_history_df)
+    keys = ["month", "soc_major"]
+    seed_values_df = seed_panel_df[[*keys, "employed_thousands", "source_reference_month"]].rename(
+        columns={"employed_thousands": "seed_employed", "source_reference_month": "seed_stamp"}
+    )
+    merged_df = merged_df.merge(seed_values_df, on=keys, how="left")
+    unchanged = merged_df["seed_employed"].notna() & (
+        merged_df["employed_thousands"].astype(float) == merged_df["seed_employed"].astype(float)
+    )
+    merged_df.loc[unchanged, "source_reference_month"] = merged_df.loc[unchanged, "seed_stamp"]
+    return merged_df.drop(columns=["seed_employed", "seed_stamp"])
+
+
+def check_release_against_history(release_df: pd.DataFrame, api_history_df: pd.DataFrame) -> None:
+    """
+    Raise if the A-19 page and the API history disagree on any month they share.
+
+    The API is the panel's source and the page is the check on it: a disagreement
+    means a series ID now points at a different group, or BLS revised one product
+    and not the other. Either way a silent merge would mislabel a sector.
+    """
+    keys = ["month", "soc_major"]
+    compared_df = release_df.merge(api_history_df, on=keys, suffixes=("_release", "_api"))
+    differing_df = compared_df[
+        compared_df["employed_thousands_release"].astype(float) != compared_df["employed_thousands_api"].astype(float)
+    ]
+    if not differing_df.empty:
+        examples = differing_df[[*keys, "employed_thousands_release", "employed_thousands_api"]].head(5).to_dict("records")
+        raise ValueError(
+            f"The A-19 page disagrees with the BLS API on {len(differing_df)} row(s), e.g. {examples}. "
+            "Check cps_panel.A19_SERIES_BY_SOC_MAJOR against the series IDs BLS now publishes, "
+            "and see the update-cps-monthly skill."
+        )
+
+
 def load_cps_panel(
     seed_path: str = SEED_PANEL_PATH,
     release_html_path: str = LATEST_RELEASE_HTML_PATH,
     output_path: str | None = OUTPUT_PANEL_PATH,
+    api_history_path: str = API_HISTORY_PATH,
 ) -> pd.DataFrame | None:
     """
-    Build the working panel from the committed seed plus the latest fetched release.
+    Build the working panel: the committed seed, then the API history, then the A-19 page.
 
-    Returns None only when neither source is available. Neither a missing release
-    HTML nor an unparseable one is fatal: the seed alone still yields correctly
-    labelled charts from real months, which is what keeps a blocked download or a
-    BLS layout change from silently republishing stale ones. The parse error is
-    still surfaced loudly — it just does not take the rest of the pipeline with it.
+    The API history (download_cps_history.py) is the source and wins over the seed.
+    The A-19 page is a cross-check: a month it shares with the API history must
+    agree exactly or this raises; a month only the page has is merged. Returns None
+    only when no source is available. A missing or unparseable page is not fatal —
+    the parse error is surfaced loudly, but the seed and API history still yield
+    correctly labelled charts.
     """
     panel_df = pd.DataFrame(columns=PANEL_COLUMNS)
     if os.path.exists(seed_path):
-        panel_df = pd.read_csv(seed_path, dtype={"month": str, "soc_major": str, "source_reference_month": str})
+        panel_df = pd.read_csv(seed_path, dtype=PANEL_DTYPES)
 
+    api_history_df = None
+    if os.path.exists(api_history_path):
+        api_history_df = pd.read_csv(api_history_path, dtype=PANEL_DTYPES)
+        panel_df = merge_api_history(panel_df, api_history_df)
+
+    release_df = None
     if os.path.exists(release_html_path):
         try:
-            panel_df = merge_panel(panel_df, parse_a19_release(release_html_path))
+            release_df = parse_a19_release(release_html_path)
         except (ValueError, IndexError) as parse_error:
             print(f"  WARNING: could not parse {release_html_path} — {parse_error}")
-            if panel_df.empty:
-                return None
-            print("  Falling back to the committed CPS panel seed; charts will use older months.")
-    elif panel_df.empty:
-        return None
+            print("  Falling back to the committed CPS panel seed and API history; the A-19 cross-check did not run.")
     else:
-        print(f"  Note: {release_html_path} not found — using the committed CPS panel seed only.")
+        print(f"  Note: {release_html_path} not found — the A-19 cross-check did not run.")
+
+    if release_df is not None:
+        if api_history_df is not None:
+            check_release_against_history(release_df, api_history_df)
+        else:
+            print(f"  Note: {api_history_path} absent — the A-19 cross-check did not run.")
+        panel_df = merge_panel(panel_df, release_df)
 
     if panel_df.empty:
         return None
@@ -308,15 +395,16 @@ def resolve_comparison_windows(panel_df: pd.DataFrame, oews_reference: str) -> C
     return CpsComparisonWindows(anchor_month=anchor_month, latest_month=latest_month, year_ago_month=year_ago_month)
 
 
-def year_over_year_month_pairs(panel_df: pd.DataFrame) -> list[tuple[str, str]]:
+def year_over_year_month_pairs(panel_df: pd.DataFrame, earliest_year_ago_month: str | None = None) -> list[tuple[str, str]]:
     """
     Every (year_ago_month, latest_month) pair the panel can support, oldest first.
 
-    A-19 hands over the latest month and the same month a year earlier in a single
-    release, so each fetch contributes exactly one such pair. With six months on
-    hand the panel yields three — all of them measuring the same 2025→2026 span
-    from endpoints two months apart, which is why they are the endpoint-sensitivity
-    check in model_signal_over_time.png rather than three periods of a time series.
+    With `earliest_year_ago_month` set to the OEWS reference month, only pairs whose
+    window starts at or after the OEWS handoff are kept — a window starting earlier
+    overlaps a period OEWS already covers. The surviving pairs measure overlapping
+    12-month spans from consecutive endpoints, which is why they are the
+    endpoint-sensitivity check in model_signal_over_time.png rather than periods of
+    a time series.
     """
     available_months = sorted(panel_df["month"].unique())
     available_month_set = set(available_months)
@@ -324,6 +412,7 @@ def year_over_year_month_pairs(panel_df: pd.DataFrame) -> list[tuple[str, str]]:
         (str(pd.Period(month, freq="M") - 12), month)
         for month in available_months
         if str(pd.Period(month, freq="M") - 12) in available_month_set
+        and (earliest_year_ago_month is None or str(pd.Period(month, freq="M") - 12) >= earliest_year_ago_month)
     ]
 
 
@@ -375,3 +464,43 @@ def build_growth_frame(panel_df: pd.DataFrame, windows: CpsComparisonWindows) ->
         ]
 
     return growth_df.dropna(subset=["emp_growth_since_anchor"]).reset_index()
+
+
+def seasonal_factors(panel_df: pd.DataFrame, first_year: int = SEASONAL_FACTOR_FIRST_YEAR) -> pd.DataFrame:
+    """
+    Classical ratio-to-moving-average seasonal factors per SOC major group and calendar month.
+
+    A-19 is not seasonally adjusted. Each group's level is divided by its centred
+    2×12 moving average; the factor is the mean of those ratios for one calendar
+    month across years from `first_year`, scaled so the twelve average exactly 1.
+    A moving-average window touching a missing month (October 2025 was never
+    collected) yields no ratio rather than a filled one. Raises when any factor
+    rests on fewer than MINIMUM_SEASONAL_YEARS years.
+    """
+    factor_frames = []
+    for soc_major, group_df in panel_df.groupby("soc_major"):
+        levels = group_df.set_index(pd.PeriodIndex(group_df["month"], freq="M"))["employed_thousands"].astype(float).sort_index()
+        levels = levels.reindex(pd.period_range(levels.index.min(), levels.index.max(), freq="M"))
+        moving_average = levels.rolling(len(CENTRED_MOVING_AVERAGE_WEIGHTS), center=True).apply(
+            lambda window: float(np.dot(window, CENTRED_MOVING_AVERAGE_WEIGHTS)), raw=True
+        )
+        ratios = (levels / moving_average).dropna()
+        ratios = ratios[ratios.index.year >= first_year]
+        by_calendar_month = ratios.groupby(ratios.index.month).agg(["mean", "count"]).reindex(range(1, 13))
+        thin_months = by_calendar_month.index[by_calendar_month["count"].fillna(0) < MINIMUM_SEASONAL_YEARS].tolist()
+        if thin_months:
+            raise ValueError(
+                f"Seasonal factor for SOC {soc_major} calendar month(s) {thin_months} rests on fewer than "
+                f"{MINIMUM_SEASONAL_YEARS} years from {first_year}"
+            )
+        factor_frames.append(
+            pd.DataFrame(
+                {
+                    "soc_major": str(soc_major),
+                    "calendar_month": range(1, 13),
+                    "factor": (by_calendar_month["mean"] / by_calendar_month["mean"].mean()).to_numpy(),
+                    "n_years": by_calendar_month["count"].astype(int).to_numpy(),
+                }
+            )
+        )
+    return pd.concat(factor_frames, ignore_index=True)

@@ -1,5 +1,7 @@
 # Demand Composition Model Implementation Plan
 
+**Status:** complete — merged in PR #20 on 2026-09-22. The step checkboxes below were never ticked during execution, so they do not record which steps ran.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Status: experimental.** This is a research probe that is expected to be iterated on or discarded. Every artifact it adds is additive and separable — new modules, new stage, new outputs, new seed. No existing model output changes. Tearing it out should mean deleting files and one `STAGES` entry, not unpicking edits.

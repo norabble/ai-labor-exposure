@@ -1,5 +1,7 @@
 # Deep History Phase 2 — Detailed Occupations Implementation Plan
 
+**Status:** complete — merged in PR #25 on 2026-09-27. The step checkboxes below were never ticked during execution, so they do not record which steps ran. Departures from the plan are in the Deviations log at the end.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Raise the 1983–2026 CPS validation from ten occupation groups to ~330 `occ1990dd` occupations (plus a 22-SOC-major rollup), and the DWS validation from ten groups to the ~25-group Autor–Dorn partition per survey, from IPUMS CPS microdata.

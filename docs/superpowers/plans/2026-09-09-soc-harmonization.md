@@ -1,5 +1,7 @@
 # SOC Crosswalk Harmonization Implementation Plan
 
+**Status:** complete — merged in PR #20 on 2026-09-22. The step checkboxes below were never ticked during execution, so they do not record which steps ran.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build occupation-level BLS employment series that are consistent from 2005 to 2025 by harmonizing SOC 2000, SOC 2010, the OEWS 2019–2020 hybrid, and SOC 2018 codes into units, so the occupation-level historical validation no longer depends on which detailed codes happened to survive the code revisions.

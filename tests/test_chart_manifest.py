@@ -27,6 +27,16 @@ class TestFigureFingerprint:
         assert figure_fingerprint(first_figure) == figure_fingerprint(second_figure)
         plt.close("all")
 
+    def test_line_collections_are_fingerprinted(self):
+        # errorbar and hlines draw LineCollections, which carry no marker sizes.
+        def build_range_figure(right_edge):
+            figure, axes = plt.subplots()
+            axes.hlines([0, 1], [0.1, 0.2], [0.5, right_edge])
+            return figure
+
+        assert figure_fingerprint(build_range_figure(0.6)) != figure_fingerprint(build_range_figure(0.7))
+        plt.close("all")
+
     def test_changed_line_data_changes_the_fingerprint(self):
         original_figure = build_sample_figure()
         changed_figure = build_sample_figure(y_values=(1.0, 2.0, 3.5))

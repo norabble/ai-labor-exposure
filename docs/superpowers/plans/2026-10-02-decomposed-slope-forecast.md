@@ -1,5 +1,7 @@
 # Decomposed-Slope Composition Forecast Implementation Plan
 
+**Status:** complete — PR #30.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Project sector (and, by allocation, occupation) employment composition from the latest OEWS and CPS data to 2030, using the dynamic model's score unchanged and a slope decomposition `β_t = β_structural + β_cycle·ΔU_t + β_AI·A_t` estimated from history.
@@ -2416,7 +2418,7 @@ uv run ruff check . && uv run ruff format --check .
 
 Expected: `check_charts.py` exits 0; all tests pass; ruff clean. If `check_charts.py` reports other charts stale because the local run differs from the committed manifest, report them rather than committing their images in this branch.
 
-- [ ] **Step 7: Mark the plan complete and commit**
+- [x] **Step 7: Mark the plan complete and commit**
 
 Add `**Status:** complete — PR #<n>` under this plan's title once the PR is open, then:
 

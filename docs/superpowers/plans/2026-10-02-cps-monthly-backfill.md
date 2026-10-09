@@ -1,5 +1,7 @@
 # CPS Monthly Backfill and Seasonally Adjusted Forecast Start Implementation Plan
 
+**Status:** complete — PR #30.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fill the CPS A-19 panel with every month from 2020-01 via the BLS API, cross-check it against the A-19 page, and run the CPS composition forecast from both the raw latest month and a seasonally adjusted latest month.

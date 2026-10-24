@@ -1,5 +1,7 @@
 # DWS Historical Panel and `D` Extension — Implementation Plan
 
+**Status:** complete — merged in PR #22 on 2026-09-22. The step checkboxes below were never ticked during execution, so they do not record which steps ran.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the project's only structurally non-circular validation from a single-survey cross-section (n=10) into a ten-survey panel spanning 2008–2026, and widen the economy-wide displacement rate `D` to match.

@@ -106,8 +106,8 @@ containing the string `github.com`, so a GitHub noreply address
 or a provider alias such as `you+bls@gmail.com`. Your own address is what their
 policy asks for, and it is deliberately not committed to the repository.
 
-`BLS_API_KEY` is optional and used by `historical_displacement.py` for the BLS
-time-series API. Requests succeed without one, but a free key registered at
+`BLS_API_KEY` is optional and used by `historical_displacement.py` and
+`download_cps_history.py` for the BLS time-series API. Requests succeed without one, but a free key registered at
 https://data.bls.gov/registrationEngine/ raises the limits from 25 requests/day,
 25 series and 10 years per request to 500/day, 50 series and 20 years — enough to
 pull 2005–2025 in a single call. It is a different system from the news-release

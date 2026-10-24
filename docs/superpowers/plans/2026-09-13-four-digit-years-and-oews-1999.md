@@ -1,5 +1,7 @@
 # Four-Digit Years and OEWS to 1999 — Implementation Plan
 
+**Status:** complete — merged in PR #22 on 2026-09-22. The step checkboxes below were never ticked during execution, so they do not record which steps ran.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Migrate the pipeline's year keys from two digits to four, then extend the OEWS series back to 1999 — six additional years, a second non-COVID downturn, and the prerequisite for the CPS deep-history work.

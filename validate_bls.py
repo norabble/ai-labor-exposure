@@ -12,6 +12,7 @@ Inputs:
   • data/output/bls_trends.csv          (from analyze_bls.py)
   • data/output/occupation_exposure_report.csv
   • seeds/cps_a19_panel.csv             (committed CPS month panel)
+  • data/raw/cps/a19_api_history.csv      (optional — from download_cps_history.py)
   • data/raw/cps/table_a19.html         (optional — from download_cps.js)
 
 Outputs (saved to data/output/visualizations/):
@@ -356,8 +357,9 @@ def plot_model_signal_over_time(
     (major-group totals, not an employment-weighted mean of occupation growth
     rates), and no period exists where both surveys overlap, so the two cannot be
     calibrated against each other. Its x-axis is the endpoint month rather than
-    time: all three points measure the same 12-month span from endpoints two
-    months apart, so their spread is endpoint sensitivity, not a trend.
+    time: each point is a 12-month window ending in a later month, starting no
+    earlier than the OEWS reference month, so their spread is endpoint sensitivity,
+    not a trend.
     """
     latest_emp_col = sorted(c for c in merged_validation_df.columns if c.startswith("TOT_EMP_"))[-1]
 
@@ -458,9 +460,14 @@ def plot_model_signal_over_time(
                 p_series[score_col].append(None)
 
     # CPS year-over-year correlations for the span OEWS does not yet reach.
-    # Every pair covers the same 12 months from a different endpoint month, so
-    # these are repeated measurements of one period, not successive periods.
-    cps_month_pairs = year_over_year_month_pairs(cps_panel_df) if cps_panel_df is not None else []
+    # Each endpoint is a 12-month window; consecutive endpoints produce overlapping
+    # windows starting at or after the OEWS reference month (May 2025).
+    # They are repeated measurements of nearly the same period, not successive periods.
+    cps_month_pairs = (
+        year_over_year_month_pairs(cps_panel_df, oews_reference_month(list(merged_validation_df.columns)))
+        if cps_panel_df is not None
+        else []
+    )
     cps_results: dict[str, list[tuple[str, float, float]]] = {cfg[0]: [] for cfg in score_configs}
     if cps_month_pairs:
         for score_col, _, _, _ in score_configs:
@@ -477,8 +484,9 @@ def plot_model_signal_over_time(
     has_cps_panel = any(cps_results[score_col] for score_col in cps_results)
 
     if has_cps_panel:
+        n_endpoints = len(cps_month_pairs)
         span_label = f"{cps_month_pairs[0][0][:4]}→{cps_month_pairs[-1][1][:4]}"
-        print(f"\n── CPS year-over-year signal, {span_label} (n=22 sectors; each endpoint is the same 12-month span) ──")
+        print(f"\n── CPS year-over-year signal, {span_label} (n=22 sectors; {n_endpoints} overlapping 12-month windows) ──")
         for score_col, label, _, _ in score_configs:
             if not cps_results[score_col]:
                 continue
@@ -556,8 +564,9 @@ def plot_model_signal_over_time(
     # ── CPS panel: the 2025→2026 span OEWS does not yet reach ────────────────
     # Drawn as a separate axes rather than as more points on the line above. The
     # y-scale is shared so the r values stay directly comparable, but the x-axis
-    # is the CPS endpoint month, not time — every point covers the same 12-month
-    # span, so their spread measures endpoint sensitivity rather than a trend.
+    # is the CPS endpoint month, not time — each endpoint is a 12-month window
+    # starting at or after the OEWS reference month; windows overlap, so their
+    # spread measures endpoint sensitivity rather than a trend.
     if cps_ax is not None:
         cps_months = sorted({month for entries in cps_results.values() for month, _, _ in entries})
         cps_x_by_month = {month: index for index, month in enumerate(cps_months)}
@@ -572,8 +581,8 @@ def plot_model_signal_over_time(
             entry_x = [cps_x_by_month[month] for month, _, _ in entries]
             entry_r = [r for _, r, _ in entries]
             # Markers only, deliberately unconnected. A line across the month axis
-            # would read as a trend, but these are one 12-month span measured from
-            # three endpoints — the vertical spread is endpoint sensitivity.
+            # would read as a trend, but these are overlapping 12-month windows from
+            # consecutive endpoints — the vertical spread is endpoint sensitivity.
             cps_ax.plot(
                 entry_x,
                 entry_r,
@@ -602,7 +611,7 @@ def plot_model_signal_over_time(
         cps_ax.set_xlim(-0.7, len(cps_months) - 0.3)
         cps_ax.set_xlabel("CPS A-19 endpoint month", fontsize=9)
         cps_ax.set_title(
-            "CPS 2025→2026\nsame span, 3 endpoints",
+            f"CPS 2025→2026\n{len(cps_months)} overlapping 12-month windows",
             fontsize=9,
             color="dimgrey",
         )
@@ -845,9 +854,10 @@ def _load_cps_growth() -> tuple[pd.DataFrame, CpsComparisonWindows] | None:
     Load the CPS month panel and derive both comparison windows.
 
     Returns (growth_df, windows), or None when no usable panel is available. A
-    panel too thin to define a window is reported and skipped rather than raised:
-    the CPS charts are a supplementary indicator and must not take down the rest
-    of the validation stage.
+    panel too thin to define a window is reported and skipped rather than raised.
+    A disagreement between the A-19 page and the BLS API history is the exception:
+    load_cps_panel raises it deliberately, because merging two sources that
+    disagree would mislabel a sector, and it propagates out of the validation stage.
     """
     cps_panel_df = load_cps_panel()
     if cps_panel_df is None:
@@ -2229,7 +2239,10 @@ def main():
         )
     else:
         print("  Skipping CPS charts — no CPS panel available.")
-        print("  Expected seeds/cps_a19_panel.csv, or run: node download_cps.js (or make download-data).")
+        print(
+            "  Expected seeds/cps_a19_panel.csv, or run: uv run download_cps_history.py (the source) "
+            "and node download_cps.js (the page cross-check), or make download-data."
+        )
 
 
 if __name__ == "__main__":

@@ -74,7 +74,8 @@ def _axes_description(axes):
                 collection.get_offsets(),
                 [path.vertices for path in collection.get_paths()],
                 collection.get_array(),
-                collection.get_sizes(),
+                # LineCollection (errorbar, hlines) has no marker sizes.
+                collection.get_sizes() if hasattr(collection, "get_sizes") else None,
                 collection.get_facecolor(),
             )
         )

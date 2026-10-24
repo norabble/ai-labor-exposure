@@ -1,0 +1,514 @@
+"""
+test_forecast_composition.py
+────────────────────────────
+Tests for forecast_composition.py — the decomposed-slope composition forecast.
+
+Every statistic is tested against synthetic sectors with a known answer, so a
+change in the real data cannot make a broken estimator look right.
+"""
+
+import dataclasses
+
+import numpy as np
+import pandas as pd
+import pytest
+
+import forecast_composition
+from btos_adoption import AdoptionFit
+from cps_panel import seasonal_factors
+from forecast_composition import (
+    ProjectionStep,
+    add_sector_noise,
+    align_sectors,
+    allocate_to_occupations,
+    attach_drivers,
+    bootstrap_coefficients,
+    coefficients_from,
+    cps_excluded_periods,
+    cps_start_shares,
+    cps_steps,
+    decompose_slopes,
+    demand_type_shares,
+    estimate_instrument,
+    estimate_period_slopes,
+    fit_coefficients,
+    oews_steps,
+    project_shares,
+    report_employment_column,
+    sector_code,
+    sector_employment_panel,
+    sector_scores,
+    slope_path,
+    stage2_input,
+    step_shares,
+)
+
+SECTORS = [f"{code:02d}" for code in range(11, 55, 2)]  # 22 two-digit codes
+
+
+def synthetic_panel(slope_by_period: dict[int, float], scores: pd.Series, years=range(2000, 2006), noise=0.0, seed=0) -> pd.DataFrame:
+    """Sector employment whose relative growth is slope × (score − weighted mean score) each year, plus optional noise.
+
+    Relative growth subtracts total growth, which removes the common 2% and the
+    weighted-mean score term, so the Stage 1 OLS slope equals `slope` exactly when noise is 0.
+    """
+    rng = np.random.default_rng(seed)
+    employment = pd.Series(1000.0, index=scores.index)
+    columns = {}
+    for year in years:
+        columns[year] = employment.copy()
+        slope = slope_by_period.get(year + 1, 0.0)
+        employment = employment * (1.0 + 0.02 + slope * scores + rng.normal(0.0, noise, len(scores)))
+    return pd.DataFrame(columns)
+
+
+@pytest.fixture
+def scores():
+    return pd.Series(np.linspace(-0.2, 0.2, len(SECTORS)), index=SECTORS, name="score")
+
+
+class TestStageOneInputs:
+    def test_sector_code_normalises_ints_and_strings(self):
+        assert sector_code(11) == "11"
+        assert sector_code("11") == "11"
+        assert sector_code(11.0) == "11"
+
+    def test_report_employment_column_detects_year(self):
+        assert report_employment_column(pd.DataFrame(columns=["OCC_CODE", "TOT_EMP_2026"])) == "TOT_EMP_2026"
+        with pytest.raises(ValueError, match="exactly one"):
+            report_employment_column(pd.DataFrame(columns=["TOT_EMP_2025", "TOT_EMP_2026"]))
+
+    def test_sector_scores_are_employment_weighted(self):
+        report_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["43-1011", "43-9061", "15-1252"],
+                "TOT_EMP_2025": [100.0, 300.0, 50.0],
+                "net_employment_change": [-0.4, 0.0, 0.16],
+            }
+        )
+        scores = sector_scores(report_df)
+        assert scores["43"] == pytest.approx(-0.1)
+        assert scores["15"] == pytest.approx(0.16)
+
+    def test_sector_employment_panel_reads_year_columns(self):
+        trends_df = pd.DataFrame(
+            {"soc_major": [11, 13], "TOT_EMP_2023": [10, 20], "TOT_EMP_2022": [9, 19], "emp_growth_2022_2023": [0.1, 0.05]}
+        )
+        panel_df = sector_employment_panel(trends_df)
+        assert list(panel_df.index) == ["11", "13"]
+        assert list(panel_df.columns) == [2022, 2023]
+
+    def test_align_sectors_raises_on_missing_score(self, scores):
+        panel_df = pd.DataFrame({2024: 1.0, 2025: 1.0}, index=[*SECTORS, "55"])
+        with pytest.raises(ValueError, match="No dynamic-model score"):
+            align_sectors(panel_df, scores)
+
+
+class TestPeriodSlopes:
+    def test_recovers_known_slopes(self, scores):
+        panel_df = synthetic_panel({2002: 0.05, 2004: -0.03}, scores)
+        slopes_df = estimate_period_slopes(panel_df, scores, "oews", {})
+        by_period = slopes_df.set_index("period")["slope"]
+        assert by_period["2001_2002"] == pytest.approx(0.05, abs=1e-9)
+        assert by_period["2003_2004"] == pytest.approx(-0.03, abs=1e-9)
+        assert by_period["2000_2001"] == pytest.approx(0.0, abs=1e-9)
+
+    def test_excluded_and_covid_periods_are_flagged_not_dropped(self, scores):
+        panel_df = synthetic_panel({}, scores, years=range(2018, 2022))
+        slopes_df = estimate_period_slopes(panel_df, scores, "oews", {"2018_2019": "SOC revision level break"})
+        flags = slopes_df.set_index("period")
+        assert flags.loc["2018_2019", "excluded_reason"] == "SOC revision level break"
+        assert bool(flags.loc["2019_2020", "is_covid"])
+        assert len(slopes_df) == 3
+
+    def test_skips_non_consecutive_years(self, scores):
+        panel_df = synthetic_panel({}, scores, years=range(2000, 2003)).drop(columns=[2001])
+        assert estimate_period_slopes(panel_df, scores, "oews", {}).empty
+
+
+def synthetic_period_slopes(structural=0.02, cycle=0.01, ai=0.08, noise=0.0, ai_periods=4, seed=0):
+    """Periods 2000→2025 whose slopes follow the decomposition exactly (plus optional noise)."""
+    rng = np.random.default_rng(seed)
+    end_years = np.arange(2001, 2026)
+    unemployment = rng.normal(0, 1, len(end_years))
+    adoption = np.where(end_years > 2025 - ai_periods, np.linspace(0.05, 0.25, len(end_years)), 0.0)
+    slopes = structural + cycle * unemployment + ai * adoption + rng.normal(0, noise, len(end_years))
+    periods = [f"{year - 1}_{year}" for year in end_years]
+    return pd.DataFrame(
+        {
+            "instrument": "oews",
+            "period": periods,
+            "start_year": end_years - 1,
+            "end_year": end_years,
+            "slope": slopes,
+            "std_error": 0.01,
+            "residual_sd": 0.02,
+            "n_sectors": 22,
+            "is_covid": False,
+            "excluded_reason": "",
+            "unemployment_change": unemployment,
+            "adoption": adoption,
+        }
+    )
+
+
+class TestStageTwo:
+    def test_attach_drivers_zeroes_adoption_through_2022(self):
+        slopes_df = pd.DataFrame({"period": ["2021_2022", "2022_2023"], "end_year": [2022, 2023]})
+        driven_df = attach_drivers(slopes_df, pd.Series({"2021_2022": -1.0, "2022_2023": -0.3}), pd.Series({2023: 0.12}))
+        assert driven_df["adoption"].tolist() == [0.0, 0.12]
+        assert driven_df["unemployment_change"].tolist() == [-1.0, -0.3]
+
+    def test_stage2_input_drops_covid_excluded_and_undriven(self):
+        driven_df = synthetic_period_slopes()
+        driven_df.loc[0, "is_covid"] = True
+        driven_df.loc[1, "excluded_reason"] = "SOC revision level break"
+        driven_df.loc[2, "unemployment_change"] = np.nan
+        assert len(stage2_input(driven_df)) == len(driven_df) - 3
+        assert len(stage2_input(driven_df, include_excluded=True)) == len(driven_df) - 2
+
+    def test_recovers_known_coefficients(self):
+        coefficients = coefficients_from(decompose_slopes(synthetic_period_slopes(noise=0.0)))
+        assert coefficients["structural"] == pytest.approx(0.02, abs=1e-9)
+        assert coefficients["cycle"] == pytest.approx(0.01, abs=1e-9)
+        assert coefficients["ai"] == pytest.approx(0.08, abs=1e-9)
+
+    def test_without_ai_periods_warns_and_omits_ai(self):
+        pre_ai_df = synthetic_period_slopes(ai_periods=0)
+        with pytest.warns(UserWarning, match="AI term is not identified"):
+            decomposition_df = decompose_slopes(pre_ai_df)
+        assert "ai" not in set(decomposition_df["term"])
+        assert coefficients_from(decomposition_df)["ai"] == 0.0
+
+    def test_fit_coefficients_returns_none_when_rank_deficient(self):
+        assert fit_coefficients(synthetic_period_slopes(ai_periods=0)) is None
+
+
+class TestEstimationEntryPoint:
+    def test_estimate_instrument_writes_main_and_sensitivity_rows(self, scores):
+        # Noise keeps every Stage 1 standard error positive; WLS weights are 1/se².
+        panel_df = synthetic_panel({year: 0.01 for year in range(2001, 2026)}, scores, years=range(2000, 2026), noise=0.002)
+        period_keys = [f"{year}_{year + 1}" for year in range(2000, 2025)]
+        unemployment_change = pd.Series(np.random.default_rng(1).normal(0, 1, len(period_keys)), index=period_keys)
+        adoption_fits = {
+            "logistic": AdoptionFit("logistic", (0.6, 0.6, 5.0), 0.55, True),
+            "linear": AdoptionFit("linear", (0.0, 0.04), 0.55, True),
+        }
+        estimate, decomposition_rows = estimate_instrument(
+            "oews", panel_df, scores, {"2009_2010": "SOC 2010 revision level break"}, unemployment_change, adoption_fits
+        )
+        assert set(decomposition_rows["specification"]) == {"main", "with_excluded_periods", "backcast_linear"}
+        assert (decomposition_rows["instrument"] == "oews").all()
+        assert "2009_2010" not in set(estimate.stage2_df["period"])
+
+    def test_decompose_rejects_zero_standard_error(self):
+        zero_error_df = synthetic_period_slopes()
+        zero_error_df.loc[0, "std_error"] = 0.0
+        with pytest.raises(ValueError, match="non-positive standard error"):
+            decompose_slopes(zero_error_df)
+
+    def test_run_stage_skips_without_unemployment(self, monkeypatch, capsys):
+        monkeypatch.setattr(forecast_composition, "unemployment_change_by_period", lambda period_keys: None)
+        monkeypatch.setattr(forecast_composition, "_load_inputs", lambda: (pd.DataFrame(), {"oews": pd.DataFrame()}))
+        monkeypatch.setattr(forecast_composition, "run_adoption", lambda: (pd.DataFrame(), {}))
+        assert forecast_composition.run_estimation() is None
+        assert "No unemployment series available" in capsys.readouterr().out
+
+
+class TestProjection:
+    def test_oews_steps_are_annual_to_2030(self):
+        steps = oews_steps(2025)
+        assert [step.as_of for step in steps] == ["2026-05", "2027-05", "2028-05", "2029-05", "2030-05"]
+        assert all(step.year_fraction == 1.0 for step in steps)
+
+    def test_cps_partial_first_step(self):
+        june = cps_steps("2026-06")
+        assert june[0] == ProjectionStep("2026-12", 2026, 0.5)
+        assert [step.as_of for step in june[1:]] == ["2027-12", "2028-12", "2029-12", "2030-12"]
+        december = cps_steps("2026-12")
+        assert december[0] == ProjectionStep("2027-12", 2027, 1.0)
+
+    def test_slope_path_combines_terms(self):
+        path = slope_path({"structural": 0.02, "cycle": 0.01, "ai": 0.1}, {2027: 1.5}, pd.Series({2026: 0.2, 2027: 0.3}), [2026, 2027])
+        assert path[2026] == pytest.approx(0.02 + 0.1 * 0.2)
+        assert path[2027] == pytest.approx(0.02 + 0.015 + 0.1 * 0.3)
+
+    def test_shares_sum_to_one_and_zero_slope_is_identity(self, scores):
+        start = pd.Series(np.arange(1, len(SECTORS) + 1, dtype=float), index=SECTORS)
+        steps = oews_steps(2025)
+        flat = project_shares(start, scores, "2025-05", steps, dict.fromkeys(range(2026, 2031), 0.0))
+        assert np.allclose(flat.sum(axis=1), 1.0)
+        assert np.allclose(flat.loc["2030-05"], start / start.sum())
+
+    def test_positive_slope_moves_share_toward_high_scores(self, scores):
+        start = pd.Series(1.0, index=SECTORS)
+        path = project_shares(start, scores, "2025-05", oews_steps(2025), dict.fromkeys(range(2026, 2031), 0.05))
+        change = path.loc["2030-05"] - path.loc["2025-05"]
+        assert change[scores.idxmax()] > 0 > change[scores.idxmin()]
+
+    def test_step_shares_rejects_nonpositive_share(self, scores):
+        with pytest.raises(ValueError, match="non-positive share"):
+            step_shares(pd.Series(1.0 / len(SECTORS), index=SECTORS), scores, slope=-10.0)
+
+    def test_cps_start_shares_requires_every_sector(self):
+        a19_df = pd.DataFrame({"month": "2026-08", "soc_major": SECTORS[:-1], "employed_thousands": 100.0})
+        with pytest.raises(ValueError, match="missing sector"):
+            cps_start_shares(a19_df)
+
+    def test_cps_start_uses_latest_month(self):
+        a19_df = pd.concat(
+            [
+                pd.DataFrame({"month": "2026-06", "soc_major": SECTORS, "employed_thousands": 50.0}),
+                pd.DataFrame({"month": "2026-08", "soc_major": SECTORS, "employed_thousands": 100.0}),
+            ]
+        )
+        label, employment = cps_start_shares(a19_df)
+        assert label == "2026-08"
+        assert (employment == 100.0).all()
+
+
+class TestUncertainty:
+    def test_bootstrap_recovers_coefficients_on_noiseless_data(self):
+        draws, skipped = bootstrap_coefficients(
+            synthetic_period_slopes(noise=0.0, ai_periods=10), 50, np.random.default_rng(0), ("structural", "cycle", "ai")
+        )
+        assert skipped == 0
+        assert draws["ai"].to_numpy() == pytest.approx(0.08, abs=1e-9)
+
+    def test_bootstrap_skips_rank_deficient_replicates(self):
+        # Only two AI-era periods out of 25: many resamples draw neither and cannot identify β_AI.
+        draws, skipped = bootstrap_coefficients(
+            synthetic_period_slopes(noise=0.001, ai_periods=2), 200, np.random.default_rng(0), ("structural", "cycle", "ai")
+        )
+        assert skipped > 0
+        assert len(draws) + skipped == 200
+        assert draws["ai"].notna().all()
+
+
+def sector_paths_for(growth_by_sector: dict[str, float]):
+    rows = []
+    for soc_major, growth in growth_by_sector.items():
+        rows += [
+            {
+                "instrument": "oews",
+                "unemployment_scenario": "steady",
+                "adoption_fit": "logistic",
+                "as_of": "2025-05",
+                "soc_major": soc_major,
+                "employment": 100.0,
+            },
+            {
+                "instrument": "oews",
+                "unemployment_scenario": "steady",
+                "adoption_fit": "logistic",
+                "as_of": "2030-05",
+                "soc_major": soc_major,
+                "employment": 100.0 * (1 + growth),
+            },
+        ]
+    return pd.DataFrame(rows)
+
+
+class TestAllocation:
+    def test_every_occupation_gets_its_sector_growth(self):
+        report_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["43-1011", "43-9061", "15-1252"],
+                "Title": ["Supervisors", "Office Clerks", "Software Developers"],
+                "dominant_demand": ["Bounded", "Bounded", "Unbounded"],
+                "TOT_EMP_2025": [40.0, 60.0, 80.0],
+            }
+        )
+        allocation_df = allocate_to_occupations(report_df, sector_paths_for({"43": -0.10, "15": 0.05}))
+        final_df = allocation_df[allocation_df["as_of"] == "2030-05"].set_index("OCC_CODE")
+        assert final_df.loc["43-1011", "allocated_employment"] == pytest.approx(36.0)
+        assert final_df.loc["43-9061", "allocated_employment"] == pytest.approx(54.0)
+        assert final_df.loc["15-1252", "allocated_employment"] == pytest.approx(84.0)
+
+    def test_demand_type_shares_sum_to_one(self):
+        report_df = pd.DataFrame(
+            {
+                "OCC_CODE": ["43-1011", "15-1252"],
+                "Title": ["A", "B"],
+                "dominant_demand": ["Bounded", "Unbounded"],
+                "TOT_EMP_2025": [50.0, 50.0],
+            }
+        )
+        shares_df = demand_type_shares(allocate_to_occupations(report_df, sector_paths_for({"43": -0.10, "15": 0.10})))
+        final = shares_df[shares_df["as_of"] == "2030-05"].set_index("dominant_demand")["share"]
+        assert final.sum() == pytest.approx(1.0)
+        assert final["Unbounded"] == pytest.approx(55.0 / 100.0)
+
+
+class TestFailSoftInputs:
+    """Final-review fixes: the stage never crashes the release on a withheld input, and never drops data silently."""
+
+    def test_cps_withheld_when_g4_failed_this_run(self, monkeypatch, capsys):
+        import cps_detailed_validation
+
+        monkeypatch.setattr(cps_detailed_validation, "LAST_RUN_G4_PASSED", False)
+        assert forecast_composition.cps_rollup_usable() is False
+        assert "G4" in capsys.readouterr().out
+
+    def test_cps_withheld_when_rollup_absent(self, monkeypatch, tmp_path, capsys):
+        import cps_detailed_validation
+
+        monkeypatch.setattr(cps_detailed_validation, "LAST_RUN_G4_PASSED", True)
+        monkeypatch.setattr(forecast_composition, "CPS_SECTOR_TRENDS_PATH", str(tmp_path / "absent.csv"))
+        assert forecast_composition.cps_rollup_usable() is False
+        assert "absent" in capsys.readouterr().out
+
+    def test_cps_usable_when_g4_passed_and_rollup_present(self, monkeypatch, tmp_path):
+        import cps_detailed_validation
+
+        rollup_path = tmp_path / "rollup.csv"
+        rollup_path.write_text("soc_major,TOT_EMP_2024\n11,1\n")
+        monkeypatch.setattr(cps_detailed_validation, "LAST_RUN_G4_PASSED", True)
+        monkeypatch.setattr(forecast_composition, "CPS_SECTOR_TRENDS_PATH", str(rollup_path))
+        assert forecast_composition.cps_rollup_usable() is True
+
+    def test_projection_runs_oews_alone_without_reading_a19(self, monkeypatch, tmp_path, scores):
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(tmp_path / "absent_a19.csv"))
+        panel_df = synthetic_panel({}, scores, years=range(2020, 2026))
+        estimate = forecast_composition.InstrumentEstimate(
+            instrument="oews",
+            scores=scores,
+            panel_df=panel_df,
+            driven_df=pd.DataFrame(),
+            stage2_df=pd.DataFrame(),
+            decomposition_df=pd.DataFrame(),
+            coefficients={"structural": 0.01, "cycle": 0.0, "ai": 0.0},
+        )
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments({"oews": estimate}, fits)
+        assert set(sector_paths_df["instrument"]) == {"oews"}
+        assert set(starts) == {("oews", "raw")}
+        assert set(sector_paths_df["start_basis"]) == {"raw"}
+
+    def test_eligible_period_missing_unemployment_raises(self, scores):
+        panel_df = synthetic_panel({}, scores, years=range(2000, 2026), noise=0.002)
+        period_keys = [f"{year}_{year + 1}" for year in range(2000, 2025) if year != 2012]  # 2012_2013 missing
+        unemployment_change = pd.Series(np.random.default_rng(1).normal(0, 1, len(period_keys)), index=period_keys)
+        fits = {"logistic": AdoptionFit("logistic", (0.6, 0.6, 5.0), 0.55, True)}
+        with pytest.raises(forecast_composition.MissingDriverError, match="2012_2013"):
+            estimate_instrument("oews", panel_df, scores, {}, unemployment_change, fits)
+
+    def test_run_estimation_skips_on_missing_driver(self, monkeypatch, capsys, scores):
+        panel_df = synthetic_panel({}, scores, years=range(2000, 2026))
+        report_df = pd.DataFrame(
+            {"OCC_CODE": [f"{code}-0000" for code in SECTORS], "TOT_EMP_2025": 1.0, "net_employment_change": scores.to_numpy()}
+        )
+        monkeypatch.setattr(forecast_composition, "_load_inputs", lambda: (report_df, {"oews": panel_df}))
+        monkeypatch.setattr(
+            forecast_composition,
+            "run_adoption",
+            lambda: (pd.DataFrame(), {"logistic": AdoptionFit("logistic", (0.6, 0.6, 5.0), 0.55, True)}),
+        )
+        monkeypatch.setattr(forecast_composition, "unemployment_change_by_period", lambda period_keys: pd.Series({"2000_2001": 0.1}))
+        assert forecast_composition.run_estimation() is None
+        assert "unemployment change missing" in capsys.readouterr().out
+
+
+SEASONAL_PATTERN = np.array([0.97, 0.98, 0.99, 1.00, 1.01, 1.02, 1.03, 1.02, 1.01, 1.00, 0.99, 0.98])
+
+
+def synthetic_a19_panel(first_month="2020-01", last_month="2026-09") -> pd.DataFrame:
+    """22 sectors, level rising with sector index, × a seasonal pattern that differs by sector parity."""
+    rows = []
+    for month in pd.period_range(first_month, last_month, freq="M"):
+        for index, sector in enumerate(SECTORS):
+            pattern = SEASONAL_PATTERN if index % 2 == 0 else SEASONAL_PATTERN[::-1]
+            employed_thousands = (100.0 + index) * pattern[month.month - 1] / pattern.mean()
+            rows.append(
+                {
+                    "month": str(month),
+                    "soc_major": sector,
+                    "occupation": sector,
+                    "employed_thousands": employed_thousands,
+                    "source_reference_month": last_month,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def cps_estimate(scores) -> "forecast_composition.InstrumentEstimate":
+    return forecast_composition.InstrumentEstimate(
+        instrument="cps",
+        scores=scores,
+        panel_df=synthetic_panel({}, scores, years=range(2020, 2026)),
+        driven_df=pd.DataFrame(),
+        stage2_df=pd.DataFrame({"residual_sd": [0.01, 0.01]}),
+        decomposition_df=pd.DataFrame(),
+        coefficients={"structural": 0.01, "cycle": 0.0, "ai": 0.0},
+    )
+
+
+class TestStartBasis:
+    def test_seasonally_adjusted_start_divides_by_the_month_factor_and_keeps_the_total(self):
+        a19_df = synthetic_a19_panel()
+        factors_df = seasonal_factors(a19_df)
+        _, raw_employment = cps_start_shares(a19_df)
+        label, adjusted_employment = cps_start_shares(a19_df, factors_df)
+        september = factors_df[factors_df["calendar_month"] == 9].set_index("soc_major")["factor"]
+        expected = raw_employment / september.reindex(raw_employment.index)
+        expected = expected * raw_employment.sum() / expected.sum()
+        assert label == "2026-09"
+        assert adjusted_employment.to_numpy() == pytest.approx(expected.to_numpy())
+        assert adjusted_employment.sum() == pytest.approx(raw_employment.sum())
+        # the synthetic levels are trend-free, so adjustment removes all seasonal distortion
+        assert (adjusted_employment / adjusted_employment.sum()).to_numpy() == pytest.approx(
+            (np.arange(22) + 100.0) / (np.arange(22) + 100.0).sum(), abs=1e-6
+        )
+
+    def test_seasonally_adjusted_start_raises_without_a_factor_for_every_sector(self):
+        a19_df = synthetic_a19_panel()
+        factors_df = seasonal_factors(a19_df)
+        with pytest.raises(ValueError, match="seasonal factor"):
+            cps_start_shares(a19_df, factors_df[factors_df["soc_major"] != SECTORS[0]])
+
+    def test_cps_projects_both_bases_and_oews_raw_only(self, monkeypatch, tmp_path, scores):
+        a19_path = tmp_path / "a19.csv"
+        synthetic_a19_panel().to_csv(a19_path, index=False)
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
+        monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        oews = dataclasses.replace(cps_estimate(scores), instrument="oews")
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments({"oews": oews, "cps": cps_estimate(scores)}, fits)
+        bases = sector_paths_df.groupby("instrument")["start_basis"].unique().map(set).to_dict()
+        assert bases == {"oews": {"raw"}, "cps": {"raw", "seasonally_adjusted"}}
+        assert set(starts) == {("oews", "raw"), ("cps", "raw"), ("cps", "seasonally_adjusted")}
+        assert (tmp_path / "factors.csv").exists()
+
+    def test_short_panel_projects_raw_only(self, monkeypatch, tmp_path, scores, capsys):
+        a19_path = tmp_path / "a19.csv"
+        synthetic_a19_panel(first_month="2025-04").to_csv(a19_path, index=False)
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
+        monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        (tmp_path / "factors.csv").write_text("stale from an earlier run\n", encoding="utf-8")
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments({"cps": cps_estimate(scores)}, fits)
+        assert not (tmp_path / "factors.csv").exists()
+        assert set(sector_paths_df["start_basis"]) == {"raw"}
+        assert set(starts) == {("cps", "raw")}
+        assert "seasonally adjusted start skipped" in capsys.readouterr().out
+
+    def test_sector_noise_handles_both_bases(self, monkeypatch, tmp_path, scores):
+        a19_path = tmp_path / "a19.csv"
+        synthetic_a19_panel().to_csv(a19_path, index=False)
+        monkeypatch.setattr(forecast_composition, "CPS_A19_PANEL_PATH", str(a19_path))
+        monkeypatch.setattr(forecast_composition, "SEASONAL_FACTORS_OUTPUT_PATH", str(tmp_path / "factors.csv"))
+        estimates = {"cps": cps_estimate(scores)}
+        fits = {"linear": AdoptionFit("linear", (0.1, 0.0), 0.5, True)}
+        sector_paths_df, starts = forecast_composition.project_both_instruments(estimates, fits)
+        noisy_df = add_sector_noise(sector_paths_df, estimates, starts)
+        assert noisy_df[["noise_low", "noise_high"]].notna().all().all()
+        assert len(noisy_df) == len(sector_paths_df)
+
+
+class TestCpsExcludedPeriods:
+    def test_excludes_a_partial_terminal_year_with_its_month_count(self):
+        detailed_df = pd.DataFrame({"year": [2025, 2026, 2026], "months_observed": [11, 8, 8]})
+        assert cps_excluded_periods(detailed_df) == {"2025_2026": "partial year (2026 averages 8 months)"}
+
+    def test_excludes_nothing_when_the_terminal_year_is_complete(self):
+        assert cps_excluded_periods(pd.DataFrame({"year": [2025, 2026], "months_observed": [11, 12]})) == {}

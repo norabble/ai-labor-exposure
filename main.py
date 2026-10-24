@@ -8,6 +8,7 @@ Stages (run in order after classification):
   synthesize — Match classified tasks to AI penetration → data/output/occupation_exposure_report.csv
   plot       — Generate visualizations → data/output/visualizations/
   validate   — Correlate model predictions with actual BLS employment/wage trends
+  forecast   — Project sector composition to 2030 → data/output/forecast_*.csv
 
 The classify stage (make classify) is kept separate because it is expensive
 and slow (~19k LLM calls). Run it once; resume is supported via checkpoint.
@@ -16,14 +17,16 @@ and slow (~19k LLM calls). Run it once; resume is supported via checkpoint.
 import argparse
 
 from analyze_bls import main as analyze_bls
+from forecast_composition import run_stage as forecast_composition
 from generate_plots import main as generate_plots
 from synthesize_composition import run_stage as synthesize_composition
 from synthesize_impacts import synthesize
 from validate_bls import main as validate_bls
 
-# composition runs last: its era comparison scores the demand composition model
-# beside the AI dynamic model, whose report the validate stage writes.
-STAGES = ["analyze", "synthesize", "plot", "validate", "composition"]
+# composition runs after validate: its era comparison scores the demand composition
+# model beside the AI dynamic model, whose report the validate stage writes.
+# forecast runs last: it reads the dynamic report and composition's CPS rollup.
+STAGES = ["analyze", "synthesize", "plot", "validate", "composition", "forecast"]
 
 
 def run_pipeline(stages: list[str]) -> None:
@@ -33,6 +36,7 @@ def run_pipeline(stages: list[str]) -> None:
         "plot": ("Generating Plots", generate_plots),
         "validate": ("Validating Against BLS Trends", validate_bls),
         "composition": ("Demand Composition Model (experimental)", synthesize_composition),
+        "forecast": ("Composition Forecast to 2030", forecast_composition),
     }
     total = len(stages)
     for i, stage in enumerate(stages, 1):
@@ -54,6 +58,7 @@ stages:
   plot       Generate all visualizations
   validate   Correlate predictions with actual BLS trends
   composition Demand composition model — the experimental pre-AI generality test
+  forecast    Decomposed-slope composition forecast to 2030
 
 examples:
   uv run main.py                     # run all stages
